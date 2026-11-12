@@ -8,6 +8,7 @@ const server = `http://127.0.0.1:${process.env.OPTCHAT_APP_PORT ?? 4780}`;
 export default defineConfig({
   root: 'src/ui',
   plugins: [react(), tailwindcss()],
-  build: { outDir: '../../dist/ui', emptyOutDir: true },
+  // Shiki's grammars are chunks of their own, fetched for a code block in their language; the largest is over Vite's limit.
+  build: { outDir: '../../dist/ui', emptyOutDir: true, chunkSizeWarningLimit: 800 },
   server: { host: '127.0.0.1', proxy: { '/ws': { target: server, ws: true }, '/images': server } },
 });

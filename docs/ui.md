@@ -35,6 +35,7 @@ npm run screenshots       # a PNG of every main state, in /tmp/optchat-app-shots
 | `src/ui/transcript.ts` | The chat as data, with no DOM: folds Pi's records into a window's state, joins that with the log, joins the log's pages, and works out what each row says (`parts`), down to the words for a tool call (`act`), for pi-optchat's status line (`news`) and for a Pi that stopped (`failure`). Tested in `test/transcript.test.ts`. |
 | `src/ui/store.ts` | Everything the page knows, outside React: the connection (and reconnecting), the logs, each window's run. Components read it with `useApp`. Tested against the server in `test/store.test.ts`. |
 | `src/ui/App.tsx`, `Profiles.tsx`, `Sidebar.tsx`, `Timeline.tsx`, `Rows.tsx`, `Composer.tsx`, `Markdown.tsx` | The components. They only draw: a row gets its part, and is drawn again only when that part changed. |
+| `src/ui/highlight.ts` | Syntax colours for code blocks, by Shiki: see below. Tested in `test/highlight.test.ts`. |
 | `src/ui/safe.ts` | What Markdown may do: see below. Tested in `test/markdown.test.ts`. |
 | `src/ui/keys.ts` | Shortcuts, and `useShortcuts`. |
 | `src/ui/ui.tsx`, `WorkLog.tsx`, `markdownStreamBlocks.ts`, `index.css` | Buttons, tool-call rows, the Markdown splitter and the design tokens, from T3 Code. |
@@ -47,6 +48,8 @@ npm run screenshots       # a PNG of every main state, in /tmp/optchat-app-shots
 **Keys.** A row's key is its first entry's number in the log, and what a run has said and the log does not have yet is numbered on from the log's last entry, which is the number the log will give it. A connected window's conversation is numbered by its place in it.
 
 **Reconnecting.** Windows live in the server. The page asks `windows`, then `records` for each, and replays them; a gap in the pushed record numbers makes it ask again, and read again what the run said. A lost connection is retried every second, from one place: the socket's closing.
+
+**Code is coloured by Shiki, which the page does not load until a code block names a language.** Shiki, its light and dark theme and each language's grammar are chunks of their own, fetched on first use; the code shows plain until they are there, and stays plain in a language Shiki does not know. A token's colour is CSS `light-dark()`, so it follows the page's `dark` class with nothing drawn again. While a block streams, the lines it had are kept and only what came since is read, on from where the grammar stood at the end of the last whole line.
 
 **Nothing in a reply is fetched on its own.** The agent reads web pages and files that may tell it what to write, and a Markdown image is fetched the moment it is drawn, with whatever its address carries. So only the profile's own images (`/images/<profile>/<name>`) are drawn; any other image is shown as a link, and links open in a new tab that knows nothing of this one. The server backs this with `Content-Security-Policy: default-src 'self'`.
 

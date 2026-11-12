@@ -189,7 +189,7 @@ test('a connected window starts the profile\'s owner first, joins it, and Comple
   const [after] = (await request('windows', {})).windows, said = (await request('command', { window: window.id, command: { type: 'get_messages' } })).data;
   assert.deepEqual([after.completed, after.status], [undefined, 'idle']);
   assert.ok(isObject(said) && Array.isArray(said.messages) && said.messages.every(isMessage));
-  assert.equal(said.messages.length, 4);
+  assert.equal(said.messages.length, 6); // The first conversation, the request for its handoff and the handoff, then this one.
   assert.deepEqual(current(after, said.messages).map(message => message.role), ['user', 'assistant']);
   assert.ok(canComplete(after), 'and it can be completed in its turn');
   await request('close', { window: window.id });

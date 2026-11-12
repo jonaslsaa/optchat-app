@@ -28,9 +28,14 @@ let completed = false;
  * `handoff` is what a window writes for the main chat when it is completed. */
 export interface Script { clock?: number; handoff?: string; replies: Record<string, { turns: { content: Content[]; results: string[] }[]; answer: string }> }
 const script: Script = process.env.FAKE_PI_SCRIPT ? JSON.parse(readFileSync(process.env.FAKE_PI_SCRIPT, 'utf8')) : { replies: {} };
-/** Each message gets a later time than the one before. */
+/** Each message gets a later time than the one before, and by the real clock none that has not come yet: the server tells a
+ * window's conversations apart by when they were said. */
 let clock = script.clock ?? 0;
-const now = () => clock = script.clock !== undefined ? clock + 1000 : Math.max(Date.now(), clock + 1);
+function now() {
+  if (script.clock !== undefined) return clock += 1000;
+  while (Date.now() <= clock); // Under a millisecond.
+  return clock = Date.now();
+}
 
 /** The profile's log, as pi-optchat writes it: one entry for each thing a message said. */
 const main = join(process.env.OPTCHAT_HOME ?? '.', 'profiles', profile, 'main');

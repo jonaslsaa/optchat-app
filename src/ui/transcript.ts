@@ -146,7 +146,7 @@ export function thinking({ streaming }: Live) {
 
 /** pi-optchat's request for a handoff (its `rpc-window.ts`): Complete has a connected window's agent say one thing more, which is
  * for the main chat and no answer to you. */
-export const asksHandoff = (message: PiMessage) => message.role === 'custom' && message.customType === 'optchat-handoff-request';
+const asksHandoff = (message: PiMessage) => message.role === 'custom' && message.customType === 'optchat-handoff-request';
 /** Each message's lines, and those of the reply being written. From a request for a handoff up to your next message they are
  * the handoff; the request, which says nothing itself, is its first line, so the handoff is there before a word of it is. */
 function told(messages: readonly PiMessage[], streaming?: Live['streaming']): Line[][] {

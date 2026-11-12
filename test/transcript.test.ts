@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import type { Message, PiRecord } from '../src/protocol.ts';
-import { apply, chat, idle, logged, merged, parts, replay, spoken, stopped, without, type Item, type PiMessage } from '../src/ui/transcript.ts';
+import { act, apply, chat, failure, idle, logged, merged, news, parts, replay, spoken, stopped, without, type Item, type PiMessage, type Tool } from '../src/ui/transcript.ts';
 
 const T = Date.UTC(2026, 0, 1), at = (seconds: number) => new Date(T + seconds * 1000).toISOString();
 const user = (seconds: number, text: string): PiMessage => ({ role: 'user', timestamp: T + seconds * 1000, content: [{ type: 'text', text }] });
@@ -140,4 +140,75 @@ test('pages of the log join by their entries\' numbers, whichever order they arr
   assert.deepEqual(numbers(merged(newest, page(8, 12))), [6, 7, 8, 9, 10, 11]);
   // The log grew by more than a page while nobody read it: what was loaded no longer reaches the newest page, and is let go.
   assert.deepEqual(numbers(merged(newest, page(15, 18))), [15, 16, 17]);
+});
+
+test('a report is named by the title its agent was started under, once the chat reaches back to that start', () => {
+  const start = [
+    entry(0, 'tool', 0, 'spawn {"tasks":[{"title":"Why it flakes","task":"Look."},{"task":"No title."},{"title":"How T3 Code retries","task":"Read."}]}'),
+    entry(1, 'echo', 1, 'spawn: Started: 1a2b3c4d, 22222222, 5e6f7a8b. Reports will arrive automatically.'),
+  ];
+  const reports = [entry(2, 'work', 2, '[5e6f7a8b] Capped at five seconds.'), entry(3, 'work', 3, '[22222222] Done.'), entry(4, 'work', 4, '[1a2b3c4d] A timer.')];
+  // The page of the log with the reports is read first, and they go by their agents' numbers.
+  const late = parts(logged(reports));
+  assert.deepEqual(late.map(part => part.type === 'work' && [part.agent, part.title]), [['5e6f7a8b', undefined], ['22222222', undefined], ['1a2b3c4d', undefined]]);
+  const whole = parts(logged([...start, ...reports]), late);
+  assert.deepEqual(whole.slice(1).map(part => part.type === 'work' && part.title), ['How T3 Code retries', undefined, 'Why it flakes']);
+  // Only the reports that got a title are made again, and none of them a second time.
+  assert.deepEqual(whole.slice(1).map((part, at) => part === late[at]), [false, true, false]);
+  assert.deepEqual(parts(logged([...start, ...reports]), whole).map((part, at) => part === whole[at]), [true, true, true, true]);
+});
+
+test('a tool call is said in words: what it did or is doing, and to what', () => {
+  const call = (name: string, args: Record<string, unknown>, output?: string): Tool => ({ key: 0, type: 'tool', name, args, failed: false, ...output !== undefined && { output } });
+  assert.deepEqual(act(call('bash', { command: 'npm test' }, 'ok'), false), { verb: 'Ran', subject: 'npm test', whole: true });
+  assert.deepEqual(act(call('bash', { command: 'npm test' }), true), { verb: 'Running', subject: 'npm test', whole: true });
+  // What a call searches for says more than where; its other arguments are left for when it is opened.
+  assert.deepEqual(act(call('grep', { path: 'src', pattern: 'retry' }, ''), false), { verb: 'Searched for', subject: 'retry', whole: false });
+  assert.deepEqual(act(call('spawn', { tasks: [{ title: 'Why it flakes', task: 'Look.' }] }, 'Started: 1a2b3c4d.'), false), { verb: 'Started an agent:', subject: 'Why it flakes', whole: false });
+  assert.deepEqual(act(call('spawn', { tasks: [{ title: 'One', task: '…' }, { title: 'Two', task: '…' }] }), true), { verb: 'Starting 2 agents:', subject: 'One, Two', whole: false });
+  // A tool that is not one of Pi's own goes by its name.
+  assert.deepEqual(act(call('zoom', { id: 128, n: 4 }, '…'), false), { verb: 'zoom', subject: '128', whole: false });
+  // That a command failed is read off what Pi's bash adds under its output.
+  const ran = (output: string) => parts(logged([entry(0, 'tool', 0, 'bash {"command":"npm test"}'), entry(1, 'echo', 1, `bash: ${output}`)]))[0];
+  assert.partialDeepStrictEqual(ran('✖ one test\n\nCommand exited with code 1'), { steps: [{ failed: true }] });
+  assert.partialDeepStrictEqual(ran('Command exited with code 1 is what I grep for\nfound'), { steps: [{ failed: false }] });
+  const read = parts(logged([entry(0, 'tool', 0, 'read {"path":"ci.log"}'), entry(1, 'echo', 1, 'read: ✖ one test\n\nCommand exited with code 1')]))[0];
+  assert.partialDeepStrictEqual(read, { steps: [{ failed: false }] }); // A file that says so was read all right.
+});
+
+test('pi-optchat\'s status line and Pi\'s failures are said as news, not as they were written for a terminal', () => {
+  assert.deepEqual(news('OptChat: work · 350 messages · 0 pending · 0 agents'), []);
+  assert.deepEqual(news('OptChat: work · 350 messages · 3 pending · 1 agents · importing'), ['3 summaries to write', '1 agent working', 'importing']);
+  assert.deepEqual(news('OptChat: work · connected window · main window not reachable'), ['main window not reachable']);
+  assert.deepEqual([news('OptChat: work · completed'), news('OptChat: choose profile'), news(undefined)], [[], [], []]);
+
+  assert.deepEqual(failure('Pi exited (code 3). out of memory'), { title: 'Pi stopped', detail: 'Pi exited with code 3: out of memory', next: 'Your next message starts it again.' });
+  assert.deepEqual(failure('Profile already running: work · PID 812 · macbook · /Users/me/code'),
+    { title: 'work is running outside the app', detail: 'A Pi in a terminal has it open: PID 812 on macbook, in /Users/me/code.', next: 'Close it there, then send your message again.' });
+  assert.partialDeepStrictEqual(failure('pi-optchat did not open the profile.'), { title: 'Pi is not running', detail: 'pi-optchat did not open the profile.' });
+});
+
+test('Complete\'s handoff is a part of its own under the conversation, and not the answer to what you asked', () => {
+  const asks: PiMessage = { role: 'custom', customType: 'optchat-handoff-request', display: false, timestamp: T + 9000, content: '[OptChat] This connected conversation has ended.' };
+  const conversation = [user(1, 'what is the port?'), reply(2, bash('c1', 'grep port')), result(3, '8080'), reply(4, text('It is 8080.'))];
+  const kinds = (items: Item[]) => parts(items).map(part => [part.type, part.type === 'reply' ? part.answer?.text : part.type === 'handoff' ? part.body : undefined]);
+  const answered = ['user', undefined], reply4 = ['reply', 'It is 8080.'];
+
+  // While the agent writes it, the handoff is there with nothing in it, and the answer above it is as it was.
+  const asked = run({ type: 'agent_start' }, ended(asks));
+  assert.deepEqual(kinds(chat(spoken(conversation), asked)), [answered, reply4, ['handoff', '']]);
+  const writing = apply(apply(asked, { type: 'message_start', message: reply(10) }, 3), update({ type: 'text_delta', contentIndex: 0, delta: 'Goal: the' }), 4);
+  assert.deepEqual(kinds(chat(spoken(conversation), writing)), [answered, reply4, ['handoff', '']]);
+  // Written, it reads the same from the run, from the window's Pi, and from both when the Pi was asked in the middle of it.
+  const handoff = reply(10, text('Goal: the port.'), text('Done: it is 8080.')), whole = [answered, reply4, ['handoff', 'Goal: the port.\n\nDone: it is 8080.']];
+  const done = run({ type: 'agent_start' }, ended(asks), ended(handoff), { type: 'agent_settled' });
+  for (const session of [conversation, [...conversation, asks], [...conversation, asks, handoff]]) assert.deepEqual(kinds(chat(spoken(session), done)), whole);
+  // A handoff that did not end on its text is none: the main chat writes it then.
+  assert.deepEqual(kinds(spoken([...conversation, asks, reply(10, text('Let me check first.'), bash('c2', 'ls')), result(11, 'a.ts'), { ...reply(12), stopReason: 'error' }])).at(-1), ['handoff', '']);
+  // Your next message is a conversation again.
+  assert.deepEqual(kinds(spoken([...conversation, asks, handoff, user(20, 'and the host?'), reply(21, text('localhost'))])), [...whole, answered, ['reply', 'localhost']]);
+
+  // Complete stops a reply that is being written: what it had said by then stays in view, and is said to have been stopped.
+  const cut = parts(spoken([user(1, 'what is the port?'), { ...reply(2, text('It is 80')), stopReason: 'aborted' }, asks, handoff]));
+  assert.partialDeepStrictEqual(cut, [{ type: 'user' }, { type: 'reply', stopped: true, answer: { text: 'It is 80' }, steps: [{ type: 'fault' }] }, { type: 'handoff' }]);
 });

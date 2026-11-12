@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 
 /** Keyboard shortcuts, written as `mod+shift+o`: `mod` is ⌘ on a Mac and Ctrl elsewhere. Letters and digits are matched by the
  * key's place on the keyboard, so Alt+1 is found though a Mac types ¡ for it. */
@@ -28,4 +28,14 @@ export function useShortcuts(bindings: () => Record<string, () => void>, deps: r
     addEventListener('keydown', pressed);
     return () => removeEventListener('keydown', pressed);
   }, deps);
+}
+/** Whether ⌥ (Alt) is down, which is when the page shows what it does with a digit. */
+export function useAltHeld() {
+  const [held, setHeld] = useState(false);
+  useEffect(() => {
+    const pressed = (event: KeyboardEvent) => setHeld(event.altKey), left = () => setHeld(false);
+    addEventListener('keydown', pressed); addEventListener('keyup', pressed); addEventListener('blur', left);
+    return () => { removeEventListener('keydown', pressed); removeEventListener('keyup', pressed); removeEventListener('blur', left); };
+  }, []);
+  return held;
 }

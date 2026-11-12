@@ -1,5 +1,6 @@
-import { LoaderCircleIcon } from 'lucide-react';
-import type { ComponentProps } from 'react';
+import { CheckIcon, CopyIcon, LoaderCircleIcon } from 'lucide-react';
+import { useState, type ComponentProps } from 'react';
+import type { WindowState } from '../protocol.ts';
 import { extendTailwindMerge, type ClassNameValue } from 'tailwind-merge';
 
 /** The small parts everything else is built from. The class strings are T3 Code's (MIT, see THIRD_PARTY_NOTICES.md), from its
@@ -35,5 +36,16 @@ export function Spinner({ className }: { className?: string }) {
 /** The dot that says what a window is doing. */
 export function StatusDot({ tone, pulse = false }: { tone: 'working' | 'failed'; pulse?: boolean }) {
   const colour = { working: 'bg-sky-500 dark:bg-sky-300/80', failed: 'bg-red-500 dark:bg-red-300/90' }[tone];
-  return <span className="inline-flex size-3.5 shrink-0 items-center justify-center"><span className={cn('size-[9px] rounded-full', colour, pulse && 'motion-safe:animate-status-pulse')} /></span>;
+  return <span role="img" aria-label={tone === 'working' ? 'Working' : 'Failed'} className="inline-flex size-3.5 shrink-0 items-center justify-center"><span className={cn('size-[9px] rounded-full', colour, pulse && 'motion-safe:animate-status-pulse')} /></span>;
+}
+/** A dot for windows of which one is working, or one's Pi failed. */
+export function WindowDot({ windows }: { windows: WindowState[] }) {
+  if (windows.some(window => window.status === 'running' || window.status === 'starting')) return <StatusDot tone="working" pulse />;
+  return windows.some(window => window.error) ? <StatusDot tone="failed" /> : null;
+}
+/** Copies `text`, and shows for a moment that it has. */
+export function CopyButton({ text, label }: { text: string; label: string }) {
+  const [copied, setCopied] = useState(false);
+  const copy = () => void navigator.clipboard.writeText(text).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1200); });
+  return <Button variant="ghost-muted" size="icon-xs" aria-label={label} title={label} onClick={copy}>{copied ? <CheckIcon className="size-3" /> : <CopyIcon className="size-3" />}</Button>;
 }

@@ -1,9 +1,9 @@
-import { CornerUpRightIcon, ListPlusIcon } from 'lucide-react';
+import { CircleAlertIcon, CornerUpRightIcon, ListPlusIcon } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import type { PiRecord, WindowState } from '../protocol.ts';
 import { label, useShortcuts } from './keys.ts';
 import { app } from './store.ts';
-import type { Live } from './transcript.ts';
+import { failure, news, type Live } from './transcript.ts';
 import { Button, cn, Kbd, Spinner } from './ui.tsx';
 
 /** What you were typing in each window, kept while you look at another. */
@@ -36,9 +36,26 @@ function Dialog({ window, dialog }: { window: string; dialog: PiRecord }) {
   );
 }
 
+/** Why the window's Pi is not running, and what to do about it. */
+function Failure({ error }: { error: string }) {
+  const { title, detail, next } = failure(error);
+  return (
+    <div role="alert" className="flex gap-2.5 rounded-xl border border-error/24 bg-error-surface px-3.5 py-2.5 text-sm [overflow-wrap:anywhere]">
+      <CircleAlertIcon className="mt-0.5 size-4 shrink-0 text-error-foreground" />
+      <div className="min-w-0">
+        <p className="font-medium text-error-foreground">{title}</p>
+        <p className="mt-0.5 whitespace-pre-wrap text-error-foreground/90">{detail}</p>
+        <p className="mt-1 text-muted-foreground">{next}</p>
+      </div>
+    </div>
+  );
+}
+
 /** Where you type. You can always type: while the agent runs, Enter steers it and ⌘Enter queues your message for when it has
- * stopped, and Esc stops it. The look is T3 Code's composer (MIT, see THIRD_PARTY_NOTICES.md), over a plain textarea. */
-export function Composer({ window, live }: { window: WindowState; live: Live }) {
+ * stopped, and Esc stops it. The line under it says only what is news: how to steer a run, that Pi is starting, agents at
+ * work. `fresh`: nothing has been said in the window yet. The look is T3 Code's composer (MIT, see THIRD_PARTY_NOTICES.md),
+ * over a plain textarea. */
+export function Composer({ window, live, fresh }: { window: WindowState; live: Live; fresh: boolean }) {
   const [text, setText] = useState(drafts.get(window.id) ?? ''), [sending, setSending] = useState(false);
   const area = useRef<HTMLTextAreaElement>(null);
   const running = window.status === 'running', queued = [...live.queued.steering, ...live.queued.followUp];
@@ -75,9 +92,7 @@ export function Composer({ window, live }: { window: WindowState; live: Live }) 
           </ol>
         )}
         {live.dialogs.map(dialog => <Dialog key={String(dialog.id)} window={window.id} dialog={dialog} />)}
-        {window.error && window.status === 'stopped' && (
-          <p role="alert" className="rounded-xl border border-error/24 bg-error-surface px-3.5 py-2.5 text-error-foreground text-sm [overflow-wrap:anywhere]">{window.error}</p>
-        )}
+        {window.error && window.status === 'stopped' && <Failure error={window.error} />}
         <div className="relative isolate rounded-2xl bg-card shadow-composer after:pointer-events-none after:absolute after:inset-0 after:rounded-[inherit] after:border after:border-black/8 dark:bg-(--surface-raised) dark:shadow-none dark:after:border-white/8">
           <div className="relative px-4 pt-3.5 pb-2">
             <textarea
@@ -92,10 +107,10 @@ export function Composer({ window, live }: { window: WindowState; live: Live }) 
           </div>
           <div className="flex min-w-0 items-center gap-2 px-2 pb-2">
             <p className="min-w-0 flex-1 truncate ps-2 text-muted-foreground text-xs">
-              {window.status === 'starting' ? <span className="inline-flex items-center gap-1.5"><Spinner />Starting Pi</span>
+              {window.status === 'starting' ? <span className="inline-flex items-center gap-1.5"><Spinner />Starting Pi…</span>
                 : running ? <><Kbd>{label('enter')}</Kbd> steer · <Kbd>{label('mod+enter')}</Kbd> queue · <Kbd>Esc</Kbd> stop</>
-                : window.completed ? 'Completed: the main chat has this conversation'
-                : live.status.optchat?.replace(/^OptChat: /, '') ?? (window.status === 'stopped' ? 'Pi starts with your first message' : '')}
+                : window.status === 'stopped' ? fresh && !window.error && 'Pi starts with your first message'
+                : news(live.status.optchat).join(' · ')}
             </p>
             {running && !text.trim() ? (
               <button type="button" aria-label="Stop the agent" title="Stop (Esc)" onClick={() => void stop()} className="flex size-8 shrink-0 items-center justify-center rounded-full bg-destructive/90 text-white shadow-destructive/24 shadow-xs inset-shadow-control-highlight transition-colors duration-150 hover:bg-destructive active:shadow-none">

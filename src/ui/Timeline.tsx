@@ -1,6 +1,6 @@
 import { ChevronDownIcon } from 'lucide-react';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { NoteRow, ReplyRow, ReportRow, UserRow, Waiting, type Working } from './Rows.tsx';
+import { HandoffRow, NoteRow, ReplyRow, ReportRow, UserRow, Waiting, type Working } from './Rows.tsx';
 import { parts, thinking, type Item, type Live, type Part } from './transcript.ts';
 import { Button } from './ui.tsx';
 
@@ -9,14 +9,15 @@ const EDGE = 48;
 
 /** The chat, oldest at the top. It stays at the end while you are there, and stays where you are while you read back; older
  * pages of the log are read as you reach the top. `running` says the agent is in a run, and `live` what it is doing in it. */
-export function Timeline({ items, live, running, profile, older, loading, empty }: { items: Item[]; live: Live; running: boolean; profile: string; older?: () => void; loading?: boolean; empty: string }) {
+export function Timeline({ items, live, running, profile, older, loading }: { items: Item[]; live: Live; running: boolean; profile: string; older?: () => void; loading?: boolean }) {
   const scroller = useRef<HTMLDivElement>(null), content = useRef<HTMLDivElement>(null);
   const atEnd = useRef(true), before = useRef({ first: items[0]?.key, height: 0, top: 0, sent: -1 });
   const [away, setAway] = useState(false);
   // The parts drawn last time are kept where their items did not change, so their rows are not drawn again.
   const drawn = useRef<Part[]>([]);
   const blocks = useMemo(() => drawn.current = parts(items, drawn.current), [items]);
-  const last = blocks.at(-1);
+  // A handoff is said to the main chat: the latest thing said to you is what is above it.
+  const last = blocks.at(-1), latest = last?.type === 'handoff' ? blocks.at(-2) : last;
   const working = useMemo((): Working => ({ thinking: thinking(live), activity: live.activity, tools: live.tools }), [live]);
 
   useLayoutEffect(() => {
@@ -60,12 +61,12 @@ export function Timeline({ items, live, running, profile, older, loading, empty 
               <span className="h-px flex-1 bg-border/70" />{loading ? 'Loading earlier messages…' : 'Load earlier messages'}<span className="h-px flex-1 bg-border/70" />
             </button>
           )}
-          {blocks.length === 0 && <p className="pt-[20vh] text-center text-muted-foreground text-sm">{empty}</p>}
           {blocks.map(part => part.type === 'user' ? <UserRow key={part.key} part={part} profile={profile} />
             : part.type === 'work' ? <ReportRow key={part.key} part={part} />
             : part.type === 'note' ? <NoteRow key={part.key} part={part} />
-            : <ReplyRow key={part.key} part={part} working={running && part === last ? working : undefined} />)}
-          {running && last && last.type !== 'reply' && <Waiting from={last.items[0].date} activity={live.activity} />}
+            : part.type === 'handoff' ? <HandoffRow key={part.key} part={part} writing={running && part === last} />
+            : <ReplyRow key={part.key} part={part} working={running && part === last ? working : undefined} latest={part === latest} />)}
+          {running && last && last.type !== 'reply' && last.type !== 'handoff' && <Waiting from={last.items[0].date} activity={live.activity} />}
         </div>
       </div>
       {away && (

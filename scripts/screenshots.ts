@@ -7,10 +7,11 @@ import { startServer } from '../src/server/server.ts';
 import { createProfile } from '../test/support.ts';
 import { demo, seed } from './seed.ts';
 
-/** `npm run screenshots [directory]`: a PNG of every main state of the UI, in /tmp/optchat-app-shots unless a directory is named.
- * It builds the UI, serves it against throwaway profiles under /tmp with the fake Pi (no model, no network, nothing of yours is
- * read), and drives it in your installed Chrome. The same command gives the same pictures. */
-const out = process.argv[2] ?? '/tmp/optchat-app-shots';
+/** `npm run screenshots [directory] [--dark]`: a PNG of every main state of the UI, in /tmp/optchat-app-shots unless a directory
+ * is named, and all of them in dark mode with `--dark`. It builds the UI, serves it against throwaway profiles under /tmp with
+ * the fake Pi (no model, no network, nothing of yours is read), and drives it in your installed Chrome. The same command gives
+ * the same pictures. */
+const options = process.argv.slice(2), allDark = options.includes('--dark'), out = options.find(option => !option.startsWith('--')) ?? '/tmp/optchat-app-shots';
 /** When the pictures are taken. The seeded chats end here, the fake Pi's messages start here, and the page's clock stands a little later. */
 const NOW = Date.UTC(2026, 10, 12, 9, 0, 0);
 const home = realpathSync(mkdtempSync('/tmp/optchat-app-shots-home-'));
@@ -38,7 +39,7 @@ try {
 
 async function pictures(browser: Browser, control: Client) {
   /** A page that opens with these profile tabs, the first one in front. */
-  async function open(tabs: string[], { width = 1280, height = 800, dark = false } = {}) {
+  async function open(tabs: string[], { width = 1280, height = 800, dark = allDark } = {}) {
     const context = await browser.newContext({ viewport: { width, height }, deviceScaleFactor: 2, colorScheme: dark ? 'dark' : 'light', reducedMotion: 'reduce', timezoneId: 'UTC', locale: 'en-GB' });
     await context.addInitScript(saved => localStorage.setItem('optchat-app', saved), JSON.stringify({ tabs, profile: tabs[0], selected: {} }));
     const page = await context.newPage();
@@ -71,10 +72,11 @@ async function pictures(browser: Browser, control: Client) {
   await shot(work, '05-queued-messages');
   await control.request('command', { window: 'work/main', command: { type: 'release' } });
   await work.getByText('Next I would wire the agents panel.').waitFor();
-  await work.getByText(/messages · 0 pending/).waitFor(); // Its status line is back once the agent is idle.
+  await work.getByText('Opened the pull request').waitFor();
+  await work.getByRole('button', { name: 'Send', exact: true }).waitFor(); // The composer sends again once the agent is idle.
   await shot(work, '06-reply-finished');
 
-  await work.getByRole('button', { name: 'New window' }).first().click();
+  await work.getByRole('button', { name: 'New window' }).click();
   await shot(work, '07-connected-window-new');
   await say(work, 'Give me a demo of this repository');
   await work.getByText('Next I would wire the agents panel.').waitFor();
@@ -98,4 +100,11 @@ async function pictures(browser: Browser, control: Client) {
   const dark = await open(['work'], { dark: true });
   await dark.getByText('which is the point of that test').last().waitFor();
   await shot(dark, '13-dark');
+
+  // The notes tab is in front on the first page: a connected window there whose Pi dies.
+  await work.getByRole('button', { name: 'New window' }).click();
+  await work.getByText('New connected window').waitFor();
+  await say(work, 'please crash now');
+  await work.getByRole('alert').waitFor();
+  await shot(work, '14-pi-stopped');
 }

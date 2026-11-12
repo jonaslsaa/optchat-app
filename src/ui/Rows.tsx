@@ -69,15 +69,16 @@ export const NoteRow = memo(function NoteRow({ part }: { part: Of<'note'> }) {
 
 const ICONS: [RegExp, LucideIcon][] = [[/bash|shell|exec/, TerminalIcon], [/read|view|cat/, EyeIcon], [/write|edit|patch/, SquarePenIcon], [/grep|find|search|ls|glob/, SearchIcon], [/web|fetch|http/, GlobeIcon], [/spawn|tell|agent/, BotIcon], [/zoom|date/, HistoryIcon]];
 const Output = ({ children }: { children: ReactNode }) => <pre className="max-h-64 cursor-text select-text overflow-auto whitespace-pre-wrap break-words rounded-md border border-border/60 bg-secondary px-2.5 py-2 font-mono text-2xs text-secondary-label leading-relaxed dark:border-transparent dark:bg-input/32">{children}</pre>;
-/** A tool call as one line saying what it did. Opened, the line is there whole, with under it what it does not say of the call
- * (the lines an edit changed, the text of a file) and what the call printed. `live`: the agent is still at work; `running` is the call's output so far, while Pi runs it. */
+/** A tool call as one line saying what it did. Opened, the line is there whole and can be selected, with under it what it does
+ * not say of the call (the lines an edit changed, the text of a file) and what the call printed. `live`: the agent is still at work; `running` is the call's output so far, while Pi runs it. */
 function ToolRow({ step, live, running }: { step: Tool; live: boolean; running?: string }) {
   const [open, setOpen] = useState(false);
   const Icon = ICONS.find(([pattern]) => pattern.test(step.name))?.[1] ?? WrenchIcon, printed = step.output ?? running, { verb, subject, detail } = act(step, live);
   return (
     <WorkLogRow
       role="button" tabIndex={0} aria-expanded={open}
-      onClick={() => setOpen(!open)}
+      // Selecting the opened line, to copy a command, is no click on the row.
+      onClick={event => { const selected = document.getSelection(); if (!selected || selected.isCollapsed || !event.currentTarget.contains(selected.anchorNode)) setOpen(!open); }}
       onKeyDown={event => { if (event.target === event.currentTarget && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); setOpen(!open); } }}
       icon={<span className="flex size-4 items-center justify-center text-icon-muted"><Icon className="block size-4 shrink-0 stroke-2" /></span>}
       label={<><span className={cn('font-medium', step.failed && 'text-destructive')}>{verb}</span> <span className={cn('opacity-80', step.name === 'bash' && 'font-mono')}>{subject}</span></>}

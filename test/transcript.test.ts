@@ -174,13 +174,13 @@ test('a tool call is said in words: what it did or is doing, and to what', () =>
 
 test('an opened tool call shows what its line does not say, and no JSON for a call the app knows', () => {
   const shown = (name: string, args: Record<string, unknown>) => act({ key: 0, type: 'tool', name, args, failed: false, output: '' }, false).detail;
-  // An edit is the lines it took out and put in, one edit after the other.
+  // An edit is the lines it took out and put in, one edit after the other. A line break at its end is a line too.
   assert.deepEqual(shown('edit', { path: 'a.ts', edits: [{ oldText: 'let a = 1;\nlet b;', newText: 'const a = 1;' }, { oldText: 'unused();\n', newText: '' }] }), [
-    { change: 'removed', text: '− let a = 1;\n− let b;' }, { change: 'added', text: '+ const a = 1;' }, { text: '…' }, { change: 'removed', text: '− unused();' },
+    { change: 'removed', text: '− let a = 1;\n− let b;' }, { change: 'added', text: '+ const a = 1;' }, { text: '…' }, { change: 'removed', text: '− unused();\n− ' },
   ]);
   assert.deepEqual(shown('write', { path: 'notes.md', content: '# Notes\n\nOne.\n' }), [{ text: '# Notes\n\nOne.\n' }]);
-  // A command is said by its line, unless it is more than a line.
-  assert.deepEqual(shown('bash', { command: 'cd src\nls' }), [{ text: 'cd src\nls' }]);
+  // A command is said by its line, unless it is more than a line: then the line has its first.
+  assert.deepEqual(act({ key: 0, type: 'tool', name: 'bash', args: { command: 'cd src\nls' }, failed: false, output: '' }, false), { verb: 'Ran', subject: 'cd src …', detail: [{ text: 'cd src\nls' }] });
   // What the line leaves out of a call is shown as it was given.
   assert.deepEqual(shown('grep', { pattern: 'retry', glob: '*.ts', limit: null }), [{ text: '{\n  "pattern": "retry",\n  "glob": "*.ts"\n}' }]);
 });

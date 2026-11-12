@@ -296,12 +296,12 @@ const NAMED = ['command', 'pattern', 'query', 'path', 'file_path', 'url', 'title
 /** A piece of what an opened call shows of itself. `change`: text an edit took out of the file, or put in. */
 export type Shown = { text: string; change?: 'removed' | 'added' };
 const changed = (change: 'removed' | 'added', text: unknown): Shown[] =>
-  typeof text === 'string' && text ? [{ change, text: text.replace(/\n$/, '').split('\n').map(line => `${change === 'added' ? '+' : '−'} ${line}`).join('\n') }] : [];
+  typeof text === 'string' && text ? [{ change, text: text.split('\n').map(line => `${change === 'added' ? '+' : '−'} ${line}`).join('\n') }] : [];
 /** A tool call in words: what it does (`Ran`, or `Running` while it does; a tool the app does not know goes by its name) and
  * to what, which is its command, pattern or path, the agents it starts, or else its first argument. `detail` is what the call
  * shows of itself when it is opened, which is only what the line (whole, once opened) does not say: an edit as the lines it
- * took out and put in, the text written to a file or told to an agent, a command of several lines, and for anything else the
- * arguments as given. */
+ * took out and put in, the text written to a file or told to an agent, a command of several lines (the line has its first),
+ * and for anything else the arguments as given. */
 export function act({ name, args, output }: Tool, live: boolean): { verb: string; subject: string; detail: Shown[] } {
   const pending = live && output === undefined;
   if (name === 'spawn' && Array.isArray(args.tasks)) {
@@ -326,9 +326,9 @@ export function act({ name, args, output }: Tool, live: boolean): { verb: string
   else if (name === 'edit' && Array.isArray(edits)) detail = edits.filter(isObject).flatMap((edit, index) => [...index ? [{ text: '…' }] : [], ...changed('removed', edit.oldText), ...changed('added', edit.newText)]);
   else if (name === 'write' && typeof content === 'string') detail = [{ text: content }];
   else if (name === 'tell' && typeof message === 'string') detail = [{ text: message }];
-  detail ??= Object.keys(given).some(key => !said.includes(key)) ? [{ text: JSON.stringify(given, null, 2) }]
-    : subject.includes('\n') ? [{ text: subject }] : [];
-  return { verb: VERBS[name]?.[pending ? 0 : 1] ?? name, subject, detail };
+  const [line, ...more] = subject.split('\n');
+  detail ??= Object.keys(given).some(key => !said.includes(key)) ? [{ text: JSON.stringify(given, null, 2) }] : more.length ? [{ text: subject }] : [];
+  return { verb: VERBS[name]?.[pending ? 0 : 1] ?? name, subject: more.length ? `${line} …` : subject, detail };
 }
 /** What pi-optchat's status line says that is news. It is written for a terminal (`OptChat: work · 350 messages · 2 pending ·
  * 1 agents`, a window's `OptChat: work · connected window · main window not reachable`): the profile, the size of the log and

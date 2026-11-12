@@ -78,13 +78,16 @@ export class Windows {
     return { window: opened.state };
   }
   async prompt({ window, text, images, whenBusy = 'steer' }: Params<'prompt'>): Promise<Result<'prompt'>> {
-    const opened = this.get(window);
+    const opened = this.get(window), pi = await this.started(opened);
     // It would steer the agent while it writes its handoff, and be part of neither conversation.
     if (opened.completing) throw new Error('This conversation is being handed to the main chat. Send your message once it is.');
-    const pi = await this.started(opened);
+    // The next conversation is told from the one handed off by the clock: its first message is later, by a millisecond at least.
+    if (opened.ended === Date.now()) await new Promise(resolve => setTimeout(resolve, 1));
     // Always with a queueing behaviour, as T3 Code sends it: Pi then starts a run or queues the message, whichever is true by
     // the time it arrives, and a run that began meanwhile (a subagent's report) cannot make it fail.
-    return answered('prompt', methods.prompt.result, await pi.request({ type: 'prompt', message: text, ...images?.length && { images }, streamingBehavior: whenBusy }));
+    const send = () => pi.request({ type: 'prompt', message: text, ...images?.length && { images }, streamingBehavior: whenBusy });
+    // pi-optchat's command, typed as a message, is Complete all the same.
+    return answered('prompt', methods.prompt.result, await (text.trim() === '/complete' ? this.handingOff(opened, send) : send()));
   }
   async abort({ window }: Params<'abort'>): Promise<Result<'abort'>> {
     const pi = this.running(window);
@@ -95,8 +98,7 @@ export class Windows {
   async complete({ window }: Params<'complete'>): Promise<Result<'complete'>> {
     const opened = this.get(window);
     if (opened.completing || !canComplete(opened.state)) throw new Error('Complete hands a connected conversation to the main chat. This window has none to hand off.');
-    opened.completing = true;
-    try { await this.running(window).request({ type: 'prompt', message: '/complete' }); } finally { opened.completing = false; }
+    await this.handingOff(opened, () => this.running(window).request({ type: 'prompt', message: '/complete' }));
     return {};
   }
   async close({ window }: Params<'close'>): Promise<Result<'close'>> {
@@ -112,6 +114,7 @@ export class Windows {
   }
   async command({ window, command }: Params<'command'>): Promise<Result<'command'>> {
     if (command.type === 'extension_ui_response') throw new Error('Pi does not answer an extension_ui_response. Send it with `answer`.');
+    if (['prompt', 'steer', 'follow_up'].includes(command.type)) throw new Error('Send a message with `prompt`, which knows when a window takes one.');
     return { data: await this.running(window).request(command) };
   }
   answer({ window, ...response }: Params<'answer'>): Result<'answer'> {
@@ -128,6 +131,11 @@ export class Windows {
     await Promise.all(windows.filter(isMain).map(opened => this.stop(opened)));
   }
 
+  /** Sends pi-optchat's `/complete`. Until Pi has answered it, the window takes no other message. */
+  private async handingOff<T>(opened: Opened, send: () => Promise<T>) {
+    opened.completing = true;
+    try { return await send(); } finally { opened.completing = false; }
+  }
   private get(id: string) {
     const opened = this.windows.get(id);
     if (!opened) throw new Error(`No window ${id}.`);

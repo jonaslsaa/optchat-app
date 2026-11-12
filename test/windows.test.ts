@@ -176,6 +176,7 @@ test('a connected window starts the profile\'s owner first, joins it, and Comple
   const [done, during] = await Promise.allSettled([request('complete', { window: window.id }), request('prompt', { window: window.id, text: 'one more thing' })]);
   assert.equal(done.status, 'fulfilled');
   assert.match(String(during.status === 'rejected' && during.reason), /being handed to the main chat/);
+  await assert.rejects(request('command', { window: window.id, command: { type: 'prompt', message: 'around the back' } }), /Send a message with `prompt`/);
   assert.partialDeepStrictEqual((await windows())[0], { id: window.id, completed: true });
   await assert.rejects(request('complete', { window: window.id }), /none to hand off/);
 
@@ -183,7 +184,6 @@ test('a connected window starts the profile\'s owner first, joins it, and Comple
   // when the new one began, and that is all of it: your message and the reply.
   const before = (await request('windows', {})).windows[0];
   assert.equal(before.since, undefined);
-  await new Promise(resolve => setTimeout(resolve, 5)); // Nobody writes the next message within the millisecond.
   await request('prompt', { window: window.id, text: 'hello again' });
   await record('agent_settled', before.seq);
   const [after] = (await request('windows', {})).windows, said = (await request('command', { window: window.id, command: { type: 'get_messages' } })).data;

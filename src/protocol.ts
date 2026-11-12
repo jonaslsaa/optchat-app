@@ -82,7 +82,8 @@ export const methods = {
    * status, widget and title, and the dialogs still waiting for an `answer`. */
   records: method(Type.Object({ window: Type.String(), after: Type.Optional(id) }),
     Type.Object({ seq: id, records: Type.Array(Type.Object({ seq: id, record: PiRecord })), complete: Type.Boolean(), ui: Type.Array(PiRecord) })),
-  /** Any other Pi RPC command (`get_state`, `set_model`, `get_messages`, ...), answered with Pi's `data`. */
+  /** Any other Pi RPC command (`get_state`, `set_model`, `get_messages`, ...), answered with Pi's `data`. Not a message to the
+   * agent: that is `prompt`. */
   command: method(Type.Object({ window: Type.String(), command: PiRecord }), Type.Object({ data: Type.Optional(Type.Unknown()) })),
   /** Answers a dialog Pi asked for in an `extension_ui_request` (select, confirm, input, editor): Pi's `extension_ui_response`
    * fields, `id` and one of `value`, `confirmed` or `cancelled`. */

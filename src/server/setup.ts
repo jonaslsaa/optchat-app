@@ -1,11 +1,11 @@
 import { spawn } from 'node:child_process';
-import { accessSync, constants, mkdirSync, readFileSync, realpathSync, statSync } from 'node:fs';
+import { accessSync, constants, mkdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { basename, delimiter, dirname, isAbsolute, join, resolve, sep } from 'node:path';
 import { stripVTControlCharacters } from 'node:util';
 import { Type } from 'typebox';
 import { Value } from 'typebox/value';
-import type { Params, Setup as State } from '../protocol.ts';
+import { methods, type Params, type Result, type Setup as State } from '../protocol.ts';
 import { killTree, Pi } from './pi.ts';
 
 /** What a chat needs before it can run, and getting it: Pi, pi-optchat installed in that Pi, and a model provider that is logged
@@ -24,6 +24,8 @@ export interface SetupOptions {
   pi?: Launch;
   /** The npm that installs Pi into the app's folder. */
   npm?: Launch;
+  /** What opens a file in a terminal of its own, for Pi's sign-in (`terminal()`). Without it the app opens none. */
+  opener?: Launch;
   push: (setup: State) => void;
 }
 
@@ -77,17 +79,20 @@ function run({ command, args }: Launch, more: readonly string[], { cwd, timeout,
   });
 }
 const Models = Type.Object({ models: Type.Array(Type.Object({ provider: Type.String() })) });
+/** What opens a `.command` file in a terminal of its own on this system: macOS's `open`. Elsewhere there is none yet, and the
+ * page shows the command to run. */
+export const terminal = (): Launch | undefined => process.platform === 'darwin' ? { command: '/usr/bin/open', args: [] } : undefined;
 
 export class Setup {
-  private readonly options: Required<SetupOptions>;
+  private readonly options: Required<Omit<SetupOptions, 'opener'>> & Pick<SetupOptions, 'opener'>;
   /** The Pi the app installed, if it has. */
   private readonly managed: Launch;
   private checked?: Promise<Checked>;
   private job?: State['job'];
   private pushing?: ReturnType<typeof setTimeout>;
   private readonly closing = new AbortController();
-  constructor({ app, push, pi = { command: 'pi', args: [] }, npm = { command: 'npm', args: [] } }: SetupOptions) {
-    this.options = { app, push, pi, npm };
+  constructor({ app, push, opener, pi = { command: 'pi', args: [] }, npm = { command: 'npm', args: [] } }: SetupOptions) {
+    this.options = { app, push, pi, npm, opener };
     this.managed = { command: join(app, 'pi', 'node_modules', '.bin', 'pi'), args: [] };
   }
   /** The Pi a window runs: yours if you have one, else the one the app installed. */
@@ -138,6 +143,33 @@ export class Setup {
     };
     void this.push();
   }
+  /** Opens a terminal of your own in which Pi signs you in to `provider`: `pi auth login`, which needs a terminal, and opens
+   * your browser itself. The line is written to a file in the app's folder and that file is opened. Nothing from the page is
+   * in it but the provider, which is one of the few the protocol names. What is asked, typed and stored there is between you
+   * and Pi: the app reads none of it. */
+  async signIn(params: Params<'signIn'>) {
+    if (!Value.Check(methods.signIn.params, params)) throw new Error('Not a provider the app signs in to.');
+    const { opener, app } = this.options, pi = await this.launch();
+    // A file for each provider, so that a second sign-in started meanwhile cannot change what the first terminal runs.
+    const file = join(app, `sign-in-${params.provider}.command`);
+    if (!opener) throw new Error(`The app cannot open a terminal on this system. Run this in one: ${shown(pi, ['auth', 'login', params.provider])}`);
+    // The Pi in the terminal keeps its files where the app's Pi does, should that not be the usual place.
+    const folder = process.env.PI_CODING_AGENT_DIR;
+    const lines = ['#!/bin/sh', ...folder ? [`export PI_CODING_AGENT_DIR=${word(folder)}`] : [], shown(pi, ['auth', 'login', params.provider]), 'echo', `echo 'You can close this window and go back to OptChat.'`];
+    mkdirSync(app, { recursive: true });
+    rmSync(file, { force: true }); // Written anew, so that it is this server's file with this mode, whatever was there.
+    writeFileSync(file, `${lines.join('\n')}\n`, { mode: 0o700, flag: 'wx' });
+    const { code, output } = await run(opener, [file], { cwd: app, timeout: 20_000, signal: this.closing.signal });
+    if (code !== 0) throw new Error(`Could not open a terminal: ${output || basename(opener.command)}`);
+  }
+  /** Whether Pi can use `provider` now. Pi is asked for its word only: it refreshes nothing, and prints no credential. */
+  async signedIn({ provider }: Params<'signedIn'>): Promise<Result<'signedIn'>> {
+    const { output } = await this.ask(await this.launch(), ['auth', 'check', '--provider', provider, '--json', '--no-refresh'], 20_000);
+    let answer: unknown;
+    try { answer = JSON.parse(output.split('\n').findLast(line => line.startsWith('{')) ?? ''); } catch {} // Its answer, past any warning.
+    if (!Value.Check(methods.signedIn.result, answer)) throw new Error('Pi did not say whether it is signed in.');
+    return { status: answer.status };
+  }
   /** Ends what is running: the server is closing. What an install left half done, the next one puts right. */
   close() { this.closing.abort(); clearTimeout(this.pushing); }
   private async push() {
@@ -179,10 +211,10 @@ export class Setup {
         : managed ? { state: 'old', installable: true, message: `Older than ${MINIMUM_PI}, which this app is tested with.` }
         : { state: 'old', message: `Older than ${MINIMUM_PI}, which this app is tested with. It is a Pi of yours, so the app leaves it alone: update it in a terminal.`, command: shown(named, ['update', 'self']) },
     };
-    const [optchat, providers] = await Promise.all([this.optchat(found, named), this.providers(found)]);
+    const [optchat, providers] = await Promise.all([this.optchat(found, named), this.providers(found)]), terminal = this.options.opener !== undefined;
     const login: State['login'] = !providers ? { state: 'unknown', providers: [], message: 'Pi did not say which models it can use.' }
-      : providers.length ? { state: 'ok', providers }
-      : { state: 'missing', providers, message: 'No model provider is logged in. Log in to one in a terminal (anthropic, openai-codex, github-copilot or another), then check again:', command: shown(named, ['auth', 'login', 'anthropic']) };
+      : providers.length ? { state: 'ok', providers, terminal }
+      : { state: 'missing', providers, terminal, message: `No model provider is logged in. Log in ${terminal ? 'with your account here, or ' : 'to one '}in a terminal (anthropic, openai-codex, github-copilot or another), then check again:`, command: shown(named, ['auth', 'login', 'anthropic']) };
     return { found, state: { pi, optchat, login } };
   }
   /** pi-optchat as this Pi has it: `pi list` prints each package's source and under it the folder it is in. A package from npm

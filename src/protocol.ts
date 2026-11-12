@@ -56,14 +56,17 @@ const Need = Type.Object({
 });
 /** What the app can install. */
 const Installed = Type.Enum(['pi', 'optchat']);
+/** The providers the app starts a sign-in for, by Pi's name for them: the ones Pi signs in to with an account, in the browser.
+ * A sign-in is only ever started for one of these. */
+const Account = Type.Enum(['anthropic', 'openai-codex', 'github-copilot']);
 /** What the app needs, and whether it is there: Pi (`run`: what runs it in a terminal; `shell`: for the Pi the app installed
  * into its own folder, the line that puts it on your PATH), pi-optchat in that Pi, and a model provider that is logged in
- * (`providers`: those that are). `job` is an install the app is running, or the last one it ran: `line` is the latest line it
+ * (`providers`: those that are; `terminal`: the app can open a terminal here for Pi's sign-in, `signIn`). `job` is an install the app is running, or the last one it ran: `line` is the latest line it
  * printed, and `output` the end of everything it printed once it has failed. */
 export const Setup = Type.Object({
   pi: Type.Intersect([Need, Type.Object({ run: Type.Optional(Type.String()), shell: Type.Optional(Type.String()) })]),
   optchat: Need,
-  login: Type.Intersect([Need, Type.Object({ providers: Type.Array(Type.String()) })]),
+  login: Type.Intersect([Need, Type.Object({ providers: Type.Array(Type.String()), terminal: Type.Optional(Type.Boolean()) })]),
   job: Type.Optional(Type.Object({ what: Installed, state: Type.Enum(['running', 'done', 'failed']), line: Type.String(), output: Type.Optional(Type.String()) })),
 });
 export type Setup = Static<typeof Setup>;
@@ -131,6 +134,11 @@ export const methods = {
    * pi-optchat with Pi's `pi install`. It never changes a Pi the app did not install. Answers once it has started; its
    * progress and its end come as `setup` pushes. */
   install: method(Type.Object({ what: Installed }), none),
+  /** Opens a terminal in which Pi signs you in to a provider with your account, in your browser (`pi auth login`). The sign-in
+   * is between you, Pi and the provider: the app starts it, and sees nothing of it. */
+  signIn: method(Type.Object({ provider: Account }), none),
+  /** Whether Pi can use a provider now, in Pi's own word (`pi auth check`): asked while a sign-in is under way. */
+  signedIn: method(Type.Object({ provider: Account }), Type.Object({ status: Type.Enum(['ready', 'not_ready', 'invalid']) })),
 };
 export type Method = keyof typeof methods;
 export type Params<M extends Method> = Static<(typeof methods)[M]['params']>;

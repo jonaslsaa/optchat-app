@@ -27,6 +27,13 @@ if (verb === 'list') {
   console.log(packages.length ? ['User packages:', ...packages.map(([source, path]) => `  ${source}\n    ${path}`)].join('\n') : 'No packages installed.');
   process.exit(0);
 }
+// Pi's sign-in asks its questions on a terminal, and says so where there is none.
+if (verb === 'auth' && source === 'login') { console.error('"pi auth login <provider> [--api-key] [--no-browser]" requires an interactive terminal'); process.exit(1); }
+if (verb === 'auth' && source === 'check') {
+  const provider = process.argv[process.argv.indexOf('--provider') + 1], ready = installed.providers.includes(provider);
+  console.log(JSON.stringify(ready ? { status: 'ready', provider, authType: 'oauth' } : { status: 'not_ready', provider, reason: 'credentials_not_configured' }));
+  process.exit(ready ? 0 : 1);
+}
 if ((verb === 'install' || verb === 'update') && folder && kept) {
   if (source === 'self') installed.version = '1.5.2';
   else {

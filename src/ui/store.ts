@@ -27,8 +27,11 @@ export interface State {
   /** The app's settings, and what a chat needs with whether it is there, once the server has said. */
   settings?: Settings;
   setup?: Setup;
+  /** The provider you are signing in to in a terminal, while the page waits for Pi to say it is done. */
+  signingIn?: Provider;
 }
-const PAGE = 200, SAVED = 'optchat-app';
+type Provider = Params<'signIn'>['provider'];
+const PAGE = 200, SAVED = 'optchat-app', SIGN_IN_ASKS = 100;
 export const mainOf = (profile: string) => `${profile}/main`;
 const ordered = (windows: WindowState[]) => windows.toSorted((a, b) => a.profile.localeCompare(b.profile) || Number(b.role === 'main') - Number(a.role === 'main') || a.id.localeCompare(b.id, undefined, { numeric: true }));
 export const UNTITLED = 'Untitled window';
@@ -49,11 +52,16 @@ export class App {
   private readonly deadlines = new Map<string, ReturnType<typeof setTimeout>>();
   private readonly storage: () => Pick<Storage, 'getItem' | 'setItem'>;
   private readonly retry: number;
+  private readonly poll: number;
+  /** Which sign-in is being waited for: a later one, or a cancel, ends the wait of the one before. */
+  private waiting = 0;
 
-  /** `storage` keeps which profiles are open across reloads; `retry` is how long to wait before connecting again. */
-  constructor({ storage = () => localStorage, retry = 1000 }: { storage?: () => Pick<Storage, 'getItem' | 'setItem'>; retry?: number } = {}) {
+  /** `storage` keeps which profiles are open across reloads; `retry` is how long to wait before connecting again, and `poll`
+   * between asking whether a sign-in is done. */
+  constructor({ storage = () => localStorage, retry = 1000, poll = 3000 }: { storage?: () => Pick<Storage, 'getItem' | 'setItem'>; retry?: number; poll?: number } = {}) {
     this.storage = storage;
     this.retry = retry;
+    this.poll = poll;
   }
   /** Connects, and again a while after the connection is lost: windows live in the server, so nothing is lost with it. A socket
    * that never opened closes too, so its closing is the one place that tries again, with one timer. */
@@ -146,6 +154,24 @@ export class App {
     this.set({ profiles: names });
     if (names.length && !this.state.profile) await this.openProfile(names[0]);
   }
+  /** Has the server open a terminal where Pi signs you in, then asks whether Pi can use the provider until it can: a hundred
+   * times at most (five minutes, and what the answers take), and no more once you cancel, the answer fails, or the page is gone. The page learns that the
+   * sign-in is done, and nothing else about it. */
+  async signIn(provider: Provider) {
+    const mine = ++this.waiting, over = () => this.closed || mine !== this.waiting;
+    this.set({ signingIn: provider });
+    let done = !await this.ask('signIn', { provider });
+    for (let asked = 0; !done && !over() && asked < SIGN_IN_ASKS; asked++) {
+      await new Promise(resolve => setTimeout(resolve, this.poll));
+      if (over()) return;
+      const answer = await this.ask('signedIn', { provider });
+      if (over()) return;
+      if (answer?.status === 'ready') await this.checkSetup(true);
+      done = answer?.status !== 'not_ready';
+    }
+    if (!over()) this.set({ signingIn: undefined });
+  }
+  cancelSignIn() { this.waiting++; this.set({ signingIn: undefined }); }
   /** Installs Pi or pi-optchat; how it goes is pushed as the setup. */
   install(what: Params<'install'>['what']) { return this.ask('install', { what }); }
   /** Reads the page before the oldest one read. */

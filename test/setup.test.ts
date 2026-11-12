@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { execFileSync, spawnSync } from 'node:child_process';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { delimiter, join, relative } from 'node:path';
 import { test, type TestContext } from 'node:test';
@@ -169,6 +169,53 @@ test('a Pi installed in a terminal meanwhile is found by the next prompt, and th
   assert.deepEqual(await request('prompt', { window: window.id, text: 'hello' }), { disposition: 'started' });
   assert.partialDeepStrictEqual(await request('setup', {}), { pi: { state: 'ok', path: later } });
   assert.equal(pushed.at(-1)?.pi.state, 'ok');
+});
+
+test('a sign-in opens a terminal with Pi\'s own login, for a provider the app knows and no other', async t => {
+  // In place of macOS's `open`: it notes which file it was asked to open.
+  const opened = join(home, 'opened.txt'), opener = { command: process.execPath, args: ['-e', `require('node:fs').writeFileSync(${JSON.stringify(opened)}, process.argv[1])`] };
+  process.env.PI_CODING_AGENT_DIR = join(home, `pi's folder`);
+  t.after(() => { delete process.env.PI_CODING_AGENT_DIR; });
+  const { app, folder, request } = await setup(t, { opener }, { version: '1.5.2', providers: [], packages: {} });
+  assert.partialDeepStrictEqual(await request('setup', {}), { login: { state: 'missing', terminal: true } });
+  assert.deepEqual(await request('signedIn', { provider: 'anthropic' }), { status: 'not_ready' });
+
+  // Anything but one of the three is refused before a file is written, whatever is in it.
+  const file = join(app, 'sign-in-anthropic.command');
+  for (const provider of ['openai', 'anthropic; touch /tmp/nope', '$(id)']) await assert.rejects(request('signIn', { provider: provider as 'anthropic' }), /Invalid signIn request/);
+  assert.equal(existsSync(file), false);
+
+  await request('signIn', { provider: 'anthropic' });
+  assert.equal(readFileSync(opened, 'utf8'), file);
+  assert.equal(statSync(file).mode & 0o777, 0o700);
+  // Pi's own login and nothing else, with Pi's folder where the app's Pi has it, and no flag of a window's.
+  assert.deepEqual(readFileSync(file, 'utf8').split('\n').slice(0, 3), ['#!/bin/sh', `export PI_CODING_AGENT_DIR='${home}/pi'\\''s folder'`, `${process.execPath} ${join(import.meta.dirname, 'fake-pi.ts')} auth login anthropic`]);
+  // Run as the terminal would run it, it is Pi's login that runs (which here finds no terminal), and then the last line.
+  const ran = spawnSync('/bin/sh', [file], { encoding: 'utf8' });
+  assert.match(ran.stderr, /requires an interactive terminal/);
+  assert.match(ran.stdout, /You can close this window and go back to OptChat\.\n$/);
+  // The file is the server's own each time, whatever was put in its place.
+  writeFileSync(file, 'something else');
+  chmodSync(file, 0o644);
+  await request('signIn', { provider: 'anthropic' });
+  assert.match(readFileSync(file, 'utf8'), / auth login anthropic\n/);
+  assert.equal(statSync(file).mode & 0o777, 0o700);
+  // Each provider has a file of its own: a second sign-in leaves what the first terminal runs as it was.
+  await request('signIn', { provider: 'github-copilot' });
+  assert.match(readFileSync(join(app, 'sign-in-github-copilot.command'), 'utf8'), / auth login github-copilot\n/);
+  assert.match(readFileSync(file, 'utf8'), / auth login anthropic\n/);
+
+  // Pi says when the sign-in is done; the app reads no credential to know.
+  writeFileSync(join(folder, 'state.json'), JSON.stringify({ version: '1.5.2', providers: ['anthropic'], packages: {} }));
+  assert.deepEqual(await request('signedIn', { provider: 'anthropic' }), { status: 'ready' });
+});
+
+test('without a way to open a terminal, a sign-in says which command to run', async t => {
+  const { request } = await setup(t, {}, { version: '1.5.2', providers: [], packages: {} });
+  const { login } = await request('setup', {});
+  assert.equal(login.terminal, false);
+  assert.match(login.command ?? '', / auth login anthropic$/);
+  await assert.rejects(request('signIn', { provider: 'github-copilot' }), /cannot open a terminal on this system\. Run this in one: .* auth login github-copilot$/);
 });
 
 test('an install that fails says why, with the end of what it printed', async t => {

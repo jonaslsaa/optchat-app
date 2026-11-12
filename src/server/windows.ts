@@ -2,9 +2,9 @@ import { existsSync } from 'node:fs';
 import { Type, type Static, type TSchema } from 'typebox';
 import { Value } from 'typebox/value';
 import { methods, type Params, type PiRecord, type Push, type Result, type WindowState } from '../protocol.ts';
-import { profileDirectory } from './disk.ts';
 import { canComplete } from '../window.ts';
 import { Pi, reason } from './pi.ts';
+import { profileDirectory } from './profiles.ts';
 
 export interface WindowsOptions {
   home: string;
@@ -29,12 +29,19 @@ interface Opened {
   /** A connected window on its way out: it starts no Pi, and leaves the list once its Pi has exited. */
   closed?: boolean;
 }
-/** What pi-optchat says a Pi in RPC mode is to its profile: JSON in a `setStatus` with this key (its docs/connected-windows.md).
- * This is the one place that reads it, and it reads only these two fields. */
+/** What pi-optchat says a Pi in RPC mode is to its profile: JSON in a `setStatus` with this key (its docs/connected-windows.md),
+ * sent as the session starts, so before Pi's first answer; a Pi that has not sent it by then has no profile open. This is the
+ * one place that reads it, and it reads only these two fields. */
 const ROLE_STATUS = 'optchat.role';
-/** pi-optchat's status line: `OptChat: <profile> · ...` once it has opened the profile, and something else before. */
-const opens = ({ ui, state }: Opened) => { const line = ui.get('status optchat')?.statusText; return typeof line === 'string' && line.startsWith(`OptChat: ${state.profile} ·`); };
-const Role = Type.Object({ completed: Type.Optional(Type.Boolean()) });
+const Role = Type.Object({ profile: Type.String(), completed: Type.Optional(Type.Boolean()) });
+/** pi-optchat's role as it stands, or nothing: from another program, or a pi-optchat too old to say. */
+function role(status: unknown) {
+  try {
+    const role: unknown = JSON.parse(String(status));
+    return Value.Check(Role, role) ? role : undefined;
+  } catch { return undefined; }
+}
+const opens = ({ ui, state }: Opened) => role(ui.get(`status ${ROLE_STATUS}`)?.statusText)?.profile === state.profile;
 const DIALOGS = ['select', 'confirm', 'input', 'editor'];
 const mainId = (profile: string) => `${profile}/main`;
 const isMain = ({ state }: Opened) => state.id === mainId(state.profile);
@@ -145,7 +152,7 @@ export class Windows {
       // Pi answers once its extensions have started the session, so by now pi-optchat has the profile or has said why not.
       // Without its profile it takes every prompt and answers nothing, so such a Pi is stopped, not left looking idle.
       await pi.request({ type: 'get_state' });
-      if (!opens(opened)) throw new Error(opened.fault ?? 'pi-optchat did not open the profile. Is it installed in this Pi? (pi install npm:pi-optchat)');
+      if (!opens(opened)) throw new Error(opened.fault ?? 'pi-optchat did not open the profile. Is pi-optchat 0.11.9 or newer installed in this Pi? (pi install npm:pi-optchat)');
     } catch (error) {
       opened.fault = reason(error);
       await pi.stop(grace);
@@ -204,9 +211,7 @@ export class Windows {
   /** `status` is pi-optchat's role as JSON, or nothing once its Pi has no profile open. All the app needs of it is whether a
    * connected window's conversation is handed off: which Pi owns the profile and which is a window on it is the app's own doing. */
   private role(opened: Opened, status: unknown) {
-    let role: unknown;
-    try { role = JSON.parse(String(status)); } catch {}
-    const { state } = opened, completed = Value.Check(Role, role) && role.completed === true;
+    const { state } = opened, completed = role(status)?.completed === true;
     if ((state.completed ?? false) === completed) return;
     if (completed) state.completed = true; else delete state.completed;
     this.changed(opened);

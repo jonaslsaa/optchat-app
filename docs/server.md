@@ -1,6 +1,6 @@
 # The server
 
-A small local server between the UI and pi-optchat. It is a client, never a second brain: it reads a profile's memory from disk through `pi-optchat/core`, and it runs each window as one `pi --mode rpc` process. Pi and pi-optchat do all the work; the server starts and stops them, passes commands in, and pushes out what Pi writes.
+A small local server between the UI and pi-optchat. It is a client, never a second brain: it reads a profile's memory from disk through `pi-optchat/files`, and it runs each window as one `pi --mode rpc` process. Pi and pi-optchat do all the work; the server starts and stops them, passes commands in, and pushes out what Pi writes.
 
 ## Run it
 
@@ -10,7 +10,7 @@ npm start                 # builds the UI, then http://127.0.0.1:4780/ (the prot
 npm run server            # the same without building the UI first
 ```
 
-It needs Node 22.19 or newer and a `pi` on the PATH with pi-optchat installed (`pi install npm:pi-optchat`). Options: `--port` and `--cwd <dir>` (where windows run unless a window names its own; your home directory by default). `OPTCHAT_HOME` picks the profiles' root, as in pi-optchat. Ctrl+C stops every Pi in order, connected windows before the main one they hand off to, so each saves its memory and frees its profile.
+It needs Node 22.19 or newer and a `pi` on the PATH with pi-optchat 0.11.9 or newer installed (`pi install npm:pi-optchat`). Options: `--port` and `--cwd <dir>` (where windows run unless a window names its own; your home directory by default). `OPTCHAT_HOME` picks the profiles' root, as in pi-optchat. Ctrl+C stops every Pi in order, connected windows before the main one they hand off to, so each saves its memory and frees its profile.
 
 ```bash
 npm run check             # types
@@ -63,9 +63,9 @@ A run's finished messages are in `history` as soon as pi-optchat has logged them
 ## Windows
 
 - **Main window.** `open` gives it at once; its Pi starts on the first `prompt`, with `--optchat-profile <name> --optchat-connect off`. Until then nothing holds the profile, so a terminal Pi can still open it. The main window never joins a profile a Pi outside the app holds: its start fails with who holds it.
-- **Connected windows.** A second Pi on a profile joins the first as a connected window: its own conversation, the profile's memory read-only, and a handoff to the main chat on Complete. The server starts it with `--optchat-connect join`, after the main window's Pi if the profile has no owner yet. This needs the pi-optchat after 0.11.8 (its "RPC hosts" change).
+- **Connected windows.** A second Pi on a profile joins the first as a connected window: its own conversation, the profile's memory read-only, and a handoff to the main chat on Complete. The server starts it with `--optchat-connect join`, after the main window's Pi if the profile has no owner yet.
 - **`role` is the window's place in the app and never changes.** The main window's Pi owns the profile and a connected window's Pi joins it; the server starts them that way, so nothing has to be read back. `completed` is pi-optchat's word (its `optchat.role` status) that a connected window's conversation is handed off.
-- **A Pi that did not open its profile** is stopped, and the prompt fails with the reason (for example pi-optchat's `Profile already running: …`, or that pi-optchat is not installed), instead of a window that looks idle and answers nothing. The server knows the profile is open when pi-optchat's `optchat` status line names it, so another extension's failure does not count.
+- **A Pi that did not open its profile** is stopped, and the prompt fails with the reason (for example pi-optchat's `Profile already running: …`, or that pi-optchat is not installed or older than 0.11.9), instead of a window that looks idle and answers nothing. The server knows the profile is open when pi-optchat's `optchat.role` status names it, which it sends as the session starts; another extension's failure does not count.
 - **Stopping.** The server closes Pi's stdin, which is Pi's request for an orderly shutdown, and kills it only if it has not exited after 15 seconds. A Pi that is still starting is stopped the same way.
 
 ## Who may connect

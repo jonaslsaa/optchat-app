@@ -72,8 +72,7 @@ test('a real Pi turn on a throwaway profile, end to end through the WebSocket', 
   assert.equal(existsSync(join(profile, 'lock.sock')), false);
 });
 
-// pi-optchat 0.11.8 cannot join a running profile in RPC mode; the change that lets it is not released yet.
-test('a connected window reads the profile\'s memory, and Complete hands its conversation to the main chat', { timeout: 180_000, skip: !checkout && 'needs a pi-optchat after 0.11.8: set PI_OPTCHAT to a checkout that has RPC windows' }, async t => {
+test('a connected window reads the profile\'s memory, and Complete hands its conversation to the main chat', { timeout: 180_000 }, async t => {
   const home = temporaryHome();
   createProfile(home, 'live');
   const server = await startServer({ home, cwd: mkdtempSync(join(home, 'cwd-')), pi });

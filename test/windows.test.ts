@@ -10,7 +10,7 @@ import { startServer, type ServerOptions } from '../src/server/server.ts';
 import { createProfile, temporaryHome } from './support.ts';
 
 const home = temporaryHome();
-for (const name of ['work', 'busy', 'stuck', 'mute', 'bare', 'noisy']) createProfile(home, name);
+for (const name of ['work', 'busy', 'stuck', 'mute', 'bare', 'old', 'noisy']) createProfile(home, name);
 const fake = { command: process.execPath, args: [join(import.meta.dirname, 'fake-pi.ts')] };
 
 /** A server over the fake Pi, and a client that remembers what it was pushed. */
@@ -137,8 +137,9 @@ test('a Pi that could not open the profile is stopped, and the prompt fails with
   assert.partialDeepStrictEqual((await status('stopped')).window, { id: 'busy/main' });
   assert.partialDeepStrictEqual((await request('windows', {})).windows[0], { status: 'stopped', error: 'Profile already running: busy · PID 1 · a-terminal · /somewhere' });
 
-  // A Pi without pi-optchat opens no profile either. Another extension's failure is not pi-optchat's.
-  await assert.rejects(request('prompt', { window: (await request('open', { profile: 'bare' })).window.id, text: 'hello' }), /pi-optchat did not open the profile/);
+  // A Pi without pi-optchat opens no profile either, and nor does one whose pi-optchat shows its status line but names no role.
+  // Another extension's failure is not pi-optchat's.
+  for (const profile of ['bare', 'old']) await assert.rejects(request('prompt', { window: (await request('open', { profile })).window.id, text: 'hello' }), /pi-optchat did not open the profile. Is pi-optchat 0.11.9 or newer installed/);
   assert.deepEqual(await request('prompt', { window: (await request('open', { profile: 'noisy' })).window.id, text: 'hello' }), { disposition: 'started' });
 });
 
@@ -208,7 +209,8 @@ test('only this machine\'s pages connect, and a request the server cannot serve 
 
   // @ts-expect-error: the compiler refuses it too.
   await assert.rejects(request('history', { profile: 'work', limit: 'all' }), /Invalid history request/);
-  await assert.rejects(request('open', { profile: '../etc' }), /No profile named/);
+  await assert.rejects(request('open', { profile: '../etc' }), /Profile names:/);
+  await assert.rejects(request('open', { profile: 'nobody' }), /No profile named nobody/);
   const { window } = await request('open', { profile: 'work' });
   await request('prompt', { window: window.id, text: 'hello' });
   await assert.rejects(request('command', { window: window.id, command: { type: 'extension_ui_response', id: 'dialog-1' } }), /Send it with `answer`/);

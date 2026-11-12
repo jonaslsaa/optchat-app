@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { createServer } from 'node:net';
+import { existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { test, type TestContext } from 'node:test';
@@ -10,9 +11,9 @@ import { createProfile, temporaryHome } from './support.ts';
 
 const pi = { command: process.execPath, args: [join(import.meta.dirname, 'fake-pi.ts')] };
 /** The page's store, without a page: what it would keep in the browser stays in `saved`. */
-function page(t: TestContext, retry = 1000) {
+function page(t: TestContext, retry = 1000, poll = 3000) {
   const saved = new Map<string, string>();
-  const app = new App({ retry, storage: () => ({ getItem: key => saved.get(key) ?? null, setItem: (key, value) => { saved.set(key, value); } }) });
+  const app = new App({ retry, poll, storage: () => ({ getItem: key => saved.get(key) ?? null, setItem: (key, value) => { saved.set(key, value); } }) });
   t.after(() => app.close());
   const until = (met: (state: State) => boolean) => new Promise<State>(resolve => {
     const check = () => { if (met(app.state)) { stop(); resolve(app.state); } };
@@ -102,4 +103,43 @@ test('records the page missed are read again from the server, so it shows what a
   assert.deepEqual(caught.live, seen.live);
   assert.deepEqual(caught.logs, seen.logs);
   assert.equal(seen.live['work/main'].messages.length, 2);
+});
+
+test('a sign-in waits for Pi to say it is done, and stops asking when you cancel', async t => {
+  const folder = process.env.FAKE_PI_HOME = mkdtempSync(join(directory, 'pi-')), state = join(folder, 'state.json'), opened = join(folder, 'opened.txt');
+  t.after(() => { delete process.env.FAKE_PI_HOME; });
+  writeFileSync(state, JSON.stringify({ version: '1.5.2', providers: [], packages: {} }));
+  // In place of the terminal: it notes the file it was asked to open, and each time Pi is asked is noted too.
+  const opener = { command: process.execPath, args: ['-e', `require('node:fs').writeFileSync(${JSON.stringify(opened)}, process.argv[1])`] };
+  const appFolder = mkdtempSync(join(directory, 'app-')), script = join(appFolder, 'sign-in-openai-codex.command');
+  const server = await startServer({ home: directory, app: appFolder, cwd: directory, pi, opener });
+  t.after(() => server.close());
+  const { app, until } = page(t, 1000, 20);
+  await app.start(server.url);
+  await until(state => state.setup?.login.state === 'missing');
+
+  // Two clicks: the page waits for the one made last, whichever the server answers first, and from the click on.
+  void app.signIn('github-copilot');
+  void app.signIn('openai-codex');
+  assert.equal(app.state.signingIn, 'openai-codex');
+  while (!existsSync(script) || !existsSync(opened)) await sleep(10);
+  await sleep(50);
+  assert.equal(app.state.signingIn, 'openai-codex');
+  assert.match(readFileSync(script, 'utf8'), / auth login openai-codex\n/);
+  await sleep(100);
+  assert.equal(app.state.signingIn, 'openai-codex', 'it waits while Pi says not yet');
+  // You finish in the terminal: Pi says so, and the setup is looked at again.
+  writeFileSync(state, JSON.stringify({ version: '1.5.2', providers: ['openai-codex'], packages: {} }));
+  const done = await until(state => !state.signingIn);
+  assert.deepEqual(done.setup?.login.providers, ['openai-codex']);
+
+  // Cancelled, it asks no more: Pi being ready later changes nothing by itself.
+  writeFileSync(state, JSON.stringify({ version: '1.5.2', providers: [], packages: {} }));
+  await app.checkSetup(true);
+  void app.signIn('anthropic');
+  await sleep(50);
+  app.cancelSignIn();
+  writeFileSync(state, JSON.stringify({ version: '1.5.2', providers: ['anthropic'], packages: {} }));
+  await sleep(150);
+  assert.equal(app.state.setup?.login.state, 'missing');
 });

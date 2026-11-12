@@ -27,7 +27,7 @@ Two servers on one machine share that folder. Each reads the settings when it st
 | --- | --- | --- |
 | **Pi** | `pi --version`, for the `pi` on your PATH first and then the one in the app's folder. One that does not run to its end and say its version is passed over. The one that is found is run by its whole path from then on, and a PATH entry that is not a whole path is not looked in, since it would mean another folder in each window. It has to be 1.5.2 or newer. | **Install** puts Pi into the app's folder (below). |
 | **pi-optchat** | `pi list` names each package and the folder it is in; that folder's `package.json` says the version. It has to be 0.11.9 or newer. | **Install** runs `pi install npm:pi-optchat`, and **Update** `pi update npm:pi-optchat`. A pi-optchat that is a folder of yours (a checkout) is read the same way and never touched. |
-| **A model** | Pi lists the models it has credentials for (`get_available_models`, asked of a Pi that opens no session, loads no extension and goes nowhere on the network). | The page shows the command: `pi auth login <provider>`. The app does not log in for you yet, and never reads a credential. |
+| **A model** | Pi lists the models it has credentials for (`get_available_models`, asked of a Pi that opens no session, loads no extension and goes nowhere on the network). | On macOS, a button for each account opens a terminal where Pi signs you in (below). Elsewhere the page shows the command: `pi auth login <provider>`. The app never reads a credential. |
 
 A fourth line in the page is the first profile, which is made in a terminal: pi-optchat creates profiles only there. Until there is one, the setup is the first thing the page shows; after that it is part of the settings, and a notice at the top says when something is missing.
 
@@ -57,11 +57,21 @@ An install runs without a terminal, one at a time. Its latest line is pushed to 
 
 The shape is T3 Code's (its provider checks and its update runner): a state per thing with one message that names the command, and an install that reports its latest line. What T3 Code does not do is install Pi or a Pi package; that part is this app's own.
 
+### Logging in
+
+Pi signs in to a provider with `pi auth login <provider>`, which needs a terminal: it may ask a question first, and then opens your browser. So the app does not run it. It opens a terminal for you with that one command in it, and waits:
+
+- `signIn { provider }` writes `sign-in-<provider>.command` into the app's folder (mode 700, written anew each time; one file for each provider, so two sign-ins do not change each other's) and opens it with macOS's `open`, which runs it in Terminal. The file holds Pi's whole path, `auth login`, and the provider. The provider is one of three the protocol names, by Pi's own names: `anthropic` (Claude), `openai-codex` (ChatGPT) and `github-copilot`. Anything else is refused before a file is written.
+- What Pi asks, what you type and what it stores stay between you and Pi. The app has no API-key field, never reads `auth.json`, and never asks Pi to print a key or a token.
+- The page then asks `signedIn { provider }` every three seconds, which is Pi's `pi auth check --provider <provider> --json --no-refresh`: ready or not, and nothing else. It stops when Pi says ready (and looks at the setup again), when you cancel, when the answer fails, after a hundred asks (five minutes and a little), or when the page is gone.
+- For any other provider, or with an API key, run `pi auth login` in a terminal yourself; **Check again** then finds it.
+- On Linux and Windows the app opens no terminal yet: the page shows the command to copy.
+- A server started from code opens no terminal unless it is given one (`opener`), so tests never do; `node src/server/main.ts` and `npm run dev` pass macOS's.
+
 ### Not handled yet
 
 - **The PATH of a desktop app.** Started from a terminal, the server has your PATH. A desktop shell started from the Dock will not, and has to read it from your login shell first, as T3 Code does; that comes with the shell.
 - **Windows.** Installing is written for macOS and Linux: on Windows npm is `npm.cmd` and the installed Pi is `.bin/pi.cmd`, which the server does not run yet.
-- **Logging in from the app.**
 - **Creating the first profile from the app.** It needs pi-optchat to offer it outside its terminal UI.
 
 ## A profile a terminal has open

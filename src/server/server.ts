@@ -26,6 +26,8 @@ export interface ServerOptions extends Partial<Pick<WindowsOptions, 'home' | 'gr
   flags?: readonly string[];
   /** The npm that installs Pi into the app's folder. */
   npm?: Launch;
+  /** What opens a file in a terminal of its own, for Pi's sign-in. Without it the server opens none. */
+  opener?: Launch;
   /** The built UI's directory (`npm run build`), served as the page at `/`. */
   ui?: string;
   /** Origins that may connect besides the server's own page: the scheme a desktop shell loads the UI from, as T3 Code's
@@ -38,7 +40,7 @@ const loopback = (url: string) => { try { return LOOPBACK.includes(new URL(url).
 
 /** Starts the app's server on this machine only: the protocol of `protocol.ts` on a WebSocket at `/ws`, a profile's images at
  * `/images/<profile>/<name>`, and the UI's page everywhere else. `close` stops every Pi it started and waits for them. */
-export async function startServer({ port = 0, origins = [], ui = join(import.meta.dirname, '../../dist/ui'), home = dataHome(), app = appHome(), cwd = homedir(), pi, flags = [], npm, grace = 15_000 }: ServerOptions = {}) {
+export async function startServer({ port = 0, origins = [], ui = join(import.meta.dirname, '../../dist/ui'), home = dataHome(), app = appHome(), cwd = homedir(), pi, flags = [], npm, opener, grace = 15_000 }: ServerOptions = {}) {
   ui = resolve(ui);
   home = resolve(home); // Pi runs in each window's directory, and has to find the same profiles from there.
   app = resolve(app); // And npm runs in the app's folder, where a path that is not whole would be another folder.
@@ -47,7 +49,7 @@ export async function startServer({ port = 0, origins = [], ui = join(import.met
   const send = (socket: WebSocket, message: ServerMessage) => { if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify(message)); };
   const push = (push: Push) => { for (const socket of sockets.clients) send(socket, push); };
   let settings = readSettings(app);
-  const setup = new Setup({ app, pi, npm, push: setup => push({ push: 'setup', setup }) });
+  const setup = new Setup({ app, pi, npm, opener, push: setup => push({ push: 'setup', setup }) });
   // A window runs in the folder the settings name, unless that folder is gone since it was kept.
   const windows = new Windows({ home, grace, push, cwd: () => settings.cwd && isDirectory(settings.cwd) ? settings.cwd : cwd, pi: async () => { const { command, args } = await setup.launch(); return { command, args: [...args, ...flags] }; } });
   const handlers: { [M in Method]: (params: Params<M>) => Result<M> | Promise<Result<M>> } = {
@@ -58,6 +60,7 @@ export async function startServer({ port = 0, origins = [], ui = join(import.met
     settings: () => settings,
     setSettings: params => { settings = writeSettings(app, settings, params); push({ push: 'settings', settings }); return settings; },
     setup: params => setup.state(params), install: async params => { await setup.install(params); return {}; },
+    signIn: async params => { await setup.signIn(params); return {}; }, signedIn: params => setup.signedIn(params),
   };
   const isMethod = (method: string): method is Method => Object.hasOwn(handlers, method);
   const call = <M extends Method>(method: M, params: unknown) => {

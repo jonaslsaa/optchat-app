@@ -45,6 +45,7 @@ The client sends `{ id, method, params }` and gets `{ id, result }` or `{ id, er
 | `settings`, `setSettings { theme?, cwd? }` | The app's own settings, and a change to the ones it names ([setup.md](setup.md)). |
 | `setup { fresh? }` | What a chat needs and whether it is there: Pi, pi-optchat in it, a model that is logged in. `fresh` looks again. |
 | `install { what }` | Installs or updates `pi` or `optchat` where the setup says `installable`: only the app's own Pi, and a pi-optchat from npm. Answers once it has started; the rest is pushed. |
+| `signIn { provider }`, `signedIn { provider }` | Opens a terminal where Pi signs you in to `anthropic`, `openai-codex` or `github-copilot`; and whether Pi can use that provider now (`ready`, `not_ready`, `invalid`). The app sees nothing of the sign-in ([setup.md](setup.md)). |
 
 The server pushes four things to every client:
 

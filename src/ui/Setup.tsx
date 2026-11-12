@@ -1,4 +1,4 @@
-import { CheckIcon, CircleAlertIcon, CircleDashedIcon, CopyIcon, RefreshCwIcon } from 'lucide-react';
+import { CheckIcon, CircleAlertIcon, CircleDashedIcon, CopyIcon, LogInIcon, RefreshCwIcon } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 import type { Params, Setup as SetupState } from '../protocol.ts';
 import { app, type State } from './store.ts';
@@ -10,6 +10,9 @@ import { Button, cn, Spinner } from './ui.tsx';
 
 type Need = Pick<SetupState['optchat'], 'state' | 'message' | 'command' | 'installable'>;
 type What = Params<'install'>['what'];
+type Provider = Params<'signIn'>['provider'];
+/** The accounts Pi signs in to in the browser, by what people call them. */
+const ACCOUNTS = { anthropic: 'Claude', 'openai-codex': 'ChatGPT', 'github-copilot': 'GitHub Copilot' } satisfies Record<Provider, string>;
 const NEEDS = [['pi', 'Pi'], ['optchat', 'pi-optchat'], ['login', 'A logged-in model']] as const;
 /** What stands between you and a chat, if anything does: the first thing that is missing or too old, said in a notice
  * wherever you are. */
@@ -51,6 +54,22 @@ function Step({ name, need, found, action, children }: { name: string; need?: Ne
   );
 }
 
+/** Logging in with an account: a button for each, which opens a terminal where Pi does the sign-in in your browser. The page
+ * only waits for Pi to say it is done. */
+function SignIn({ signingIn }: { signingIn?: Provider }) {
+  if (signingIn) return (
+    <p role="status" className="mt-2 flex flex-wrap items-center gap-2 text-muted-foreground">
+      <Spinner className="size-3 shrink-0" />Finish signing in to {ACCOUNTS[signingIn]} in the terminal window that opened.
+      <Button variant="ghost-muted" size="xs" onClick={() => app.cancelSignIn()}>Cancel</Button>
+    </p>
+  );
+  return (
+    <p className="mt-2 flex flex-wrap items-center gap-2">
+      {(Object.keys(ACCOUNTS) as Provider[]).map(provider => <Button key={provider} variant="outline" onClick={() => void app.signIn(provider)}><LogInIcon />{ACCOUNTS[provider]}</Button>)}
+    </p>
+  );
+}
+
 export function Setup({ state }: { state: State }) {
   const { setup } = state, job = setup?.job, busy = job?.state === 'running';
   const [checking, setChecking] = useState(false);
@@ -74,7 +93,9 @@ export function Setup({ state }: { state: State }) {
         <Step name="pi-optchat" need={optchat} found={optchat?.version && `${optchat.version} · ${optchat.path}`} action={install('optchat', optchat)}>
           {progress('optchat')}
         </Step>
-        <Step name="A model" need={login} found={login?.providers.length ? `logged in: ${login.providers.join(', ')}` : undefined} />
+        <Step name="A model" need={login} found={login?.providers.length ? `logged in: ${login.providers.join(', ')}` : undefined}>
+          {login?.terminal && login.state === 'missing' && <SignIn signingIn={state.signingIn} />}
+        </Step>
         <Step name="A profile" need={state.profiles.length ? { state: 'ok' } : pi?.version ? { state: 'missing', message: 'A profile is one chat that never ends. The first one is made in a terminal: run Pi there, choose "+ Create profile", then check again here.', command: pi.run } : { state: 'unknown' }}
           found={state.profiles.length ? state.profiles.join(', ') : undefined} />
       </ul>

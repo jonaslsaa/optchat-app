@@ -45,7 +45,8 @@ await build({ logLevel: 'warn' });
 const server = await startServer({ home, app: join(home, 'app'), cwd: home, pi });
 // A machine with nothing on it yet: no Pi, no profile.
 mkdirSync(join(home, 'new'));
-const fresh = await startServer({ home: join(home, 'new'), app: join(home, 'new', 'app'), cwd: home, pi: { command: join(home, 'no-such-pi'), args: [] }, npm: { command: process.execPath, args: [join(import.meta.dirname, '../test/fake-npm.ts')] } });
+const fresh = await startServer({ home: join(home, 'new'), app: join(home, 'new', 'app'), cwd: home, pi: { command: join(home, 'no-such-pi'), args: [] }, npm: { command: process.execPath, args: [join(import.meta.dirname, '../test/fake-npm.ts')] },
+  opener: { command: process.execPath, args: ['-e', ''] } }); // In place of the terminal a sign-in opens: nothing.
 let control: Client | undefined, browser: Browser | undefined;
 // Whatever happens, nothing is left running: the browser, and the servers with their fake Pis.
 try {
@@ -170,4 +171,9 @@ async function pictures(browser: Browser, control: Client) {
   await first.getByRole('button', { name: 'Settings' }).click();
   await first.getByText('The app installed this Pi into its own folder.').waitFor();
   await shot(first, '21-settings-app-pi');
+  // A sign-in: the terminal is open somewhere, and the page waits for Pi to say it is done.
+  await first.getByRole('button', { name: 'Claude' }).click();
+  await first.getByText('Finish signing in to Claude').waitFor();
+  await shot(first, '22-signing-in');
+  await first.getByRole('button', { name: 'Cancel' }).click();
 }

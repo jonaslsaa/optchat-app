@@ -156,6 +156,9 @@ test('a report is named by the title its agent was started under, once the chat 
   // Only the reports that got a title are made again, and none of them a second time.
   assert.deepEqual(whole.slice(1).map((part, at) => part === late[at]), [false, true, false]);
   assert.deepEqual(parts(logged([...start, ...reports]), whole).map((part, at) => part === whole[at]), [true, true, true, true]);
+  // pi-optchat writes the title in front of the report itself, and under it a line for the main agent, which is no part of it.
+  assert.partialDeepStrictEqual(parts(logged([entry(0, 'work', 0, '[1a2b3c4d · Read the notes] The answer is 42.\n\nFull chat: zoom("1a2b3c4d")')])),
+    [{ type: 'work', agent: '1a2b3c4d', title: 'Read the notes', body: 'The answer is 42.' }]);
 });
 
 test('a tool call is said in words: what it did or is doing, and to what', () => {

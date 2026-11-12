@@ -1,0 +1,71 @@
+import { readFileSync, statSync } from 'node:fs';
+import { profileOwner, readRuns, type RunInfo } from 'pi-optchat/files';
+import { working } from '../agent.ts';
+import type { Agent, Params, Result } from '../protocol.ts';
+import { profileDirectory } from './profiles.ts';
+
+type Message = Record<string, unknown>;
+const SHOWN = 30, KEPT = 20;
+const isObject = (value: unknown): value is Message => typeof value === 'object' && value !== null;
+/** The tool calls of an agent's last reply that have no result yet. */
+function pending(messages: Message[]): Agent['doing'] {
+  const at = messages.findLastIndex(message => message.role === 'assistant'), content = messages[at]?.content;
+  const done = new Set(messages.slice(at + 1).map(message => message.toolCallId));
+  return (Array.isArray(content) ? content : []).flatMap(block => isObject(block) && block.type === 'toolCall' && !done.has(block.id)
+    ? [{ name: String(block.name), args: isObject(block.arguments) ? block.arguments : {} }] : []);
+}
+
+/** A profile's subagents, as pi-optchat keeps them on disk: a record of each (`readRuns`), and each one's chat in a Pi session
+ * file, which Pi appends to as every message ends. Nothing is asked of a Pi and nothing is written, so an agent can be followed
+ * from here while it works: by message, not by word. */
+export class Agents {
+  /** Session files as last read, the latest few: one is read again only when it has grown. */
+  private readonly read = new Map<string, { print: string; messages: Message[] }>();
+  private readonly home: string;
+  constructor(home: string) { this.home = home; }
+
+  /** An agent's chat: what its session file has of the conversation, with its task alone as the first message (it was sent
+   * under a view of the profile's memory, which is the main chat's and long) and images named but not carried. */
+  private chat({ sessionFile: file, task }: RunInfo): Message[] {
+    if (!file) return [];
+    let print: string, text: string;
+    // A session file can go at any moment (a run deleted in a terminal): then there is no chat, as when it never was.
+    try {
+      const { size, mtimeMs } = statSync(file), read = this.read.get(file);
+      print = `${size}|${mtimeMs}`;
+      if (read?.print === print) return read.messages;
+      text = readFileSync(file, 'utf8');
+    } catch { return []; }
+    // A line Pi is still writing does not parse yet: it is read the next time.
+    const entries = text.split('\n').flatMap((line): unknown[] => { try { return [JSON.parse(line)]; } catch { return []; } });
+    const messages = entries.flatMap(entry => isObject(entry) && entry.type === 'message' && isObject(entry.message) && entry.message.role !== 'system' ? [entry.message] : [])
+      .map((message, at) => at === 0 && message.role === 'user' ? { ...message, content: task }
+        : Array.isArray(message.content) ? { ...message, content: message.content.map(part => isObject(part) && part.type === 'image' ? { type: 'image' } : part) } : message);
+    this.read.delete(file);
+    this.read.set(file, { print, messages });
+    for (const oldest of this.read.keys()) { if (this.read.size <= KEPT) break; this.read.delete(oldest); }
+    return messages;
+  }
+  /** The profile's agents: connected windows are runs to pi-optchat too, and are windows here. */
+  private runs(profile: string) { return readRuns(profileDirectory(this.home, profile)).filter(run => !run.connected); }
+
+  async list({ profile, limit = SHOWN }: Params<'agents'>): Promise<Result<'agents'>> {
+    const runs = this.runs(profile).sort((a, b) => b.started - a.started);
+    // A run saved as working is at work only if a Pi has the profile open, the app's or one in a terminal: a Pi that died
+    // corrects its runs' records only when the profile is next opened. A holder that does not answer is there all the same.
+    const owned = !runs.some(working) || await profileOwner(profileDirectory(this.home, profile)).then(owner => owner !== undefined, () => true);
+    const agents = runs.map((run): Agent => {
+      const { id, title, task, model, started, ended, parentId, report } = run, state = working(run) && !owned ? 'interrupted' : run.state;
+      const headline = report?.split('\n').find(line => line.trim())?.trim().slice(0, 200);
+      return { id, ...title && { title }, task, model, state, started, ...ended !== undefined && { ended }, ...parentId && { parent: parentId },
+        doing: working({ state }) ? pending(this.chat(run)) : [], ...headline && { headline } };
+    });
+    const ended = agents.filter(agent => !working(agent));
+    return { agents: [...agents.filter(working), ...ended.slice(0, limit)], more: Math.max(0, ended.length - limit) };
+  }
+  one({ profile, id, after = 0 }: Params<'agent'>): Result<'agent'> {
+    // A report in the chat outlives its agent's record, and a click on it asks for that agent: it has no chat, which is no error.
+    const run = this.runs(profile).find(run => run.id === id), messages = run ? this.chat(run) : [];
+    return { total: messages.length, messages: messages.slice(after), ...run?.report !== undefined && { report: run.report } };
+  }
+}

@@ -7,6 +7,7 @@ import { dataHome } from 'pi-optchat/files';
 import { Value } from 'typebox/value';
 import { WebSocket, WebSocketServer } from 'ws';
 import { Envelope, methods, type Method, type Params, type Push, type Result, type ServerMessage } from '../protocol.ts';
+import { Agents } from './agents.ts';
 import { reason } from './pi.ts';
 import { Profiles } from './profiles.ts';
 import { appHome, isDirectory, readSettings, writeSettings } from './settings.ts';
@@ -44,7 +45,7 @@ export async function startServer({ port = 0, origins = [], ui = join(import.met
   ui = resolve(ui);
   home = resolve(home); // Pi runs in each window's directory, and has to find the same profiles from there.
   app = resolve(app); // And npm runs in the app's folder, where a path that is not whole would be another folder.
-  const profiles = new Profiles(home), sockets = new WebSocketServer({ noServer: true });
+  const profiles = new Profiles(home), agents = new Agents(home), sockets = new WebSocketServer({ noServer: true });
   let closing = false;
   const send = (socket: WebSocket, message: ServerMessage) => { if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify(message)); };
   const push = (push: Push) => { for (const socket of sockets.clients) send(socket, push); };
@@ -53,6 +54,7 @@ export async function startServer({ port = 0, origins = [], ui = join(import.met
   // A window runs in the folder the settings name, unless that folder is gone since it was kept.
   const windows = new Windows({ home, grace, push, cwd: () => settings.cwd && isDirectory(settings.cwd) ? settings.cwd : cwd, pi: async () => { const { command, args } = await setup.launch(); return { command, args: [...args, ...flags] }; } });
   const handlers: { [M in Method]: (params: Params<M>) => Result<M> | Promise<Result<M>> } = {
+    agents: params => agents.list(params), agent: params => agents.one(params),
     profiles: () => profiles.list(), createProfile: params => profiles.create(params), history: params => profiles.history(params), view: params => profiles.view(params), zoom: params => profiles.zoom(params),
     windows: () => windows.list(), open: params => windows.open(params), prompt: params => windows.prompt(params), abort: params => windows.abort(params),
     complete: params => windows.complete(params), close: params => windows.close(params), records: params => windows.records(params),

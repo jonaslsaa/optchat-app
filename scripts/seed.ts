@@ -1,6 +1,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Script } from '../test/fake-pi.ts';
+import { writeRun } from '../test/support.ts';
 
 /** A profile's log for the screenshots: a believable chat with everything the UI draws, written as pi-optchat writes one. */
 type Said = [kind: 'user' | 'talk' | 'tool' | 'echo' | 'work' | 'note', text: string];
@@ -42,9 +43,76 @@ const TURNS: Said[][] = [
 ];
 const NOTE: Said = ['note', 'Jonas prefers short answers, typed protocols, and tests that are focused.'];
 
-/** Writes `turns` turns of the chat to the profile in `directory`, a message a minute, the newest a minute before `end`. */
-export function seed(directory: string, turns: number, end = Date.UTC(2026, 10, 12, 9, 0, 0)) {
-  const said = [NOTE, ...Array.from({ length: turns }, (_, turn) => TURNS[turn % TURNS.length]).flat()];
+const RECONNECTS = '**T3 Code replays by sequence number.** Each thread keeps a numbered event log; a client that reconnects sends the last number it saw and gets the rest, or a fresh snapshot when the log no longer reaches that far.\n\n- Sequence numbers are per thread\n- The snapshot is the fallback, not the default\n- Nothing is replayed twice';
+const WINDOWS_NOTE = '# Windows\n\nPi is started through `cmd.exe` there, so a signal reaches the shell and not Pi.\n\n- `stop()` closes stdin first, which Pi takes as the end of the session\n- only after the grace period is the process tree killed, with `taskkill /T /F`\n';
+/** A chat whose agent changed files and handed work out: what the agents panel and an opened edit are pictured with. Its agents
+ * are `agents` below. */
+export const TEAM: Said[][] = [
+  [
+    ['user', 'The shutdown test fails on Windows. Can you fix the timeout and write down why it is different there?'],
+    ['talk', 'The test gives Pi two seconds to stop, which is not enough for `taskkill`. I\'ll raise it and note why.'],
+    ['tool', `edit ${JSON.stringify({ path: 'test/pi.test.ts', edits: [{ oldText: '  await pi.stop(2_000);\n  assert.equal(pi.running, false);', newText: '  // Windows ends the whole process tree, which takes longer than a signal.\n  await pi.stop(process.platform === \'win32\' ? 10_000 : 2_000);\n  assert.equal(pi.running, false);' }] })}`],
+    ['echo', 'edit: Successfully replaced 1 block(s) in test/pi.test.ts.'],
+    ['tool', `write ${JSON.stringify({ path: 'docs/windows.md', content: WINDOWS_NOTE })}`],
+    ['echo', 'write: Successfully wrote 263 bytes to docs/windows.md'],
+    ['talk', 'Done: the test waits ten seconds on Windows, and `docs/windows.md` says why stopping is slower there.'],
+  ],
+  [
+    ['user', 'Good. Get someone to check how T3 Code handles reconnects, and someone to run that test on Windows.'],
+    ['tool', 'spawn {"tasks":[{"title":"How T3 Code reconnects","task":"Read-only investigation of the reconnect path…"},{"title":"Run the shutdown test on Windows","task":"Run test/pi.test.ts on the Windows runner…"}]}'],
+    ['echo', 'spawn: Started: ce3d516d, a41f09c2. Reports will arrive automatically.'],
+    ['talk', 'Started two agents. I\'ll tell you when they report.'],
+  ],
+  [
+    ['work', `[ce3d516d · How T3 Code reconnects] ${RECONNECTS}\n\nFull chat: zoom("ce3d516d")`],
+    ['talk', 'That matches what we built: numbered records per window, and the profile\'s log as the snapshot. The Windows run is still going.'],
+  ],
+];
+
+/** One of an agent's replies: what it says, and the tools it calls with what each printed. A call with nothing printed is
+ * still running. */
+type Reply = { say?: string; calls?: [name: string, args: object, result?: string][] };
+/** An agent's chat as Pi keeps it in a session file: its task, then its replies, each followed by its tools' results. */
+function session(task: string, replies: Reply[], start: number): object[] {
+  let clock = start, calls = 0;
+  return [{ role: 'user', content: [{ type: 'text', text: `<chat>\n…\n</chat>\n\nYour task:\n${task}` }], timestamp: clock }, ...replies.flatMap(({ say, calls: called = [] }) => {
+    const made = called.map(([name, args, result]) => ({ id: `call-${calls++}`, name, args, result }));
+    return [
+      { role: 'assistant', timestamp: clock += 3000, stopReason: made.length ? 'toolUse' : 'stop', content: [...say ? [{ type: 'text', text: say }] : [], ...made.map(({ id, name, args }) => ({ type: 'toolCall', id, name, arguments: args }))] },
+      ...made.flatMap(({ id, name, result }) => result === undefined ? [] : [{ role: 'toolResult', toolCallId: id, toolName: name, content: [{ type: 'text', text: result }], timestamp: clock += 2000 }]),
+    ];
+  })];
+}
+/** The agents of the TEAM chat, as pi-optchat keeps them in the profile's `runs`: two at work (one with an agent of its own),
+ * and others that ended each way. `end` is when the picture is taken. */
+export function agents(directory: string, end: number) {
+  const ago = (seconds: number) => end - seconds * 1000;
+  const run = (id: string, title: string | undefined, task: string, state: Parameters<typeof writeRun>[1]['state'], started: number, more: Partial<Parameters<typeof writeRun>[1]> = {}, replies: Reply[] = []) =>
+    writeRun(directory, { id, ...title && { title }, task, state, started: ago(started), model: 'anthropic/claude-sonnet-5', ...more }, session(task, replies, ago(started)));
+  run('a41f09c2', 'Run the shutdown test on Windows', 'Run test/pi.test.ts on the Windows runner and say whether the ten-second grace is enough. Do not change the test.', 'running', 96, {}, [
+    { say: 'I\'ll read the test, then find the run that failed.', calls: [['read', { path: 'test/pi.test.ts' }, 'test(\'stop() ends a Pi that does not answer\', async () => {\n  const pi = start();\n  await pi.stop(process.platform === \'win32\' ? 10_000 : 2_000);\n  …']] },
+    { calls: [['spawn', { tasks: [{ title: 'Find the failing CI run', task: 'Find the last failing windows-latest run of the test workflow…' }] }, 'Started: 7be2d1a0. Reports will arrive automatically.']] },
+    { say: 'The failing run timed out after two seconds. Running it with the new grace now.', calls: [['bash', { command: 'gh workflow run test.yml --ref fix/windows-stop && gh run watch' }]] },
+  ]);
+  run('7be2d1a0', 'Find the failing CI run', 'Find the last failing windows-latest run of the test workflow and say which assertion failed.', 'completed', 80, { parentId: 'a41f09c2', depth: 2, ended: ago(58), report: 'Run 8841 failed in `stop() ends a Pi that does not answer`: Pi was still running after 2,000 ms.' }, [
+    { calls: [['bash', { command: 'gh run list --workflow test.yml --status failure --limit 5' }, 'completed\tfailure\tFix the shutdown test\ttest\tmain\tpush\t8841\t1m12s\t2h']] },
+    { say: 'Run 8841 failed in `stop() ends a Pi that does not answer`: Pi was still running after 2,000 ms.' },
+  ]);
+  run('5d0e6f1b', 'Draft the release notes', 'Draft release notes for 0.2.0 from the merged pull requests since v0.1.0.', 'running', 9);
+  run('ce3d516d', 'How T3 Code reconnects', 'Read-only investigation of the reconnect path in ~/Downloads/t3code: what does a client send when its socket comes back, and what does the server answer? Change nothing.', 'completed', 420, { ended: ago(318), report: RECONNECTS }, [
+    { say: 'I\'ll find where the client reconnects.', calls: [['grep', { pattern: 'reconnect', path: 'apps/web/src' }, 'apps/web/src/rpc/wsTransport.ts:112:  private reconnect() {\napps/web/src/rpc/wsTransport.ts:131:    this.send({ type: \'resume\', after: this.lastSequence });'], ['read', { path: 'apps/web/src/rpc/wsTransport.ts', offset: 100, limit: 60 }, '  private reconnect() {\n    this.socket = new WebSocket(this.url);\n    …']] },
+    { say: 'The client sends the last sequence number it saw. Now the server side.', calls: [['read', { path: 'apps/server/src/orchestration/replay.ts' }, 'export function replay(thread: Thread, after: number) {\n  if (after < thread.log.first) return snapshot(thread);\n  return thread.log.since(after);\n}']] },
+    { say: RECONNECTS },
+  ]);
+  run('3f6c88e1', 'Benchmark the log reader', 'Time reading a 20,000-message log, page by page.', 'failed', 1560, { ended: ago(1556), report: 'Task error: 529 {"type":"error","error":{"type":"overloaded_error","message":"Overloaded"}}' });
+  run('0d93b7aa', 'Audit the WebSocket origin check', 'Read src/server/server.ts and say whether a page on another origin can connect.', 'stopped', 3600, { ended: ago(3570), report: 'Stopped by the main agent.' });
+  run('b2c4e6f8', undefined, 'Count the lines of TypeScript in src/ and say which file is the longest.\nReport one line.', 'completed', 7200, { ended: ago(7188), report: '4,812 lines; `src/ui/transcript.ts` is the longest at 361.' });
+}
+
+/** Writes `turns` turns of the chat (`from`, over again) to the profile in `directory`, a message a minute, the newest a minute
+ * before `end`. */
+export function seed(directory: string, turns: number, end = Date.UTC(2026, 10, 12, 9, 0, 0), from = TURNS) {
+  const said = [NOTE, ...Array.from({ length: turns }, (_, turn) => from[turn % from.length]).flat()];
   const entries = said.map(([kind, text], i) => JSON.stringify({ i, kind, date: new Date(end - (said.length - i) * 60_000).toISOString(), text }));
   mkdirSync(join(directory, 'main'), { recursive: true });
   writeFileSync(join(directory, 'main', '2026-11-12.jsonl'), `${entries.join('\n')}\n`);

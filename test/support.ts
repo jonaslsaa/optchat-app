@@ -1,5 +1,6 @@
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import type { RunInfo } from 'pi-optchat/files';
 
 /** A throwaway OPTCHAT_HOME under /tmp (a short path: profile sockets have a length limit), removed when the test process exits.
  * No test may touch the real ~/.optchat, nor the app's own folder: a server started without one gets a folder in here. */
@@ -29,4 +30,11 @@ export function writeMemory(directory: string, count: number, text = (i: number)
   }
   writeFileSync(join(directory, 'main', '2026-01-01.jsonl'), entries.join('\n') + '\n');
   writeFileSync(join(directory, 'tree', '2026-01-01.jsonl'), nodes.join('\n') + '\n');
+}
+/** A subagent as pi-optchat keeps one: its record, and its chat in a Pi session file, a line a message. */
+export function writeRun(directory: string, run: Pick<RunInfo, 'id' | 'state' | 'started'> & Partial<RunInfo>, messages: object[] = []) {
+  const runs = join(directory, 'runs'), sessionFile = join(runs, `${run.id}.jsonl`);
+  mkdirSync(runs, { recursive: true });
+  writeFileSync(sessionFile, [{ type: 'session', version: 3, id: run.id }, ...messages.map(message => ({ type: 'message', message }))].map(line => JSON.stringify(line)).join('\n') + '\n');
+  writeFileSync(join(runs, `${run.id}.optchat.json`), JSON.stringify({ task: 'Look into it.', cwd: '/tmp', model: 'anthropic/claude-haiku-5-5', thinking: 'off', parentSession: 'main', depth: 1, guidance: [], sessionFile, ...run } satisfies RunInfo));
 }

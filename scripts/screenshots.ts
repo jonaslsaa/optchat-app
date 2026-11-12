@@ -7,7 +7,7 @@ import { startServer } from '../src/server/server.ts';
 // pi-optchat's own lock, which only Pi takes: here it stands for a Pi in a terminal.
 import { describeOwner, lockProfile } from '../node_modules/pi-optchat/dist/profiles.js';
 import { createProfile } from '../test/support.ts';
-import { demo, seed } from './seed.ts';
+import { agents, demo, seed, TEAM } from './seed.ts';
 
 /** `npm run screenshots [directory] [--dark]`: a PNG of every main state of the UI, in /tmp/optchat-app-shots unless a directory
  * is named, and all of them in dark mode with `--dark`. It builds the UI, serves it against throwaway profiles under /tmp with
@@ -24,6 +24,9 @@ const home = realpathSync(WORKSPACE);
 process.on('exit', () => rmSync(home, { recursive: true, force: true }));
 for (const signal of ['SIGINT', 'SIGTERM'] as const) process.once(signal, () => process.exit(1));
 createProfile(home, 'empty');
+const team = createProfile(home, 'team');
+seed(team, TEAM.length, NOW, TEAM);
+agents(team, NOW + 42_000);
 const terminal = createProfile(home, 'terminal');
 seed(terminal, 2, NOW);
 seed(createProfile(home, 'work'), 95, NOW); // Ends with the turn that ran the tests.
@@ -176,4 +179,31 @@ async function pictures(browser: Browser, control: Client) {
   await first.getByText('Finish signing in to Claude').waitFor();
   await shot(first, '22-signing-in');
   await first.getByRole('button', { name: 'Cancel' }).click();
+
+  // What an agent changed: an edit opens as the lines it took out and put in, a write as what it wrote.
+  const changes = await open(['team']);
+  await changes.getByRole('button', { name: /Worked for/ }).first().click();
+  await changes.getByText('Edited test/pi.test.ts').click();
+  await changes.getByText('Wrote docs/windows.md').click();
+  await shot(changes, '23-edit-and-write-opened');
+
+  // The main chat's agents, beside it. They are at work only while a Pi has the profile open, so one takes it here: after the
+  // pages have opened the chat, which is therefore still the app's.
+  const panel = await open(['team']), small = await open(['team'], { width: 420, height: 800 });
+  const working = await lockProfile(team, describeOwner({ profile: 'team', pid: process.pid, host: 'jonas-macbook', cwd: home }));
+  try {
+    await panel.getByRole('button', { name: 'Agents' }).click();
+    await panel.getByText('Draft the release notes').waitFor();
+    await shot(panel, '24-agents');
+    await panel.getByText('Run the shutdown test on Windows').last().click();
+    await panel.getByText('Runs on its own').waitFor();
+    await shot(panel, '25-agent-working');
+    // A report in the chat opens the agent it is from.
+    await panel.getByRole('button', { name: 'Report: How T3 Code reconnects' }).click();
+    await panel.getByText('Completed · 1m 42s').waitFor();
+    await shot(panel, '26-agent-report');
+    await small.getByRole('button', { name: 'Agents' }).click();
+    await small.getByText('Draft the release notes').waitFor();
+    await shot(small, '27-agents-narrow');
+  } finally { await working(); }
 }

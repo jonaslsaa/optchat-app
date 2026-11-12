@@ -45,13 +45,18 @@ export const UserRow = memo(function UserRow({ part, profile }: { part: Of<'user
   );
 });
 /** What OptChat itself put in the chat: a subagent's report or a connected window's handoff, named by the title its agent was
- * started under, or else by the agent's number. */
-export const ReportRow = memo(function ReportRow({ part }: { part: Of<'work'> }) {
+ * started under, or else by the agent's number. Where agents can be opened (`onAgent`), its name opens the agent's chat. */
+export const ReportRow = memo(function ReportRow({ part, onAgent }: { part: Of<'work'>; onAgent?: (agent: string) => void }) {
+  const { agent } = part, name = part.title ? `Report: ${part.title}` : agent ? `Report from ${agent}` : 'Report';
   return (
     <div className="group pb-4">
       <div className="rounded-xl border border-border/70 bg-card px-3.5 py-3 dark:bg-card/60">
         <div className="mb-1.5 flex items-center gap-1.5 text-secondary-label text-xs">
-          <BotIcon className="size-3.5" /><span title={part.agent} className="min-w-0 truncate font-medium">{part.title ? `Report: ${part.title}` : part.agent ? `Report from ${part.agent}` : 'Report'}</span><span className="flex-1" /><Time date={part.date} />
+          <BotIcon className="size-3.5 shrink-0" />
+          {agent && onAgent
+            ? <button type="button" title={`Open this agent's chat (${agent})`} onClick={() => onAgent(agent)} className="min-w-0 cursor-pointer truncate rounded-sm font-medium outline-none hover:text-foreground hover:underline hover:underline-offset-2 focus-visible:ring-2 focus-visible:ring-ring/70">{name}</button>
+            : <span title={agent} className="min-w-0 truncate font-medium">{name}</span>}
+          <span className="flex-1" /><Time date={part.date} />
         </div>
         <Clamp text={part.body} lines={14}><Markdown text={part.body} /></Clamp>
       </div>
@@ -103,7 +108,7 @@ function StepRow({ step, tools }: { step: Step; tools?: Record<string, string> }
   return <ToolRow step={step} live={tools !== undefined} running={step.call !== undefined ? tools?.[step.call] : undefined} />;
 }
 /** Counts the seconds since `from` while the agent works. */
-function Timer({ from }: { from: string }) {
+export function Timer({ from }: { from: string }) {
   const [now, setNow] = useState(Date.now());
   useEffect(() => { const timer = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(timer); }, []);
   return <>{took(from, new Date(now).toISOString())}</>;

@@ -5,6 +5,12 @@ import { PiRecord } from '../protocol.ts';
 
 export interface PiOptions { command: string; args: readonly string[]; cwd: string; env: NodeJS.ProcessEnv }
 export const reason = (error: unknown) => error instanceof Error ? error.message : String(error);
+/** Kills a process that was spawned `detached` with everything it started: its process group, or on Windows its process tree. */
+export function killTree({ pid, exitCode, signalCode }: ChildProcess) {
+  if (pid === undefined || exitCode !== null || signalCode !== null) return;
+  if (process.platform === 'win32') spawn('taskkill', ['/pid', String(pid), '/T', '/F']).on('error', () => {});
+  else try { process.kill(-pid, 'SIGKILL'); } catch {}
+}
 /** How much of Pi's stderr is kept to explain an exit. */
 const STDERR = 4000;
 
@@ -68,13 +74,7 @@ export class Pi {
   async stop(grace: number) {
     this.stopping = true;
     this.child.stdin?.end();
-    const kill = setTimeout(() => {
-      const { pid } = this.child;
-      if (pid === undefined || this.child.exitCode !== null || this.child.signalCode !== null) return;
-      // With everything it started: its process group, or on Windows its process tree.
-      if (process.platform === 'win32') spawn('taskkill', ['/pid', String(pid), '/T', '/F']).on('error', () => {});
-      else try { process.kill(-pid, 'SIGKILL'); } catch {}
-    }, grace);
+    const kill = setTimeout(() => killTree(this.child), grace);
     await this.exited;
     clearTimeout(kill);
   }

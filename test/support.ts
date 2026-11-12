@@ -2,9 +2,10 @@ import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'nod
 import { join } from 'node:path';
 
 /** A throwaway OPTCHAT_HOME under /tmp (a short path: profile sockets have a length limit), removed when the test process exits.
- * No test may touch the real ~/.optchat. */
+ * No test may touch the real ~/.optchat, nor the app's own folder: a server started without one gets a folder in here. */
 export function temporaryHome() {
   const home = realpathSync(mkdtempSync('/tmp/optchat-app-test-'));
+  process.env.OPTCHAT_APP_HOME = join(home, 'app'); // Whatever it was: never your own.
   process.on('exit', () => rmSync(home, { recursive: true, force: true }));
   return home;
 }

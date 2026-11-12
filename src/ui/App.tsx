@@ -1,9 +1,12 @@
-import { CheckIcon, PanelLeftIcon, XIcon } from 'lucide-react';
+import { CheckIcon, PanelLeftIcon, SettingsIcon, XIcon } from 'lucide-react';
 import { Fragment, useMemo, useState } from 'react';
 import { canComplete, current } from '../window.ts';
 import { Composer } from './Composer.tsx';
 import { useShortcuts } from './keys.ts';
+import { Outside } from './Outside.tsx';
 import { ProfileName, Tabs } from './Profiles.tsx';
+import { Settings, Welcome } from './Settings.tsx';
+import { missing } from './Setup.tsx';
 import { Sidebar } from './Sidebar.tsx';
 import { app, mainOf, title, UNTITLED, useApp, type State } from './store.ts';
 import { Timeline } from './Timeline.tsx';
@@ -14,7 +17,7 @@ import { Button, cn } from './ui.tsx';
 const NOTHING = idle();
 
 /** One profile: its windows on the left, and the selected window's chat. */
-function Profile({ state, profile }: { state: State; profile: string }) {
+function Profile({ state, profile, onSettings }: { state: State; profile: string; onSettings: () => void }) {
   const [sidebar, setSidebar] = useState(() => innerWidth >= 768);
   const windows = state.windows.filter(window => window.profile === profile), ids = windows.map(window => window.id).join(' ');
   const window = windows.find(w => w.id === state.selected[profile]) ?? windows.find(w => w.id === mainOf(profile));
@@ -46,6 +49,7 @@ function Profile({ state, profile }: { state: State; profile: string }) {
           {own && <span className="shrink-0 rounded-full border px-2 py-0.5 text-2xs text-muted-foreground">{window.completed ? 'Completed' : 'Connected window'}</span>}
           <span className="flex-1" />
           {canComplete(window) && <Button variant="outline" title="Complete: hand this conversation to the main chat" onClick={() => void app.complete(window.id)}><CheckIcon />Complete</Button>}
+          <Button variant="ghost-muted" size="icon-sm" aria-label="Settings" title="Settings" onClick={onSettings}><SettingsIcon /></Button>
         </header>
         <Fragment key={window.id}>
           {/* An empty window says what it is, with the composer under it in the middle of the page, as T3 Code's new thread does. */}
@@ -57,7 +61,7 @@ function Profile({ state, profile }: { state: State; profile: string }) {
               </p>
             </div>
           ) : <Timeline items={items} live={live} running={window.status === 'running'} profile={profile} loading={log?.loading} older={more ? () => void app.older(profile) : undefined} />}
-          <Composer window={window} live={live} />
+          {window.outside ? <Outside window={window} outside={window.outside} /> : <Composer window={window} live={live} />}
           {fresh && <div className="flex-[1.6]" />}
         </Fragment>
       </main>
@@ -65,7 +69,9 @@ function Profile({ state, profile }: { state: State; profile: string }) {
   );
 }
 export function App() {
-  const state = useApp();
+  const state = useApp(), [settings, setSettings] = useState(false), needs = missing(state);
+  // The settings are in place of the chat, so Esc there closes them: a run is stopped from where it can be seen.
+  useShortcuts(() => ({ 'mod+,': () => setSettings(open => !open), ...settings && { escape: () => setSettings(false) } }), [settings]);
   return (
     <div className="flex h-dvh flex-col">
       {state.tabs.length > 1 && <Tabs state={state} />}
@@ -75,9 +81,15 @@ export function App() {
           <span className="min-w-0 truncate">{state.error}</span><button type="button" aria-label="Dismiss" onClick={() => app.dismiss()} className="rounded-sm p-0.5 hover:bg-foreground/10"><XIcon className="size-3" /></button>
         </p>
       )}
-      {state.profile ? <Profile key={state.profile} state={state} profile={state.profile} />
+      {needs && !settings && state.profile && (
+        <p role="status" className="flex shrink-0 items-center justify-center gap-2 bg-warning-surface px-4 py-1.5 text-warning-foreground text-xs">
+          {needs}.<button type="button" onClick={() => setSettings(true)} className="rounded-sm font-medium underline underline-offset-2">Set up</button>
+        </p>
+      )}
+      {settings ? <Settings state={state} onClose={() => setSettings(false)} />
+        : state.profile ? <Profile key={state.profile} state={state} profile={state.profile} onSettings={() => setSettings(true)} />
         : state.connection === 'connecting' ? <p className="m-auto text-muted-foreground text-sm">Connecting…</p>
-        : <div className="m-auto max-w-sm text-center text-sm"><p className="font-medium">No profiles yet</p><p className="mt-1 text-muted-foreground">A profile is one chat that never ends. Create the first one in a terminal with <code className="rounded bg-foreground/10 px-1 py-0.5 text-[0.85em]">pi --optchat-profile work</code>, then reload.</p></div>}
+        : <Welcome state={state} />}
     </div>
   );
 }

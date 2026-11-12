@@ -6,13 +6,26 @@ import type { AddressInfo } from 'node:net';
 import { dataHome } from 'pi-optchat/files';
 import { Value } from 'typebox/value';
 import { WebSocket, WebSocketServer } from 'ws';
-import { Envelope, methods, type Method, type Params, type Result, type ServerMessage } from '../protocol.ts';
+import { Envelope, methods, type Method, type Params, type Push, type Result, type ServerMessage } from '../protocol.ts';
 import { reason } from './pi.ts';
 import { Profiles } from './profiles.ts';
+import { appHome, isDirectory, readSettings, writeSettings } from './settings.ts';
+import { Setup, type Launch } from './setup.ts';
 import { Windows, type WindowsOptions } from './windows.ts';
 
-export interface ServerOptions extends Partial<Omit<WindowsOptions, 'push'>> {
+export interface ServerOptions extends Partial<Pick<WindowsOptions, 'home' | 'grace'>> {
   port?: number;
+  /** The app's own folder: its settings, and the Pi it installs. */
+  app?: string;
+  /** Where windows run while the settings name no folder. */
+  cwd?: string;
+  /** How Pi is run: yours on the PATH unless named. Where there is none, the Pi the app installed is run. */
+  pi?: Launch;
+  /** More arguments for a window's Pi, such as the cheap model the live tests name. Only a window's: after them, a word like
+   * `list` would be a message to the agent, so nothing that asks Pi about itself gets them. */
+  flags?: readonly string[];
+  /** The npm that installs Pi into the app's folder. */
+  npm?: Launch;
   /** The built UI's directory (`npm run build`), served as the page at `/`. */
   ui?: string;
   /** Origins that may connect besides the server's own page: the scheme a desktop shell loads the UI from, as T3 Code's
@@ -25,18 +38,26 @@ const loopback = (url: string) => { try { return LOOPBACK.includes(new URL(url).
 
 /** Starts the app's server on this machine only: the protocol of `protocol.ts` on a WebSocket at `/ws`, a profile's images at
  * `/images/<profile>/<name>`, and the UI's page everywhere else. `close` stops every Pi it started and waits for them. */
-export async function startServer({ port = 0, origins = [], ui = join(import.meta.dirname, '../../dist/ui'), home = dataHome(), cwd = homedir(), pi = { command: 'pi', args: [] }, grace = 15_000 }: ServerOptions = {}) {
+export async function startServer({ port = 0, origins = [], ui = join(import.meta.dirname, '../../dist/ui'), home = dataHome(), app = appHome(), cwd = homedir(), pi, flags = [], npm, grace = 15_000 }: ServerOptions = {}) {
   ui = resolve(ui);
   home = resolve(home); // Pi runs in each window's directory, and has to find the same profiles from there.
+  app = resolve(app); // And npm runs in the app's folder, where a path that is not whole would be another folder.
   const profiles = new Profiles(home), sockets = new WebSocketServer({ noServer: true });
   let closing = false;
   const send = (socket: WebSocket, message: ServerMessage) => { if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify(message)); };
-  const windows = new Windows({ home, cwd, pi, grace, push: push => { for (const socket of sockets.clients) send(socket, push); } });
+  const push = (push: Push) => { for (const socket of sockets.clients) send(socket, push); };
+  let settings = readSettings(app);
+  const setup = new Setup({ app, pi, npm, push: setup => push({ push: 'setup', setup }) });
+  // A window runs in the folder the settings name, unless that folder is gone since it was kept.
+  const windows = new Windows({ home, grace, push, cwd: () => settings.cwd && isDirectory(settings.cwd) ? settings.cwd : cwd, pi: async () => { const { command, args } = await setup.launch(); return { command, args: [...args, ...flags] }; } });
   const handlers: { [M in Method]: (params: Params<M>) => Result<M> | Promise<Result<M>> } = {
     profiles: () => profiles.list(), history: params => profiles.history(params), view: params => profiles.view(params), zoom: params => profiles.zoom(params),
     windows: () => windows.list(), open: params => windows.open(params), prompt: params => windows.prompt(params), abort: params => windows.abort(params),
     complete: params => windows.complete(params), close: params => windows.close(params), records: params => windows.records(params),
     command: params => windows.command(params), answer: params => windows.answer(params),
+    settings: () => settings,
+    setSettings: params => { settings = writeSettings(app, settings, params); push({ push: 'settings', settings }); return settings; },
+    setup: params => setup.state(params), install: async params => { await setup.install(params); return {}; },
   };
   const isMethod = (method: string): method is Method => Object.hasOwn(handlers, method);
   const call = <M extends Method>(method: M, params: unknown) => {
@@ -97,6 +118,7 @@ export async function startServer({ port = 0, origins = [], ui = join(import.met
     /** No request is taken from here on; one already under way ends with its Pi. */
     async close() {
       closing = true;
+      setup.close();
       await windows.shutdown();
       for (const socket of sockets.clients) socket.close();
       await new Promise(resolve => server.close(resolve));

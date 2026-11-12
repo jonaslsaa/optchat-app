@@ -17,16 +17,18 @@ npm run screenshots       # a PNG of every main state, in /tmp/optchat-app-shots
 - **The chat** in the centre. The main chat is the profile's log, read from disk a page at a time as you scroll back, so it shows with no Pi running. A connected window shows its own conversation, which only its Pi has until Complete hands it over. A completed one stays as it was until your next message, which begins a new conversation in the same window: the view starts empty, and the finished one is in the main chat.
 - **The chat's rows.** A tool call reads as what it did ("Ran `npm test`", "Read src/client.ts, lines 40–99", "Looked back at 128+2", "Started an agent: …") and opens to what it printed. Opened, the line is there whole and can be selected, and above what the call printed is only what the line does not say: an edit as the lines it took out and put in, the text it wrote to a file, a command of several lines. Arguments show as JSON only where the app has no words for them: a tool it does not know, or an argument its line leaves out (a search's `glob`). Finished work folds to one line, which says so when a call failed. A subagent's report goes by the title it was started under. A reply can be copied whole, and what the agent had written when you stopped it stays in view. When you complete a connected window, the handoff its agent writes for the main chat is a folded line under the conversation ("Handed to the main chat"), not a reply to you.
 - **An empty window** says what it is in the middle of the page, with the composer under it.
+- **Settings**, behind the gear in the title bar: the theme, where new windows run, and what a chat needs with whether it is there ([setup.md](setup.md)). Before there is a profile, that setup is the page. A main chat that a Pi in a terminal has open says so where its composer would be.
 - **The composer.** You can always type. While the agent runs, Enter steers it, ⌘Enter queues the message for after the run, and Esc stops the run and puts what was still queued back in the composer. What you were typing stays with its window. The line under it speaks only when there is news: how to steer a run, that Pi is starting, agents at work, summaries still to write. When a window's Pi has stopped, a box above the composer says why and what to do.
 
 | Keys | |
 | --- | --- |
 | Enter / Shift+Enter | Send (or steer) / new line |
 | ⌘Enter | Queue for after the run |
-| Esc | Stop the run |
+| Esc | Stop the run; in the settings, close them |
 | ⌘⇧O | New window |
 | ⌥1 … ⌥9 | Go to a window |
 | ⌘B | Show or hide the sidebar |
+| ⌘, | Settings |
 
 ## How it is built
 
@@ -37,6 +39,7 @@ npm run screenshots       # a PNG of every main state, in /tmp/optchat-app-shots
 | `src/ui/App.tsx`, `Profiles.tsx`, `Sidebar.tsx`, `Timeline.tsx`, `Rows.tsx`, `Composer.tsx`, `Markdown.tsx` | The components. They only draw: a row gets its part, and is drawn again only when that part changed. |
 | `src/ui/highlight.ts` | Syntax colours for code blocks, by Shiki: see below. Tested in `test/highlight.test.ts`. |
 | `src/ui/safe.ts` | What Markdown may do: see below. Tested in `test/markdown.test.ts`. |
+| `src/ui/Settings.tsx`, `Setup.tsx`, `Outside.tsx`, `theme.ts` | The settings page, what a chat needs, a profile a terminal has open, and the theme ([setup.md](setup.md)). |
 | `src/ui/keys.ts` | Shortcuts, and `useShortcuts`. |
 | `src/ui/ui.tsx`, `WorkLog.tsx`, `markdownStreamBlocks.ts`, `index.css` | Buttons, tool-call rows, the Markdown splitter and the design tokens, from T3 Code. |
 | `src/window.ts` | What a window can do (`canComplete`) and which of its Pi's messages are the conversation it is in (`current`), for the server and the page alike. |
@@ -55,4 +58,4 @@ npm run screenshots       # a PNG of every main state, in /tmp/optchat-app-shots
 
 ## Screenshots
 
-`npm run screenshots [directory]` builds the page, serves it against throwaway profiles under `/tmp` with the fake Pi (`test/fake-pi.ts`: no model, no network, nothing of yours is read), drives it in your installed Chrome through `playwright-core`, and saves one PNG per state: an empty profile, a long history, a folded reply opened, a reply streaming, a steering and a queued message, the finished reply, a new connected window, a connected window with its conversation, a completed window, two profile tabs, a narrow page with and without its sidebar, dark mode, and a window whose Pi stopped. `--dark` takes them all in dark mode. Clocks are fixed, so the same code gives the same bytes: compare two runs to see what a change did.
+`npm run screenshots [directory]` builds the page, serves it against throwaway profiles under `/tmp` with the fake Pi (`test/fake-pi.ts`: no model, no network, nothing of yours is read), drives it in your installed Chrome through `playwright-core`, and saves one PNG per state: an empty profile, a long history, a folded reply opened, a reply streaming, a steering and a queued message, the finished reply, a new connected window, a connected window with its conversation, a completed window, two profile tabs, a narrow page with and without its sidebar, dark mode, a window whose Pi stopped, the settings in both themes, a chat that is running outside the app, and the first run on a machine without Pi (before an install, after one that failed, after one that worked, and the settings of that machine later). `--dark` takes them all in dark mode. Clocks are fixed and the throwaway folder has one name (`/tmp/optchat-app-shots-home`, so one run at a time), so the same code gives the same bytes: compare two runs to see what a change did.

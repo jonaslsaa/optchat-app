@@ -24,10 +24,10 @@ export type PiRecord = Static<typeof PiRecord>;
 
 /** A window is a conversation in the app, and one Pi process when it runs. `role` is its place in the app and never changes: the
  * profile's `main` chat, or a `connected` window beside it, whose conversation ends in a handoff to the main chat.
- * The main window's Pi owns the profile, or fails to start when a Pi outside the app holds it; a connected window's Pi only
- * ever joins. `completed` is pi-optchat's word that a connected window's conversation is handed off; its next prompt begins a
- * new conversation in it, and `since` is then when the last one was handed off: what its Pi said up to then belongs to
- * conversations the main chat has.
+ * The main window's Pi owns the profile. While a Pi outside the app holds it (one in a terminal), the main window says who in
+ * `outside` (`unknown` when that Pi does not say) and takes no prompt; a connected window's Pi only ever joins, that one too. `completed` is pi-optchat's word that a
+ * connected window's conversation is handed off; its next prompt begins a new conversation in it, and `since` is then when the
+ * last one was handed off: what its Pi said up to then belongs to conversations the main chat has.
  * `stopped`: no process (not started yet, closed, or it exited: `error` says why if it failed). `idle` and `running`: whether the
  * agent is in a run. `closed`: a connected window that is gone, pushed once as it leaves the list. `seq` is the number of the last
  * record the window pushed. `cwd` is where its Pi runs, set when the window is first opened. */
@@ -35,8 +35,38 @@ export const WindowState = Type.Object({
   id: Type.String(), profile: Type.String(), role: Type.Enum(['main', 'connected']), cwd: Type.String(),
   status: Type.Enum(['stopped', 'starting', 'idle', 'running', 'closed']), seq: id,
   completed: Type.Optional(Type.Boolean()), since: Type.Optional(Type.Number()), error: Type.Optional(Type.String()),
+  outside: Type.Optional(Type.Union([Type.Object({ pid: Type.Integer(), host: Type.String(), cwd: Type.String() }), Type.Literal('unknown')])),
 });
 export type WindowState = Static<typeof WindowState>;
+
+/** The app's own settings, kept in its own folder (never in pi-optchat's). `cwd`: where new windows run; your home directory
+ * when it is not set. `theme`: the page's colours, the system's by default. */
+const Theme = Type.Enum(['system', 'light', 'dark']);
+export const Settings = Type.Object({ cwd: Type.Optional(Type.String()), theme: Theme });
+export type Settings = Static<typeof Settings>;
+
+/** One thing the app needs before it can run a chat. `ok`: there and new enough. `missing`: not there. `old`: there, and too
+ * old. `unknown`: could not be told (Pi itself is missing, or did not answer). `message` says what is wrong and what to do in
+ * the other states, and `command` is the exact line that does it in a terminal; `path` is where it was found. `installable`:
+ * the app can put it right itself (`install`), which it does only for what is its own to change: a Pi in its own folder, and
+ * a pi-optchat that Pi installed from npm. Never a Pi of yours, nor a pi-optchat that is a folder on your disk. */
+const Need = Type.Object({
+  state: Type.Enum(['ok', 'missing', 'old', 'unknown']), version: Type.Optional(Type.String()), path: Type.Optional(Type.String()),
+  message: Type.Optional(Type.String()), command: Type.Optional(Type.String()), installable: Type.Optional(Type.Boolean()),
+});
+/** What the app can install. */
+const Installed = Type.Enum(['pi', 'optchat']);
+/** What the app needs, and whether it is there: Pi (`run`: what runs it in a terminal; `shell`: for the Pi the app installed
+ * into its own folder, the line that puts it on your PATH), pi-optchat in that Pi, and a model provider that is logged in
+ * (`providers`: those that are). `job` is an install the app is running, or the last one it ran: `line` is the latest line it
+ * printed, and `output` the end of everything it printed once it has failed. */
+export const Setup = Type.Object({
+  pi: Type.Intersect([Need, Type.Object({ run: Type.Optional(Type.String()), shell: Type.Optional(Type.String()) })]),
+  optchat: Need,
+  login: Type.Intersect([Need, Type.Object({ providers: Type.Array(Type.String()) })]),
+  job: Type.Optional(Type.Object({ what: Installed, state: Type.Enum(['running', 'done', 'failed']), line: Type.String(), output: Type.Optional(Type.String()) })),
+});
+export type Setup = Static<typeof Setup>;
 
 const Image = Type.Object({ type: Type.Literal('image'), data: Type.String(), mimeType: Type.String() });
 const target = Type.Object({ window: Type.String() });
@@ -58,8 +88,9 @@ export const methods = {
 
   /** Every window the server knows. */
   windows: method(none, Type.Object({ windows: Type.Array(WindowState) })),
-  /** A profile's main window (the same one each time), or a new connected window. No Pi starts until its first prompt; a
-   * connected window's first prompt starts the main window's Pi too if the profile has no owner yet. */
+  /** A profile's main window (the same one each time), or a new connected window, which runs in `cwd` or else the folder in
+   * the settings. No Pi starts until its first prompt; a connected window's first prompt starts the main window's Pi too if the
+   * profile has no owner yet. Opening the main window also looks again at who holds the profile (`outside`). */
   open: method(Type.Object({ profile: Type.String(), role: Type.Optional(Type.Enum(['main', 'connected'])), cwd: Type.Optional(Type.String()) }), Type.Object({ window: WindowState })),
   /** Sends your message, starting the window's Pi first if it has none. In a run it is queued: `steer` (the default) reaches the
    * agent after its current tool calls, `followUp` once it has stopped. `disposition` is Pi's: `started`, `queued`, or `handled`
@@ -88,6 +119,18 @@ export const methods = {
   /** Answers a dialog Pi asked for in an `extension_ui_request` (select, confirm, input, editor): Pi's `extension_ui_response`
    * fields, `id` and one of `value`, `confirmed` or `cancelled`. */
   answer: method(Type.Object({ window: Type.String(), id: Type.String(), value: Type.Optional(Type.String()), confirmed: Type.Optional(Type.Boolean()), cancelled: Type.Optional(Type.Boolean()) }), none),
+
+  /** The app's settings. */
+  settings: method(none, Settings),
+  /** Changes the settings it names and leaves the others, and answers them all as they are kept. A `cwd` has to be a directory
+   * that exists (`~` is your home folder); `null` puts back the default. */
+  setSettings: method(Type.Object({ theme: Type.Optional(Theme), cwd: Type.Optional(Type.Union([Type.String(), Type.Null()])) }), Settings),
+  /** What the app needs and whether it is there, as last checked; `fresh` checks again now. */
+  setup: method(Type.Object({ fresh: Type.Optional(Type.Boolean()) }), Setup),
+  /** Installs what is missing, or updates what is too old, where the setup says `installable`: Pi into the app's own folder,
+   * pi-optchat with Pi's `pi install`. It never changes a Pi the app did not install. Answers once it has started; its
+   * progress and its end come as `setup` pushes. */
+  install: method(Type.Object({ what: Installed }), none),
 };
 export type Method = keyof typeof methods;
 export type Params<M extends Method> = Static<(typeof methods)[M]['params']>;
@@ -97,10 +140,13 @@ export type Result<M extends Method> = Static<(typeof methods)[M]['result']>;
 export const Envelope = Type.Object({ id, method: Type.String(), params: Type.Unknown() });
 export type Response<M extends Method = Method> = { id: number; result: Result<M> } | { id: number; error: string };
 
-/** What the server sends unasked, to every client: a window that changed, and each record a window's Pi writes. */
+/** What the server sends unasked, to every client: a window that changed, each record a window's Pi writes, and the settings
+ * and the setup when they change. */
 export const Push = Type.Union([
   Type.Object({ push: Type.Literal('window'), window: WindowState }),
   Type.Object({ push: Type.Literal('record'), window: Type.String(), seq: id, record: PiRecord }),
+  Type.Object({ push: Type.Literal('settings'), settings: Settings }),
+  Type.Object({ push: Type.Literal('setup'), setup: Setup }),
 ]);
 export type Push = Static<typeof Push>;
 export type ServerMessage = Response | Push;

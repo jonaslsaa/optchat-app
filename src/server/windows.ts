@@ -1,4 +1,5 @@
 import { existsSync } from 'node:fs';
+import { profileOwner } from 'pi-optchat/files';
 import { Type, type Static, type TSchema } from 'typebox';
 import { Value } from 'typebox/value';
 import { methods, type Params, type PiRecord, type Push, type Result, type WindowState } from '../protocol.ts';
@@ -9,9 +10,9 @@ import { profileDirectory } from './profiles.ts';
 export interface WindowsOptions {
   home: string;
   /** Where a window's Pi runs unless `open` names a directory. */
-  cwd: string;
-  /** The Pi to run, and arguments to give it before `--optchat-profile <name> --mode rpc`. */
-  pi: { command: string; args: readonly string[] };
+  cwd(): string;
+  /** The Pi to run, and arguments to give it before `--optchat-profile <name> --mode rpc`. It fails when there is none. */
+  pi(): Promise<{ command: string; args: readonly string[] }>;
   /** How long a Pi asked to stop may take before it is killed, in milliseconds. */
   grace: number;
   push(push: Push): void;
@@ -28,6 +29,8 @@ interface Opened {
   fault?: string;
   /** A connected window on its way out: it starts no Pi, and leaves the list once its Pi has exited. */
   closed?: boolean;
+  /** Asked to stop while its start had no Pi yet: that start spawns none. */
+  stopping?: boolean;
   /** Its conversation is being handed off: Complete has not answered yet. */
   completing?: boolean;
   /** When the window's Pi last said its conversation was handed off. */
@@ -65,16 +68,9 @@ export class Windows {
   constructor(options: WindowsOptions) { this.options = options; }
 
   list(): Result<'windows'> { return { windows: [...this.windows.values()].map(w => w.state) }; }
-  open({ profile, role = 'main', cwd = this.options.cwd }: Params<'open'>): Result<'open'> {
-    profileDirectory(this.options.home, profile);
-    const id = role === 'main' ? mainId(profile) : `${profile}/${++this.connected}`;
-    let opened = this.windows.get(id);
-    if (!opened) {
-      if (!existsSync(cwd)) throw new Error(`No such directory: ${cwd}`);
-      opened = { state: { id, profile, role, cwd, status: 'stopped', seq: 0 }, records: [], dropped: 0, ui: new Map() };
-      this.windows.set(id, opened);
-      this.changed(opened);
-    }
+  async open({ profile, role = 'main', cwd }: Params<'open'>): Promise<Result<'open'>> {
+    const opened = this.window(profile, role, cwd);
+    if (isMain(opened)) await this.look(opened);
     return { window: opened.state };
   }
   async prompt({ window, text, images, whenBusy = 'steer' }: Params<'prompt'>): Promise<Result<'prompt'>> {
@@ -136,6 +132,33 @@ export class Windows {
     opened.completing = true;
     try { return await send(); } finally { opened.completing = false; }
   }
+  /** The profile's main window, made the first time it is asked for, or a new connected window. */
+  private window(profile: string, role: WindowState['role'] = 'main', cwd = this.options.cwd()) {
+    profileDirectory(this.options.home, profile);
+    const id = role === 'main' ? mainId(profile) : `${profile}/${++this.connected}`;
+    let opened = this.windows.get(id);
+    if (!opened) {
+      if (!existsSync(cwd)) throw new Error(`No such directory: ${cwd}`);
+      opened = { state: { id, profile, role, cwd, status: 'stopped', seq: 0 }, records: [], dropped: 0, ui: new Map() };
+      this.windows.set(id, opened);
+      this.changed(opened);
+    }
+    return opened;
+  }
+  /** Whether a Pi outside the app holds a main window's profile, as it is now: one in a terminal, which the app never joins
+   * unasked. It is looked at when the window is opened (which is what the page's "Check again" does) and before a Pi starts
+   * on the profile, and at no other time. */
+  private async look(main: Opened) {
+    const { state } = main;
+    if (main.pi || this.closing) return; // The app's own Pi holds it, or soon will.
+    // A holder that does not say who it is still holds the profile.
+    const outside = await profileOwner(profileDirectory(this.options.home, state.profile)).then(owner => owner && { pid: owner.pid, host: owner.host, cwd: owner.cwd }, () => 'unknown' as const);
+    if (main.pi || this.closing) return;
+    const before = state.outside;
+    if (outside === before || typeof outside === 'object' && typeof before === 'object' && outside.pid === before.pid && outside.host === before.host && outside.cwd === before.cwd) return;
+    if (outside) state.outside = outside; else delete state.outside;
+    this.changed(main);
+  }
   private get(id: string) {
     const opened = this.windows.get(id);
     if (!opened) throw new Error(`No window ${id}.`);
@@ -150,18 +173,25 @@ export class Windows {
   /** The window's Pi, started first if it has none; a start under way is shared. */
   private started(opened: Opened) {
     if (opened.pi && !opened.starting) return Promise.resolve(opened.pi);
-    return opened.starting ??= this.start(opened).finally(() => { opened.starting = undefined; });
+    return opened.starting ??= this.start(opened).finally(() => { opened.starting = undefined; opened.stopping = false; });
   }
   private async start(opened: Opened) {
-    const { state } = opened, { home, pi: { command, args }, grace } = this.options, joins = !isMain(opened);
-    // The first Pi on a profile owns it and a connected window is a later one, so the main window's Pi goes first.
-    if (joins) await this.started(this.get(this.open({ profile: state.profile }).window.id));
-    if (this.closing || opened.closed) throw new Error(`${state.id} was closed before it started.`);
+    const { state } = opened, { home, grace } = this.options, joins = !isMain(opened), main = this.window(state.profile);
+    // The first Pi on a profile owns it and a connected window is a later one, so the main window's Pi goes first. On a profile
+    // a Pi outside the app holds, that one is the owner: a connected window joins it, and the main window does not start.
+    // A window closed while its start was finding something out starts nothing: not its own Pi, and not the main window's.
+    const closed = () => { if (this.closing || opened.closed || opened.stopping) throw new Error(`${state.id} was closed before it started.`); };
+    await this.look(main);
+    closed();
+    if (joins && !main.state.outside) await this.started(main);
+    if (!joins && state.outside) throw new Error('This chat is running outside the app.');
+    const { command, args } = await this.options.pi();
+    closed();
     Object.assign(opened, { records: [], dropped: state.seq, fault: undefined });
     opened.ui.clear();
     state.status = 'starting'; delete state.error; this.changed(opened);
     // pi-optchat's --optchat-connect: a connected window only ever joins the profile's owner, and the main window only ever is
-    // the owner. On a profile a Pi outside the app holds, it fails with who that is, and never joins it unasked.
+    // the owner. Should a Pi outside the app take the profile just now, it fails with who that is, and never joins it unasked.
     const pi: Pi = new Pi({ command, args: [...args, '--optchat-profile', state.profile, '--optchat-connect', joins ? 'join' : 'off'], cwd: state.cwd, env: { ...process.env, OPTCHAT_HOME: home } },
       record => this.record(opened, record), error => this.exited(opened, pi, error));
     opened.pi = pi;
@@ -173,6 +203,7 @@ export class Windows {
     } catch (error) {
       opened.fault = reason(error);
       await pi.stop(grace);
+      if (!joins) await this.look(opened);
       throw error;
     }
     if (state.status === 'starting') { state.status = 'idle'; this.changed(opened); }
@@ -180,8 +211,9 @@ export class Windows {
   }
   /** Stops the window's Pi, one that is still starting too: it need not answer first. */
   private async stop(opened: Opened) {
-    // With no Pi yet, a start is waiting for the main window's Pi, and spawns none for a window that is closed.
-    if (!opened.pi) return;
+    // With no Pi yet, a start is still finding out what to run (who holds the profile, which Pi, the main window's Pi for a
+    // connected one): it is told to spawn none.
+    if (!opened.pi) { opened.stopping = opened.starting !== undefined; return; }
     await opened.pi.stop(this.options.grace);
     await opened.starting?.catch(() => {});
   }

@@ -199,7 +199,7 @@ export class Windows {
       // Pi answers once its extensions have started the session, so by now pi-optchat has the profile or has said why not.
       // Without its profile it takes every prompt and answers nothing, so such a Pi is stopped, not left looking idle.
       await pi.request({ type: 'get_state' });
-      if (!opens(opened)) throw new Error(opened.fault ?? 'pi-optchat did not open the profile. Is pi-optchat 0.11.9 or newer installed in this Pi? (pi install npm:pi-optchat)');
+      if (!opens(opened)) throw new Error(opened.fault ?? 'pi-optchat did not open the profile. Is pi-optchat 0.11.10 or newer installed in this Pi? (pi install npm:pi-optchat)');
     } catch (error) {
       opened.fault = reason(error);
       await pi.stop(grace);

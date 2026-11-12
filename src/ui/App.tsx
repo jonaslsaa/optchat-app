@@ -4,7 +4,9 @@ import { canComplete, current } from '../window.ts';
 import { AgentsPanel } from './Agents.tsx';
 import { busy } from './agents.ts';
 import { Composer } from './Composer.tsx';
-import { useShortcuts } from './keys.ts';
+import { label, useShortcuts } from './keys.ts';
+import { MemoryView } from './Memory.tsx';
+import { NO_TREE } from './memory.ts';
 import { Outside } from './Outside.tsx';
 import { ProfileName, Tabs } from './Profiles.tsx';
 import { Settings, Welcome } from './Settings.tsx';
@@ -23,11 +25,13 @@ function Profile({ state, profile, onSettings }: { state: State; profile: string
   const [sidebar, setSidebar] = useState(() => innerWidth >= 768);
   // The agents are the main chat's: `panel.agent` is the one whose chat is open in the panel.
   const [panel, setPanel] = useState<{ agent?: string }>(), openAgent = useCallback((agent?: string) => setPanel({ agent }), []);
+  // The main chat as the agent reads its memory, in the chat's place. A message sent from there is answered in the chat.
+  const [remembering, setMemory] = useState(false), toChat = useCallback(() => setMemory(false), []);
   const windows = state.windows.filter(window => window.profile === profile), ids = windows.map(window => window.id).join(' ');
   const window = windows.find(w => w.id === state.selected[profile]) ?? windows.find(w => w.id === mainOf(profile));
   const live = (window && state.live[window.id]) ?? NOTHING, log = state.logs[profile], session = window && state.sessions[window.id];
   // The main chat is the profile's log. A connected window's conversation is only in its Pi until it is handed off.
-  const own = window?.role === 'connected';
+  const own = window?.role === 'connected', memory = remembering && !own;
   const since = window?.since, run = useMemo(() => current({ since }, live.messages), [since, live.messages]);
   const before = useMemo(() => own ? spoken(current({ since }, session ?? [])) : logged(log?.entries ?? []), [own, since, session, log?.entries]);
   const items = useMemo(() => chat(before, { ...live, messages: run }), [before, run, live.streaming]);
@@ -35,8 +39,9 @@ function Profile({ state, profile, onSettings }: { state: State; profile: string
   useShortcuts(() => ({
     'mod+shift+o': () => void app.newWindow(profile),
     'mod+b': () => setSidebar(shown => !shown),
+    ...!own && { 'alt+m': () => setMemory(shown => !shown) },
     ...Object.fromEntries(ids.split(' ').slice(0, 9).map((id, index) => [`alt+${index + 1}`, () => app.select(id)])),
-  }), [profile, ids]);
+  }), [profile, ids, own]);
   // What of the main chat says its agents changed: its Pi started or stopped, an agent was started or ended, a report came.
   const pulse = [window?.status, live.status.optchat, live.messages.length, log?.total].join(' ');
   // A Pi that has stopped counts nothing: its last status line still stands, and is about agents that went with it.
@@ -56,6 +61,16 @@ function Profile({ state, profile, onSettings }: { state: State; profile: string
           <h1 className={cn('min-w-0 truncate font-medium text-sm', name === UNTITLED && 'text-muted-foreground')}>{name}</h1>
           {own && <span className="shrink-0 rounded-full border px-2 py-0.5 text-2xs text-muted-foreground">{window.completed ? 'Completed' : 'Connected window'}</span>}
           <span className="flex-1" />
+          {!own && (
+            <div role="radiogroup" aria-label="What the page shows" title={`Chat or memory view (${label('alt+m')})`} className="flex shrink-0 rounded-[var(--control-radius)] border bg-muted/50 p-0.5">
+              {/* The browser's own radio buttons, for its arrow keys; only their labels are drawn. */}
+              {([['Chat', false], ['Memory', true]] as const).map(([name, on]) => (
+                <label key={name} className={cn('flex h-5.5 items-center rounded-[calc(var(--control-radius)-2px)] px-2 text-xs has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring', memory === on ? 'bg-background font-medium text-foreground shadow-xs' : 'text-muted-foreground hover:text-foreground')}>
+                  <input type="radio" name={`shows-${profile}`} className="sr-only" checked={memory === on} onChange={() => setMemory(on)} />{name}
+                </label>
+              ))}
+            </div>
+          )}
           {canComplete(window) && <Button variant="outline" title="Complete: hand this conversation to the main chat" onClick={() => void app.complete(window.id)}><CheckIcon />Complete</Button>}
           {!own && (
             <Button variant="ghost-muted" size="icon-sm" aria-label="Agents" title={agentsWork ? 'Agents: some are working' : 'Agents'} aria-pressed={panel !== undefined} onClick={() => setPanel(panel ? undefined : {})}>
@@ -66,7 +81,7 @@ function Profile({ state, profile, onSettings }: { state: State; profile: string
         </header>
         <Fragment key={window.id}>
           {/* An empty window says what it is, with the composer under it in the middle of the page, as T3 Code's new thread does. */}
-          {fresh ? (
+          {memory ? <MemoryView tree={state.memory[profile] ?? NO_TREE} profile={profile} window={window} pulse={`${window.status} ${log?.total} ${state.connection}`} /> : fresh ? (
             <div className="flex min-h-0 flex-1 flex-col items-center justify-end gap-2 px-6 pb-7 text-center">
               <h2 className="max-w-full truncate font-normal text-2xl tracking-tight sm:text-3xl">{!own ? profile : window.completed ? 'Completed' : 'New connected window'}</h2>
               <p className="max-w-xl text-balance text-muted-foreground text-sm">
@@ -74,8 +89,8 @@ function Profile({ state, profile, onSettings }: { state: State; profile: string
               </p>
             </div>
           ) : <Timeline items={items} live={live} running={window.status === 'running'} profile={profile} loading={log?.loading} older={more ? () => void app.older(profile) : undefined} onAgent={own ? undefined : openAgent} />}
-          {window.outside ? <Outside window={window} outside={window.outside} /> : <Composer window={window} live={live} />}
-          {fresh && <div className="flex-[1.6]" />}
+          {window.outside ? <Outside window={window} outside={window.outside} /> : <Composer window={window} live={live} onSend={toChat} />}
+          {fresh && !memory && <div className="flex-[1.6]" />}
         </Fragment>
       </main>
       {panel && !own && <AgentsPanel state={state} profile={profile} agent={panel.agent} pulse={pulse} outside={window.outside !== undefined} onAgent={openAgent} onClose={() => setPanel(undefined)} />}

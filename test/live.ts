@@ -63,7 +63,11 @@ test('a real Pi turn on a throwaway profile, end to end through the WebSocket', 
   const run = pushed.reduce((live, push) => apply(live, push.record, push.seq), idle());
   assert.deepEqual(chat([], run).map(({ kind, text, date }) => ({ kind, text, date })), messages.map(({ kind, text, date }) => ({ kind, text, date })));
   assert.equal(chat(logged(messages), run).length, messages.length);
-  assert.deepEqual((await client.request('view', { profile: 'live' })).lines.map(l => [l.id, l.n]), [[0, 1], [1, 1]]);
+  // The memory view of that turn, as Pi's files have it: a line for each message, and under a line the message as it was said.
+  const view = await client.request('view', { profile: 'live' });
+  assert.deepEqual(view.lines, messages.map(({ i, kind, text, date }) => ({ id: i, n: 1, text: `${kind}: ${text}`, from: date, to: date })));
+  assert.ok(view.total === 2 && view.size > 0 && view.size < view.budget);
+  assert.deepEqual((await client.request('original', { profile: 'live', id: 1 })).messages, [messages[1]]);
 
   // A second client finds the window and its run; closing the server lets Pi release the profile.
   const second = await connect(server.url);

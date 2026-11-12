@@ -54,7 +54,7 @@ function Failure({ error }: { error: string }) {
 /** Where you type. You can always type: while the agent runs, Enter steers it and ⌘Enter queues your message for when it has
  * stopped, and Esc stops it. The line under it says only what is news: how to steer a run, that Pi is starting, agents at
  * work. The look is T3 Code's composer (MIT, see THIRD_PARTY_NOTICES.md), over a plain textarea. */
-export function Composer({ window, live }: { window: WindowState; live: Live }) {
+export function Composer({ window, live, onSend }: { window: WindowState; live: Live; onSend?: () => void }) {
   const [text, setText] = useState(drafts.get(window.id) ?? ''), [sending, setSending] = useState(false);
   const area = useRef<HTMLTextAreaElement>(null);
   const running = window.status === 'running', queued = [...live.queued.steering, ...live.queued.followUp];
@@ -64,7 +64,7 @@ export function Composer({ window, live }: { window: WindowState; live: Live }) 
   const send = async (later: boolean) => {
     const message = text.trim();
     if (!message || sending) return;
-    setSending(true); change('');
+    setSending(true); change(''); onSend?.();
     // A message the server refused goes back where it was typed, before what was typed since.
     if (!await app.send(window.id, message, later)) change([message, drafts.get(window.id)].filter(Boolean).join('\n\n'));
     setSending(false);

@@ -102,7 +102,7 @@ function ToolRow({ step, live, running }: { step: Tool; live: boolean; running?:
     </WorkLogRow>
   );
 }
-function StepRow({ step, tools }: { step: Step; tools?: Record<string, string> }) {
+export function StepRow({ step, tools }: { step: Step; tools?: Record<string, string> }) {
   if (step.type === 'talk') return <div className="px-1 py-1"><Markdown text={step.text} streaming={step.streaming} /></div>;
   if (step.type === 'fault') return <p className="px-1 py-0.5 text-destructive-foreground text-sm">{step.text}</p>;
   return <ToolRow step={step} live={tools !== undefined} running={step.call !== undefined ? tools?.[step.call] : undefined} />;

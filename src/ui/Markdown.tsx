@@ -23,9 +23,11 @@ function CodeBlock({ children }: ComponentProps<'pre'>) {
   const code = isValidElement<{ className?: string; children?: ReactNode }>(children) ? children.props : {};
   const [wrapped, setWrapped] = useState(false), language = /language-(\S+)/.exec(code.className ?? '')?.[1], text = String(code.children ?? '');
   return (
-    <div data-wrap={wrapped} className="my-[0.65rem] overflow-hidden rounded-lg border border-border/70 bg-secondary text-start leading-snug dark:border-transparent dark:bg-input/32">
-      <div className="flex select-none items-center justify-between gap-2 pt-1.5 pr-1.5 pb-0 pl-3">
-        <span className="inline-flex min-w-0 items-center gap-1.5 font-mono text-2xs text-muted-foreground">{language}</span>
+    <div data-wrap={wrapped} className="relative my-[0.65rem] overflow-hidden rounded-lg border border-border/70 bg-secondary text-start leading-snug dark:border-transparent dark:bg-input/32">
+      {/* A block that names its language has a line for it, with the buttons at its end. One that names none has only the
+          buttons, in its corner, with the code beside them. */}
+      <div className={cn('flex select-none items-center justify-between gap-2', language ? 'pt-1.5 pr-1.5 pb-0 pl-3' : 'absolute top-1.5 right-1.5 z-10 rounded-md bg-secondary dark:bg-[color-mix(in_srgb,var(--input)_32%,var(--background))]')}>
+        {language && <span className="inline-flex min-w-0 items-center gap-1.5 font-mono text-2xs text-muted-foreground">{language}</span>}
         <span className="flex gap-0.5">
           <Button variant={wrapped ? 'secondary' : 'ghost-muted'} size="icon-xs" title="Wrap lines" aria-pressed={wrapped} onClick={() => setWrapped(!wrapped)}><WrapTextIcon className="size-3" /></Button>
           <CopyButton text={text.replace(/\n$/, '')} label="Copy" />

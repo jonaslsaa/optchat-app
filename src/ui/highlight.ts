@@ -33,7 +33,8 @@ export function highlighter(language: string): Promise<HighlighterCore | undefin
 
 /** Colours one code block, line by line, as often as it is asked: for a block that grows while its reply streams, the lines it
  * had are kept as they are (the same arrays, so they are not drawn again) and only what came since is read, on from where the
- * grammar stood at the end of the last whole line. */
+ * grammar stood at the end of the last whole line. `code` is as Markdown gives it, with a newline after its last line whether
+ * that line is finished or not: it is no part of the code, and a line counts as whole once another follows it. */
 export function painter(core: HighlighterCore, lang: string) {
   const options = { lang, themes: THEMES, defaultColor: false as const };
   let done = '', lines: Token[][] = [], state: GrammarState | undefined;
@@ -44,7 +45,8 @@ export function painter(core: HighlighterCore, lang: string) {
       return { text: content, ...light && dark && { color: `light-dark(${light}, ${dark})` } };
     })) };
   };
-  return (code: string): Token[][] => {
+  return (given: string): Token[][] => {
+    const code = given.replace(/\n$/, '');
     if (!code.startsWith(done)) { done = ''; lines = []; state = undefined; }
     const rest = code.slice(done.length), end = rest.lastIndexOf('\n');
     if (end >= 0) {

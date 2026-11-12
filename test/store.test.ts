@@ -52,6 +52,9 @@ test('a server that started again numbers its records from one, and the page fol
   const before = (await answered(1)).live['work/main'].seq;
   await first.close();
   await until(state => state.connection === 'lost');
+  // What is asked meanwhile fails quietly: that the server is away is said once, by the connection.
+  assert.equal(await app.send('work/main', 'anyone there?'), false);
+  assert.equal(app.state.error, undefined);
 
   const second = await startServer({ port: first.port, home: directory, cwd: directory, pi });
   t.after(() => second.close());

@@ -73,6 +73,7 @@ Next I would wire the agents panel.`;
  * messages are dated from `clock` on, so the pictures do not change with the time of day. */
 export const demo = (clock: number): Script => ({
   clock,
+  handoff: 'Goal: a tour of this repository.\n\nDone: Read `src/` and `README.md` and described the server, the protocol and the UI. Nothing was changed.\n\nOpen: The agents panel is not wired yet.',
   replies: {
     demo: {
       turns: [{

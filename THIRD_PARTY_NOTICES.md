@@ -8,7 +8,7 @@ Parts of the UI come from [T3 Code](https://github.com/pingdotgg/t3code) (commit
 - `src/ui/WorkLog.tsx`: the row and its details, copied from `apps/web/src/components/chat/WorkLog.tsx`.
 - `src/ui/index.css`: the colour tokens, the `surface-glass` utility and the `.chat-markdown` rules, from `apps/web/src/index.css`.
 - `src/ui/ui.tsx`: the `Button` and `Kbd` class strings, from `apps/web/src/components/ui/button.tsx` and `kbd.tsx`, without Base UI.
-- `src/ui/Composer.tsx`, `Rows.tsx`, `Markdown.tsx`, `Sidebar.tsx` and `Timeline.tsx`: the looks (Tailwind class strings) of T3 Code's composer, timeline rows, code block frame and sidebar thread row. The components themselves are written for this app.
+- `src/ui/Composer.tsx`, `Rows.tsx`, `Markdown.tsx`, `Sidebar.tsx`, `Timeline.tsx` and `App.tsx`: the looks (Tailwind class strings) of T3 Code's composer, timeline rows, code block frame, sidebar thread row and new-thread heading. The components themselves are written for this app.
 
 ```
 MIT License

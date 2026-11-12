@@ -5,7 +5,7 @@ import type { Message, PiRecord } from '../protocol.ts';
  * Nothing here touches the DOM. */
 
 /** A message as Pi writes it in its records (its docs: message-types.md), read only as far as the chat needs. */
-export interface PiMessage { role: string; timestamp: number; content?: unknown; stopReason?: string; errorMessage?: string; toolName?: string; display?: boolean }
+export interface PiMessage { role: string; timestamp: number; content?: unknown; stopReason?: string; errorMessage?: string; toolName?: string; display?: boolean; customType?: string }
 
 /** A block of the reply being written. A tool call's arguments arrive as JSON text (`json`) until its end has them whole. */
 type Block = { type: 'text'; text: string } | { type: 'thinking'; thinking: string } | { type: 'toolCall'; id: string; name: string; arguments?: unknown; json: string };
@@ -16,6 +16,8 @@ export interface Line extends Pick<Message, 'kind' | 'text' | 'date'> {
   streaming?: boolean;
   /** The tool call's id, while Pi may still be running it. */
   call?: string;
+  /** Part of a connected window's handoff: what its agent wrote for the main chat when the conversation was completed. */
+  handoff?: boolean;
 }
 /** A line in its place in the chat. `key` is its number in the profile's log (in a connected window, in its conversation), so it
  * is the same while the line streams, once it is logged, and whichever pages of the log are loaded. */
@@ -142,22 +144,37 @@ export function thinking({ streaming }: Live) {
   return last?.type === 'thinking' ? last.thinking : undefined;
 }
 
+/** pi-optchat's request for a handoff (its `rpc-window.ts`): Complete has a connected window's agent say one thing more, which is
+ * for the main chat and no answer to you. */
+const asksHandoff = (message: PiMessage) => message.role === 'custom' && message.customType === 'optchat-handoff-request';
+/** Each message's lines, and those of the reply being written. From a request for a handoff up to your next message they are
+ * the handoff; the request, which says nothing itself, is its first line, so the handoff is there before a word of it is. */
+function told(messages: readonly PiMessage[], streaming?: Live['streaming']): Line[][] {
+  let handoff = false;
+  const lines = (message: PiMessage): Line[] => {
+    if (asksHandoff(message)) { handoff = true; return [{ kind: 'work', text: '', date: date(message), handoff }]; }
+    if (message.role === 'user') handoff = false;
+    return said(message);
+  };
+  const marked = (lines: Line[]) => handoff ? lines.map(line => ({ ...line, handoff })) : lines;
+  return [...messages.map(message => marked(lines(message))), ...streaming ? [marked(writing(streaming))] : []];
+}
+
 /** The loaded part of a profile's log, as the chat's items. */
 export const logged = (entries: readonly Message[]): Item[] => entries.map(({ i, kind, text, date }) => ({ key: i, kind, text, date }));
 /** A connected window's conversation, which only its Pi has, as the chat's items. */
-export const spoken = (messages: readonly PiMessage[]): Item[] => messages.flatMap(message => said(message)).map((line, key) => ({ ...line, key }));
+export const spoken = (messages: readonly PiMessage[]): Item[] => told(messages).flat().map((line, key) => ({ ...line, key }));
 /** The chat: `before` (what is logged, or a connected window's conversation), then what the latest run said that is not among it
  * yet. pi-optchat dates an entry with its message's time and logs a run in order, so a message is logged once the log has an
  * entry of its time, and so is everything before it. The new items are numbered on from the last of `before`, which is the
  * number the log will give them. */
 export function chat(before: readonly Item[], live: Live): Item[] {
   const dates = new Set(before.map(item => item.date)), next = (before.at(-1)?.key ?? -1) + 1;
-  const last = live.messages.findLastIndex(message => dates.has(date(message)));
+  const last = live.messages.findLastIndex(message => dates.has(date(message))), lines = told(live.messages, live.streaming);
   // The log does not name a tool call; the run does, and what a call that is still running has printed goes by that name.
-  const calls = new Map(live.messages.slice(0, last + 1).map(message => [date(message), said(message).flatMap(line => line.call ?? [])]));
+  const calls = new Map(live.messages.slice(0, last + 1).map((message, at) => [date(message), lines[at].flatMap(line => line.call ?? [])]));
   const named = before.map(item => { const call = item.kind === 'tool' ? calls.get(item.date)?.shift() : undefined; return call ? { ...item, call } : item; });
-  const fresh = live.messages.slice(last + 1).flatMap(message => said(message));
-  return [...named, ...[...fresh, ...live.streaming ? writing(live.streaming) : []].map((line, n) => ({ ...line, key: next + n }))];
+  return [...named, ...lines.slice(last + 1).flat().map((line, n) => ({ ...line, key: next + n }))];
 }
 /** A profile's log with one more page read: the entries of both by their number, and of those the unbroken run up to the
  * newest, since a page that does not reach what was loaded leaves a gap nobody has read. */
@@ -172,32 +189,60 @@ export type Step = { key: number } & (
   | { type: 'talk'; text: string; streaming?: boolean }
   | { type: 'tool'; name: string; args: Record<string, unknown>; output?: string; failed: boolean; call?: string }
   | { type: 'fault'; text: string });
-/** The chat in the blocks it is drawn as: your message with its images, a note, a report from an agent, or the agent's reply,
- * which is its work and then its answer. `items` is what the part was made from. */
+export type Tool = Extract<Step, { type: 'tool' }>;
+/** The chat in the blocks it is drawn as: your message with its images, a note, a report from an agent (with the `title` it was
+ * started under, where the chat has its start), the agent's reply, which is its work and then its answer, or the handoff a
+ * connected window's agent wrote for the main chat (`body`, empty until it is written). `items` is what the part was made from. */
 export type Part = { key: number; items: readonly Item[] } & (
   | { type: 'user'; date: string; text: string; images: string[] }
   | { type: 'note'; text: string }
-  | { type: 'work'; date: string; agent?: string; body: string }
+  | { type: 'work'; date: string; agent?: string; title?: string; body: string }
+  | { type: 'handoff'; date: string; body: string }
   | { type: 'reply'; steps: Step[]; answer?: { text: string; streaming?: boolean }; from: string; to: string; stopped: boolean });
 
 const inReply = ({ kind }: Item) => kind === 'talk' || kind === 'tool' || kind === 'echo';
-const same = (a: Item, b: Item) => a === b || a.key === b.key && a.kind === b.kind && a.date === b.date && a.text === b.text && a.streaming === b.streaming && a.call === b.call;
+const same = (a: Item, b: Item) => a === b || a.key === b.key && a.kind === b.kind && a.date === b.date && a.text === b.text && a.streaming === b.streaming && a.call === b.call && a.handoff === b.handoff;
 /** Groups the chat into its parts. A part of `previous` whose items all still say the same is returned as it was, so that only
  * what changed is drawn again: while a reply streams that is the reply, not the whole chat. */
 export function parts(items: readonly Item[], previous: readonly Part[] = []): Part[] {
   const groups: Item[][] = [], before = new Map(previous.map(part => [part.key, part]));
   for (const item of items) {
     const last = groups.at(-1);
-    if (last && inReply(item) && inReply(last[0])) last.push(item); else groups.push([item]);
+    // A handoff is one part, from the request for it on, and no part of the reply before it.
+    if (last && (item.handoff ? last[0].handoff && item.kind !== 'work' : inReply(item) && inReply(last[0]) && !last[0].handoff)) last.push(item); else groups.push([item]);
   }
-  return groups.map(group => {
+  const made = groups.map(group => {
     const old = before.get(group[0].key);
     return old && old.items.length === group.length && old.items.every((item, at) => same(item, group[at])) ? old : part(group);
   });
+  // A report is named by its agent's number; the call that started the agent, where the chat reaches back to it, has its title.
+  const titles = new Map(made.flatMap(part => part.type === 'reply' ? part.steps.flatMap(spawned) : []));
+  return made.map(part => {
+    const title = part.type === 'work' && part.agent ? titles.get(part.agent) : undefined;
+    return part.type !== 'work' || part.title === title ? part : { ...part, title };
+  });
 }
+/** The agents a `spawn` call started, each with the title it was given: pi-optchat answers `Started: <id>, <id>.`, in the order
+ * of the call's tasks. */
+function spawned(step: Step): [id: string, title: string][] {
+  const tasks = step.type === 'tool' && step.name === 'spawn' && Array.isArray(step.args.tasks) ? step.args.tasks : [];
+  const ids = step.type === 'tool' ? /^Started: ([^.]+)\./.exec(step.output ?? '')?.[1].split(', ') ?? [] : [];
+  return ids.flatMap((id, at): [string, string][] => { const task: unknown = tasks[at]; return isObject(task) && typeof task.title === 'string' ? [[id, task.title]] : []; });
+}
+/** The text a message ended on: pi-optchat logs each block of it as an entry of its own, under the message's date. */
+function closing(items: readonly Item[]): Item[] {
+  const last = items.at(-1);
+  return items.slice(items.findLastIndex(item => item.kind !== 'talk' || item.date !== last?.date) + 1);
+}
+const text = (items: Item[]) => items.map(item => item.text).join('\n\n');
 const IMAGE = /\[image ([0-9a-f]{16})\]/g;
 function part(items: readonly Item[]): Part {
   const [first] = items, last = items.at(-1)!, common = { key: first.key, items };
+  if (first.handoff) {
+    // The handoff is the text of the agent's last message, if that was text and no tool call, as pi-optchat reads it (its `handoffText`).
+    const written = !last.streaming && !items.some(item => item.kind === 'tool' && item.date === last.date);
+    return { ...common, type: 'handoff', date: last.date, body: written ? text(closing(items)) : '' };
+  }
   if (first.kind === 'user') return { ...common, type: 'user', date: first.date, text: first.text.replace(IMAGE, '').trim(), images: [...first.text.matchAll(IMAGE)].map(match => match[1]) };
   if (first.kind === 'note') return { ...common, type: 'note', text: first.text };
   if (first.kind === 'work') {
@@ -205,27 +250,32 @@ function part(items: readonly Item[]): Part {
     const [, agent, body = first.text] = /^\[([\w-]+)\] ([\s\S]*)$/.exec(first.text) ?? [];
     return { ...common, type: 'work', date: first.date, ...agent && { agent }, body };
   }
-  const answer = last.kind === 'talk' ? last : undefined, work = steps(answer ? items.slice(0, -1) : items);
+  // What the agent was saying when it was stopped stays in view, as its answer does.
+  const cut = last.kind === 'echo' && last.text.startsWith('Agent aborted'), answer = closing(cut ? items.slice(0, -1) : items);
+  const work = steps(items.filter(item => !answer.includes(item)));
   return {
-    ...common, type: 'reply', steps: work, from: first.date, to: last.date, stopped: work.some(step => step.type === 'fault' && step.text.startsWith('Agent aborted')),
-    ...answer && { answer: { text: answer.text, ...answer.streaming && { streaming: true } } },
+    ...common, type: 'reply', steps: work, from: first.date, to: last.date, stopped: cut || work.some(step => step.type === 'fault' && step.text.startsWith('Agent aborted')),
+    ...answer.length > 0 && { answer: { text: text(answer), ...answer.at(-1)?.streaming && { streaming: true } } },
   };
 }
+/** What Pi's bash adds under a command's output when it failed. */
+const COMMAND_FAILED = /(^|\n)Command (exited with code [1-9]\d*|aborted|timed out after \d+ seconds)[^\n]*$/;
 /** A reply's tool calls come first and their results after, in the same order: each result goes to the oldest call still without
  * one. A tool call's entry is the tool's name, then its arguments as JSON; a result's is the tool's name, a colon, and what it
  * printed. */
 function steps(items: readonly Item[]): Step[] {
-  const result: Step[] = [], waiting: Extract<Step, { type: 'tool' }>[] = [];
+  const result: Step[] = [], waiting: Tool[] = [];
   for (const { key, kind, text, streaming, call } of items) {
     if (kind === 'talk') result.push({ key, type: 'talk', text, ...streaming && { streaming } });
     else if (kind === 'tool') {
-      const space = text.indexOf(' '), step: Extract<Step, { type: 'tool' }> = { key, type: 'tool', name: space < 0 ? text : text.slice(0, space), args: {}, failed: false, ...call && { call } };
+      const space = text.indexOf(' '), step: Tool = { key, type: 'tool', name: space < 0 ? text : text.slice(0, space), args: {}, failed: false, ...call && { call } };
       try { const args: unknown = JSON.parse(text.slice(space + 1)); if (isObject(args)) step.args = args; } catch {}
       result.push(step); waiting.push(step);
     } else if (/^Agent (error|aborted): /.test(text) || !waiting.length) result.push({ key, type: 'fault', text });
     else {
       const output = text.slice(text.indexOf(': ') + 2);
-      Object.assign(waiting.shift()!, { output, failed: /^error\b/i.test(output) });
+      const step = waiting.shift()!;
+      Object.assign(step, { output, failed: /^error\b/i.test(output) || step.name === 'bash' && COMMAND_FAILED.test(output) });
     }
   }
   return result;
@@ -234,4 +284,45 @@ function steps(items: readonly Item[]): Step[] {
 export function took(from: string, to: string) {
   const seconds = Math.max(0, Math.round((Date.parse(to) - Date.parse(from)) / 1000));
   return seconds < 60 ? `${seconds}s` : `${Math.floor(seconds / 60)}m ${String(seconds % 60).padStart(2, '0')}s`;
+}
+
+const VERBS: Record<string, [doing: string, done: string]> = {
+  bash: ['Running', 'Ran'], read: ['Reading', 'Read'], edit: ['Editing', 'Edited'], write: ['Writing', 'Wrote'],
+  grep: ['Searching for', 'Searched for'], find: ['Finding', 'Found'], ls: ['Listing', 'Listed'],
+};
+/** A tool call in words: what it does (`Ran`, or `Running` while it does; a tool that is not one of Pi's own goes by its name) and
+ * to what, which is its command, pattern or path, the agents it starts, or else its first argument. `whole` says that the two
+ * are all there is to the call. */
+export function act({ name, args, output }: Tool, live: boolean): { verb: string; subject: string; whole: boolean } {
+  const pending = live && output === undefined;
+  if (name === 'spawn' && Array.isArray(args.tasks)) {
+    const titles = args.tasks.flatMap((task: unknown) => isObject(task) && typeof task.title === 'string' ? [task.title] : []), many = args.tasks.length !== 1;
+    return { verb: `${pending ? 'Starting' : 'Started'} ${many ? `${args.tasks.length} agents` : 'an agent'}${titles.length ? ':' : ''}`, subject: titles.join(', '), whole: false };
+  }
+  const value = args.command ?? args.pattern ?? args.query ?? args.path ?? args.file_path ?? args.url ?? args.title ?? Object.values(args)[0];
+  return {
+    verb: VERBS[name]?.[pending ? 0 : 1] ?? name,
+    subject: typeof value === 'string' ? value : value === undefined ? '' : JSON.stringify(value),
+    whole: Object.keys(args).length <= 1 && typeof (value ?? '') === 'string',
+  };
+}
+/** What pi-optchat's status line says that is news. It is written for a terminal (`OptChat: work · 350 messages · 2 pending ·
+ * 1 agents`, a window's `OptChat: work · connected window · main window not reachable`): the profile, the size of the log and
+ * what the window is are on the page already, a count of nothing says nothing, and the rest is said in words. */
+export function news(status = ''): string[] {
+  return status.split(' · ').slice(1).flatMap(part => {
+    const [, count, what] = /^(\d+) (messages|pending|agents)$/.exec(part) ?? [];
+    if (what === 'agents') return count === '0' ? [] : [`${count} ${count === '1' ? 'agent' : 'agents'} working`];
+    if (what === 'pending') return count === '0' ? [] : [`${count} ${count === '1' ? 'summary' : 'summaries'} to write`];
+    return what || part === 'connected window' || part === 'completed' ? [] : [part];
+  });
+}
+/** Why a window's Pi is not running: a headline, the detail, and what to do next. The server says `Pi exited (code 3).` and what
+ * Pi wrote last; pi-optchat says `Profile already running: <profile> · PID <pid> · <host> · <directory>` when a Pi outside
+ * the app has the profile. */
+export function failure(error: string): { title: string; detail: string; next: string } {
+  const [, profile, pid, host, cwd] = /^Profile already running: (.+?) · PID (\d+) · (.+?) · (.+)$/.exec(error) ?? [];
+  if (profile) return { title: `${profile} is running outside the app`, detail: `A Pi in a terminal has it open: PID ${pid} on ${host}, in ${cwd}.`, next: 'Close it there, then send your message again.' };
+  const [, how, why] = /^Pi exited \((.+?)\)\.\s*([\s\S]*)$/.exec(error) ?? [];
+  return { title: how ? 'Pi stopped' : 'Pi is not running', detail: how ? `Pi exited with ${how}${why && `: ${why}`}` : error, next: 'Your next message starts it again.' };
 }

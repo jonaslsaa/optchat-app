@@ -4,7 +4,8 @@ import { join } from 'node:path';
 /** Stands in for `pi --mode rpc` with pi-optchat: the same records on stdin and stdout, scripted by the profile's name and the
  * prompt's words, so the server's tests and the UI's screenshots need no model.
  * - It says it owns its profile, or with `--optchat-connect join` that it is a window on it. An owner logs what is said to the
- *   profile's `main/`, as pi-optchat does; a window keeps its conversation to itself (`get_messages`).
+ *   profile's `main/`, as pi-optchat does; a window keeps its conversation to itself (`get_messages`), and writes a handoff
+ *   when it is completed with `/complete`.
  * - A prompt holding "wait" stays mid-reply until a `release` command or an abort; "ask" asks a dialog first and replies with its
  *   answer; "crash" kills it without an answer. A message sent during a run waits in the queue it was sent to: one that steers
  *   is answered next, one for later after those.
@@ -19,16 +20,22 @@ const status = (statusKey: string, statusText: string) => write({ type: 'extensi
 const role = (completed = false) => status('optchat.role', JSON.stringify(joins ? { role: 'window', profile, id: 'w1', connected: true, completed } : { role: 'owner', profile }));
 
 export type Content = { type: 'text'; text: string } | { type: 'thinking'; thinking: string } | { type: 'toolCall'; id: string; name: string; arguments: Record<string, unknown> };
-interface Said { role: string; content: Content[]; timestamp: number; stopReason?: string; errorMessage?: string; toolCallId?: string; toolName?: string }
+interface Said { role: string; content: Content[]; timestamp: number; stopReason?: string; errorMessage?: string; toolCallId?: string; toolName?: string; customType?: string; display?: boolean }
 const messages: Said[] = [];
 let completed = false;
 /** Replies by a word of the prompt: turns of the agent's work, each a reply with tool calls and what those print, and then its
- * answer. With `clock` the messages' times start there and go up a second a message, where they are otherwise the time it is. */
-export interface Script { clock?: number; replies: Record<string, { turns: { content: Content[]; results: string[] }[]; answer: string }> }
+ * answer. With `clock` the messages' times start there and go up a second a message, where they are otherwise the time it is.
+ * `handoff` is what a window writes for the main chat when it is completed. */
+export interface Script { clock?: number; handoff?: string; replies: Record<string, { turns: { content: Content[]; results: string[] }[]; answer: string }> }
 const script: Script = process.env.FAKE_PI_SCRIPT ? JSON.parse(readFileSync(process.env.FAKE_PI_SCRIPT, 'utf8')) : { replies: {} };
-/** Each message gets a later time than the one before. */
+/** Each message gets a later time than the one before, and by the real clock none that has not come yet: the server tells a
+ * window's conversations apart by when they were said. */
 let clock = script.clock ?? 0;
-const now = () => clock = script.clock !== undefined ? clock + 1000 : Math.max(Date.now(), clock + 1);
+function now() {
+  if (script.clock !== undefined) return clock += 1000;
+  while (Date.now() <= clock); // Under a millisecond.
+  return clock = Date.now();
+}
 
 /** The profile's log, as pi-optchat writes it: one entry for each thing a message said. */
 const main = join(process.env.OPTCHAT_HOME ?? '.', 'profiles', profile, 'main');
@@ -51,7 +58,7 @@ function ended(message: Said) {
 }
 const user = (text: string) => { const message: Said = { role: 'user', content: [{ type: 'text', text }], timestamp: now() }; write({ type: 'message_start', message }); ended(message); };
 
-let running = false, steering: string[] = [], followUp: string[] = [], release: ((held: { aborted: boolean; answer?: string }) => void) | undefined;
+let running = false, settled = Promise.resolve(), steering: string[] = [], followUp: string[] = [], release: ((held: { aborted: boolean; answer?: string }) => void) | undefined;
 const held = () => new Promise<{ aborted: boolean; answer?: string }>(resolve => { release = held => { release = undefined; resolve(held); }; });
 
 /** Streams a reply block by block, in the records real Pi writes in RPC mode (test/pi-turn.jsonl is a capture): a start, deltas
@@ -107,16 +114,31 @@ async function run(text: string) {
   running = false;
   write({ type: 'agent_settled', aborted });
 }
+/** /complete in a window, as pi-optchat does it: a request the chat does not show, which the agent answers with its handoff in
+ * a run of its own. */
+function handoff() {
+  write({ type: 'agent_start' });
+  const request: Said = { role: 'custom', customType: 'optchat-handoff-request', display: false, content: [{ type: 'text', text: '[OptChat] This connected conversation has ended.' }], timestamp: now() };
+  write({ type: 'message_start', message: request }); ended(request);
+  void reply([{ type: 'text', text: script.handoff ?? 'Goal: what was asked.\n\nDone: it was answered.\n\nOpen: nothing.' }], 'stop'); // It does not pause, so it is written by now.
+  write({ type: 'agent_end', messages: [] });
+  write({ type: 'agent_settled', aborted: false });
+}
 const commands: Record<string, (command: Record<string, unknown>) => unknown> = {
   get_state: () => ({ pid: process.pid, args: process.argv.slice(2), home: process.env.OPTCHAT_HOME, cwd: process.cwd() }),
   get_messages: () => ({ messages }),
   prompt: ({ message, streamingBehavior }) => {
     const text = String(message);
-    if (text === '/complete') { role(completed = true); return { disposition: 'handled' }; }
+    if (text === '/complete') {
+      // A reply being written is stopped first, and the handoff follows once that run has ended.
+      const hand = () => { handoff(); role(completed = true); };
+      if (running) { release?.({ aborted: true }); void settled.then(hand); } else hand();
+      return { disposition: 'handled' };
+    }
     if (completed) role(completed = false); // The next message begins a new conversation, and pi-optchat says so before the run.
     if (text.includes('crash')) { process.stderr.write('out of memory\n'); process.exit(3); }
     if (running) { (streamingBehavior === 'followUp' ? followUp : steering).push(text); write({ type: 'queue_update', steering, followUp }); return { disposition: 'queued' }; }
-    void run(text); return { disposition: 'started' };
+    settled = run(text); return { disposition: 'started' };
   },
   release: () => { release?.({ aborted: false }); },
   clear_queue: () => {

@@ -28,11 +28,12 @@ export interface State {
 const PAGE = 200, SAVED = 'optchat-app';
 export const mainOf = (profile: string) => `${profile}/main`;
 const ordered = (windows: WindowState[]) => windows.toSorted((a, b) => a.profile.localeCompare(b.profile) || Number(b.role === 'main') - Number(a.role === 'main') || a.id.localeCompare(b.id, undefined, { numeric: true }));
-/** What a window is called: the main chat, or a connected window by the first message of the conversation it is in. */
+export const UNTITLED = 'Untitled window';
+/** What a window is called: the main chat, or a connected window by the first message of the conversation it is in, once it has one. */
 export function title(window: WindowState, state: State) {
   if (window.role === 'main') return 'Main chat';
   const first = current(window, [...state.sessions[window.id] ?? [], ...state.live[window.id]?.messages ?? []]).find(message => message.role === 'user');
-  return first ? words(first.content).split('\n')[0] : 'New window';
+  return first ? words(first.content).split('\n')[0] : UNTITLED;
 }
 
 export class App {
@@ -75,8 +76,9 @@ export class App {
   }
   subscribe = (listener: () => void) => { this.listeners.add(listener); return () => { this.listeners.delete(listener); }; };
   private set(patch: Partial<State>) {
-    const before = this.state;
-    this.state = { ...before, ...patch };
+    const before = this.state, next = { ...before, ...patch };
+    // A lost connection is said once, for as long as it lasts: whatever fails meanwhile fails for that reason.
+    this.state = next.connection === 'lost' ? { ...next, error: undefined } : next;
     const { tabs, profile, selected } = this.state;
     if (tabs !== before.tabs || profile !== before.profile || selected !== before.selected) this.storage().setItem(SAVED, JSON.stringify({ tabs, profile, selected }));
     for (const listener of this.listeners) listener();

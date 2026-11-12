@@ -5,7 +5,8 @@ import { test } from 'node:test';
 import { connect } from '../src/client.ts';
 import type { PiRecord, Push } from '../src/protocol.ts';
 import { startServer } from '../src/server/server.ts';
-import { apply, chat, idle, logged } from '../src/ui/transcript.ts';
+import { apply, chat, idle, isMessage, isObject, logged, words } from '../src/ui/transcript.ts';
+import { current } from '../src/window.ts';
 import { createProfile, temporaryHome } from './support.ts';
 
 /** `npm run test:live`: real turns through the installed Pi with pi-optchat, on throwaway profiles. It needs Pi logged in to
@@ -103,6 +104,11 @@ test('a connected window reads the profile\'s memory, and Complete hands its con
   const again = (await client.request('windows', {})).windows.find(w => w.id === window.id)!.seq;
   await client.request('prompt', { window: window.id, text: 'Reply with exactly: here' });
   await record(window.id, r => r.type === 'agent_settled', again);
-  const { completed, status } = (await client.request('windows', {})).windows.find(w => w.id === window.id)!;
-  assert.deepEqual({ completed, status }, { completed: undefined, status: 'idle' });
+  const after = (await client.request('windows', {})).windows.find(w => w.id === window.id)!;
+  assert.deepEqual([after.completed, after.status], [undefined, 'idle']);
+  // Its Pi still has the conversation that was handed off; the window's is what came since.
+  const kept = (await client.request('command', { window: window.id, command: { type: 'get_messages' } })).data;
+  assert.ok(isObject(kept) && Array.isArray(kept.messages) && kept.messages.every(isMessage));
+  assert.ok(kept.messages.some(message => /marzipan/.test(JSON.stringify(message))));
+  assert.deepEqual(current(after, kept.messages).map(message => [message.role, words(message.content)]), [['user', 'Reply with exactly: here'], ['assistant', 'here']]);
 });

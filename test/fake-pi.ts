@@ -21,6 +21,7 @@ const role = (completed = false) => status('optchat.role', JSON.stringify(joins 
 export type Content = { type: 'text'; text: string } | { type: 'thinking'; thinking: string } | { type: 'toolCall'; id: string; name: string; arguments: Record<string, unknown> };
 interface Said { role: string; content: Content[]; timestamp: number; stopReason?: string; errorMessage?: string; toolCallId?: string; toolName?: string }
 const messages: Said[] = [];
+let completed = false;
 /** Replies by a word of the prompt: turns of the agent's work, each a reply with tool calls and what those print, and then its
  * answer. With `clock` the messages' times start there and go up a second a message, where they are otherwise the time it is. */
 export interface Script { clock?: number; replies: Record<string, { turns: { content: Content[]; results: string[] }[]; answer: string }> }
@@ -111,7 +112,8 @@ const commands: Record<string, (command: Record<string, unknown>) => unknown> = 
   get_messages: () => ({ messages }),
   prompt: ({ message, streamingBehavior }) => {
     const text = String(message);
-    if (text === '/complete') { role(true); return { disposition: 'handled' }; }
+    if (text === '/complete') { role(completed = true); return { disposition: 'handled' }; }
+    if (completed) role(completed = false); // The next message begins a new conversation, and pi-optchat says so before the run.
     if (text.includes('crash')) { process.stderr.write('out of memory\n'); process.exit(3); }
     if (running) { (streamingBehavior === 'followUp' ? followUp : steering).push(text); write({ type: 'queue_update', steering, followUp }); return { disposition: 'queued' }; }
     void run(text); return { disposition: 'started' };

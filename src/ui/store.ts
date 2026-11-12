@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from 'react';
 import { connect, type Client } from '../client.ts';
 import type { Message, Method, Params, Push, Result, WindowState } from '../protocol.ts';
+import { current } from '../window.ts';
 import { apply, idle, isMessage, isObject, merged, replay, stopped, without, words, type Live, type PiMessage } from './transcript.ts';
 
 /** Everything the page knows, kept outside React: the connection to the server, and what it said. Components read it with
@@ -27,10 +28,10 @@ export interface State {
 const PAGE = 200, SAVED = 'optchat-app';
 export const mainOf = (profile: string) => `${profile}/main`;
 const ordered = (windows: WindowState[]) => windows.toSorted((a, b) => a.profile.localeCompare(b.profile) || Number(b.role === 'main') - Number(a.role === 'main') || a.id.localeCompare(b.id, undefined, { numeric: true }));
-/** What a window is called: the main chat, or a connected window by its first message. */
+/** What a window is called: the main chat, or a connected window by the first message of the conversation it is in. */
 export function title(window: WindowState, state: State) {
   if (window.role === 'main') return 'Main chat';
-  const first = [...state.sessions[window.id] ?? [], ...state.live[window.id]?.messages ?? []].find(message => message.role === 'user');
+  const first = current(window, [...state.sessions[window.id] ?? [], ...state.live[window.id]?.messages ?? []]).find(message => message.role === 'user');
   return first ? words(first.content).split('\n')[0] : 'New window';
 }
 

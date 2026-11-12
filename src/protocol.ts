@@ -26,14 +26,15 @@ export type PiRecord = Static<typeof PiRecord>;
  * profile's `main` chat, or a `connected` window beside it, whose conversation ends in a handoff to the main chat.
  * The main window's Pi owns the profile, or fails to start when a Pi outside the app holds it; a connected window's Pi only
  * ever joins. `completed` is pi-optchat's word that a connected window's conversation is handed off; its next prompt begins a
- * new conversation in it.
+ * new conversation in it, and `since` is then when the last one was handed off: what its Pi said up to then belongs to
+ * conversations the main chat has.
  * `stopped`: no process (not started yet, closed, or it exited: `error` says why if it failed). `idle` and `running`: whether the
  * agent is in a run. `closed`: a connected window that is gone, pushed once as it leaves the list. `seq` is the number of the last
  * record the window pushed. `cwd` is where its Pi runs, set when the window is first opened. */
 export const WindowState = Type.Object({
   id: Type.String(), profile: Type.String(), role: Type.Enum(['main', 'connected']), cwd: Type.String(),
   status: Type.Enum(['stopped', 'starting', 'idle', 'running', 'closed']), seq: id,
-  completed: Type.Optional(Type.Boolean()), error: Type.Optional(Type.String()),
+  completed: Type.Optional(Type.Boolean()), since: Type.Optional(Type.Number()), error: Type.Optional(Type.String()),
 });
 export type WindowState = Static<typeof WindowState>;
 
@@ -69,7 +70,7 @@ export const methods = {
    * (Pi's `clear_queue`), which would otherwise start the next run. */
   abort: method(target, Type.Object({ steering: Type.Array(Type.String()), followUp: Type.Array(Type.String()) })),
   /** Ends a connected window's conversation and hands it to the main chat (pi-optchat's `/complete`). Answers once the handoff
-   * is written, which takes a turn of the window's agent. */
+   * is written, which takes a turn of the window's agent; until then the window takes no prompt. */
   complete: method(target, none),
   /** Stops the window's Pi, letting it shut down cleanly. A main window stays in the list and starts again on its next prompt;
    * a connected window leaves it. */
@@ -81,7 +82,8 @@ export const methods = {
    * status, widget and title, and the dialogs still waiting for an `answer`. */
   records: method(Type.Object({ window: Type.String(), after: Type.Optional(id) }),
     Type.Object({ seq: id, records: Type.Array(Type.Object({ seq: id, record: PiRecord })), complete: Type.Boolean(), ui: Type.Array(PiRecord) })),
-  /** Any other Pi RPC command (`get_state`, `set_model`, `get_messages`, ...), answered with Pi's `data`. */
+  /** Any other Pi RPC command (`get_state`, `set_model`, `get_messages`, ...), answered with Pi's `data`. Not a message to the
+   * agent: that is `prompt`. */
   command: method(Type.Object({ window: Type.String(), command: PiRecord }), Type.Object({ data: Type.Optional(Type.Unknown()) })),
   /** Answers a dialog Pi asked for in an `extension_ui_request` (select, confirm, input, editor): Pi's `extension_ui_response`
    * fields, `id` and one of `value`, `confirmed` or `cancelled`. */

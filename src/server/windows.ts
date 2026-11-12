@@ -28,6 +28,10 @@ interface Opened {
   fault?: string;
   /** A connected window on its way out: it starts no Pi, and leaves the list once its Pi has exited. */
   closed?: boolean;
+  /** Its conversation is being handed off: Complete has not answered yet. */
+  completing?: boolean;
+  /** When the window's Pi last said its conversation was handed off. */
+  ended?: number;
 }
 /** What pi-optchat says a Pi in RPC mode is to its profile: JSON in a `setStatus` with this key (its docs/connected-windows.md),
  * sent as the session starts, so before Pi's first answer; a Pi that has not sent it by then has no profile open. This is the
@@ -74,10 +78,16 @@ export class Windows {
     return { window: opened.state };
   }
   async prompt({ window, text, images, whenBusy = 'steer' }: Params<'prompt'>): Promise<Result<'prompt'>> {
-    const pi = await this.started(this.get(window));
+    const opened = this.get(window), pi = await this.started(opened);
+    // It would steer the agent while it writes its handoff, and be part of neither conversation.
+    if (opened.completing) throw new Error('This conversation is being handed to the main chat. Send your message once it is.');
+    // The next conversation is told from the one handed off by the clock: its first message is later, by a millisecond at least.
+    if (opened.ended === Date.now()) await new Promise(resolve => setTimeout(resolve, 1));
     // Always with a queueing behaviour, as T3 Code sends it: Pi then starts a run or queues the message, whichever is true by
     // the time it arrives, and a run that began meanwhile (a subagent's report) cannot make it fail.
-    return answered('prompt', methods.prompt.result, await pi.request({ type: 'prompt', message: text, ...images?.length && { images }, streamingBehavior: whenBusy }));
+    const send = () => pi.request({ type: 'prompt', message: text, ...images?.length && { images }, streamingBehavior: whenBusy });
+    // pi-optchat's command, typed as a message, is Complete all the same.
+    return answered('prompt', methods.prompt.result, await (text.trim() === '/complete' ? this.handingOff(opened, send) : send()));
   }
   async abort({ window }: Params<'abort'>): Promise<Result<'abort'>> {
     const pi = this.running(window);
@@ -86,8 +96,9 @@ export class Windows {
     return queued;
   }
   async complete({ window }: Params<'complete'>): Promise<Result<'complete'>> {
-    if (!canComplete(this.get(window).state)) throw new Error('Complete hands a connected conversation to the main chat. This window has none to hand off.');
-    await this.running(window).request({ type: 'prompt', message: '/complete' });
+    const opened = this.get(window);
+    if (opened.completing || !canComplete(opened.state)) throw new Error('Complete hands a connected conversation to the main chat. This window has none to hand off.');
+    await this.handingOff(opened, () => this.running(window).request({ type: 'prompt', message: '/complete' }));
     return {};
   }
   async close({ window }: Params<'close'>): Promise<Result<'close'>> {
@@ -103,6 +114,7 @@ export class Windows {
   }
   async command({ window, command }: Params<'command'>): Promise<Result<'command'>> {
     if (command.type === 'extension_ui_response') throw new Error('Pi does not answer an extension_ui_response. Send it with `answer`.');
+    if (['prompt', 'steer', 'follow_up'].includes(command.type)) throw new Error('Send a message with `prompt`, which knows when a window takes one.');
     return { data: await this.running(window).request(command) };
   }
   answer({ window, ...response }: Params<'answer'>): Result<'answer'> {
@@ -119,6 +131,11 @@ export class Windows {
     await Promise.all(windows.filter(isMain).map(opened => this.stop(opened)));
   }
 
+  /** Sends pi-optchat's `/complete`. Until Pi has answered it, the window takes no other message. */
+  private async handingOff<T>(opened: Opened, send: () => Promise<T>) {
+    opened.completing = true;
+    try { return await send(); } finally { opened.completing = false; }
+  }
   private get(id: string) {
     const opened = this.windows.get(id);
     if (!opened) throw new Error(`No window ${id}.`);
@@ -209,11 +226,15 @@ export class Windows {
     }
   }
   /** `status` is pi-optchat's role as JSON, or nothing once its Pi has no profile open. All the app needs of it is whether a
-   * connected window's conversation is handed off: which Pi owns the profile and which is a window on it is the app's own doing. */
+   * connected window's conversation is handed off: which Pi owns the profile and which is a window on it is the app's own doing.
+   * A conversation that is handed off stays the window's until its Pi says it is in another, which it does as your next message
+   * arrives and before the run: that one began after the last ended, and every message of it is later than that. Pi says a
+   * conversation is handed off before it answers Complete, and no message is passed on until it has, so none can be earlier. */
   private role(opened: Opened, status: unknown) {
     const { state } = opened, completed = role(status)?.completed === true;
     if ((state.completed ?? false) === completed) return;
-    if (completed) state.completed = true; else delete state.completed;
+    if (completed) { state.completed = true; opened.ended = Date.now(); }
+    else { delete state.completed; if (opened.ended !== undefined) state.since = opened.ended; }
     this.changed(opened);
   }
 }

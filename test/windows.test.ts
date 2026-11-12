@@ -7,6 +7,8 @@ import { WebSocket } from 'ws';
 import { connect } from '../src/client.ts';
 import type { Push, WindowState } from '../src/protocol.ts';
 import { startServer, type ServerOptions } from '../src/server/server.ts';
+import { isMessage, isObject } from '../src/ui/transcript.ts';
+import { canComplete, current } from '../src/window.ts';
 import { createProfile, temporaryHome } from './support.ts';
 
 const home = temporaryHome();
@@ -157,7 +159,7 @@ test('a message sent during a run is queued, and abort hands back what was still
 });
 
 test('a connected window starts the profile\'s owner first, joins it, and Complete hands it off', async t => {
-  const { request, status } = await setup(t);
+  const { request, status, record } = await setup(t);
   const { window } = await request('open', { profile: 'work', role: 'connected' });
   const windows = async () => (await request('windows', {})).windows.map(({ id, role, status, completed }) => ({ id, role, status, completed }));
   assert.deepEqual(await windows(), [{ id: 'work/1', role: 'connected', status: 'stopped', completed: undefined }]);
@@ -170,9 +172,26 @@ test('a connected window starts the profile\'s owner first, joins it, and Comple
 
   // Complete is for a connected conversation that is not handed off yet: not the main chat, and not twice.
   await assert.rejects(request('complete', { window: 'work/main' }), /none to hand off/);
-  await request('complete', { window: window.id });
+  // Nor does a message get in while the conversation is being handed off: it would belong to neither conversation.
+  const [done, during] = await Promise.allSettled([request('complete', { window: window.id }), request('prompt', { window: window.id, text: 'one more thing' })]);
+  assert.equal(done.status, 'fulfilled');
+  assert.match(String(during.status === 'rejected' && during.reason), /being handed to the main chat/);
+  await assert.rejects(request('command', { window: window.id, command: { type: 'prompt', message: 'around the back' } }), /Send a message with `prompt`/);
   assert.partialDeepStrictEqual((await windows())[0], { id: window.id, completed: true });
   await assert.rejects(request('complete', { window: window.id }), /none to hand off/);
+
+  // The next message begins a new conversation in the same Pi, which still has the one that was handed off. The window says
+  // when the new one began, and that is all of it: your message and the reply.
+  const before = (await request('windows', {})).windows[0];
+  assert.equal(before.since, undefined);
+  await request('prompt', { window: window.id, text: 'hello again' });
+  await record('agent_settled', before.seq);
+  const [after] = (await request('windows', {})).windows, said = (await request('command', { window: window.id, command: { type: 'get_messages' } })).data;
+  assert.deepEqual([after.completed, after.status], [undefined, 'idle']);
+  assert.ok(isObject(said) && Array.isArray(said.messages) && said.messages.every(isMessage));
+  assert.equal(said.messages.length, 4);
+  assert.deepEqual(current(after, said.messages).map(message => message.role), ['user', 'assistant']);
+  assert.ok(canComplete(after), 'and it can be completed in its turn');
   await request('close', { window: window.id });
   assert.equal((await status('closed')).window.id, window.id);
   assert.deepEqual((await windows()).map(w => w.id), ['work/main']);

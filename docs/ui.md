@@ -14,7 +14,7 @@ npm run screenshots       # a PNG of every main state, in /tmp/optchat-app-shots
 
 - **Profile tabs** on top, only once two profiles are open, with a + that opens another. With one profile there is no tab bar: its name sits in the title bar and opens the list of profiles.
 - **Windows** on the left: the main chat, then connected windows, each with Complete and close. "New window" opens a connected window, which sends the main agent nothing until its first message.
-- **The chat** in the centre. The main chat is the profile's log, read from disk a page at a time as you scroll back, so it shows with no Pi running. A connected window shows its own conversation, which only its Pi has until Complete hands it over.
+- **The chat** in the centre. The main chat is the profile's log, read from disk a page at a time as you scroll back, so it shows with no Pi running. A connected window shows its own conversation, which only its Pi has until Complete hands it over. A completed one stays as it was until your next message, which begins a new conversation in the same window: the view starts empty, and the finished one is in the main chat.
 - **The composer.** You can always type. While the agent runs, Enter steers it, ⌘Enter queues the message for after the run, and Esc stops the run and puts what was still queued back in the composer.
 
 | Keys | |
@@ -36,7 +36,7 @@ npm run screenshots       # a PNG of every main state, in /tmp/optchat-app-shots
 | `src/ui/safe.ts` | What Markdown may do: see below. Tested in `test/markdown.test.ts`. |
 | `src/ui/keys.ts` | Shortcuts, and `useShortcuts`. |
 | `src/ui/ui.tsx`, `WorkLog.tsx`, `markdownStreamBlocks.ts`, `index.css` | Buttons, tool-call rows, the Markdown splitter and the design tokens, from T3 Code. |
-| `src/window.ts` | What a window can do (`canComplete`), for the server and the page alike. |
+| `src/window.ts` | What a window can do (`canComplete`) and which of its Pi's messages are the conversation it is in (`current`), for the server and the page alike. |
 
 **One chat, three sources.** Every item in the chat is a log entry, or what a message Pi has not logged yet will be logged as (`said` mirrors pi-optchat's own). So a reply looks the same while it streams, when it has ended and after a restart, and keeps what you opened in it. The live test checks that the two readings agree on a real turn.
 

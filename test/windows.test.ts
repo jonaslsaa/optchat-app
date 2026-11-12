@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { request } from 'node:http';
 import { join } from 'node:path';
+import { setTimeout as sleep } from 'node:timers/promises';
 import { test, type TestContext } from 'node:test';
 import { WebSocket } from 'ws';
 import { connect } from '../src/client.ts';
@@ -211,7 +212,16 @@ test('a connected window starts the profile\'s owner first, joins it, and Comple
   assert.ok(isObject(said) && Array.isArray(said.messages) && said.messages.every(isMessage));
   assert.equal(said.messages.length, 6); // The first conversation, the request for its handoff and the handoff, then this one.
   assert.deepEqual(current(after, said.messages).map(message => message.role), ['user', 'assistant']);
+  // The cut is pi-optchat's own, as its Pi said it: after the handoff, and not after what came next.
+  assert.ok(after.since !== undefined && said.messages[3].timestamp < after.since && after.since <= said.messages[4].timestamp);
   assert.ok(canComplete(after), 'and it can be completed in its turn');
+  // As pi-optchat cuts what its agent reads: a message of that very millisecond is the new conversation's.
+  assert.deepEqual(current({ since: 5 }, [{ timestamp: 4 }, { timestamp: 5 }, { timestamp: 6 }]), [{ timestamp: 5 }, { timestamp: 6 }]);
+  // Its Pi gone, the page still has what that Pi said: the cut stays with it.
+  await assert.rejects(request('prompt', { window: window.id, text: 'crash' }));
+  let gone = (await request('windows', {})).windows[0];
+  while (gone.status !== 'stopped') { await sleep(10); gone = (await request('windows', {})).windows[0]; }
+  assert.equal(gone.since, after.since);
   await request('close', { window: window.id });
   assert.equal((await status('closed')).window.id, window.id);
   assert.deepEqual((await windows()).map(w => w.id), ['work/main']);

@@ -240,3 +240,12 @@ test('Complete\'s handoff is a part of its own under the conversation, and not t
   const cut = parts(spoken([user(1, 'what is the port?'), { ...reply(2, text('It is 80')), stopReason: 'aborted' }, asks, handoff]));
   assert.partialDeepStrictEqual(cut, [{ type: 'user' }, { type: 'reply', stopped: true, answer: { text: 'It is 80' }, steps: [{ type: 'fault' }] }, { type: 'handoff' }]);
 });
+
+test('a message says what pi-optchat would log, with an image named as one and a tool call by its id', () => {
+  const picture = { type: 'image', data: 'aGk=', mimeType: 'image/png' };
+  // A connected window's messages are drawn from Pi, not from the log: one that is only a picture is not an empty bubble.
+  assert.deepEqual(spoken([{ role: 'user', timestamp: T, content: [picture] }]).map(item => [item.kind, item.text]), [['user', '[image]']]);
+  assert.deepEqual(spoken([{ role: 'toolResult', timestamp: T, toolName: 'read', content: [text('a chart'), picture] }]).map(item => [item.kind, item.text]), [['echo', 'read: a chart\n[image]']]);
+  assert.deepEqual(spoken([reply(1, text('Looking.'), bash('call-1', 'ls'), bash('call-2', 'pwd'))]).map(item => [item.kind, item.text, item.call]),
+    [['talk', 'Looking.', undefined], ['tool', 'bash {"command":"ls"}', 'call-1'], ['tool', 'bash {"command":"pwd"}', 'call-2']]);
+});

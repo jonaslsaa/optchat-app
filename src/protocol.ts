@@ -27,7 +27,7 @@ export type PiRecord = Static<typeof PiRecord>;
  * The main window's Pi owns the profile. While a Pi outside the app holds it (one in a terminal), the main window says who in
  * `outside` (`unknown` when that Pi does not say) and takes no prompt; a connected window's Pi only ever joins, that one too. `completed` is pi-optchat's word that a
  * connected window's conversation is handed off; its next prompt begins a new conversation in it, and `since` is then when the
- * last one was handed off: what its Pi said up to then belongs to conversations the main chat has.
+ * last one was handed off, as pi-optchat says it: what its Pi said before then belongs to conversations the main chat has.
  * `stopped`: no process (not started yet, closed, or it exited: `error` says why if it failed). `idle` and `running`: whether the
  * agent is in a run. `closed`: a connected window that is gone, pushed once as it leaves the list. `seq` is the number of the last
  * record the window pushed. `cwd` is where its Pi runs, set when the window is first opened. */

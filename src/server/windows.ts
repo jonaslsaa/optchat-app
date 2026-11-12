@@ -33,14 +33,12 @@ interface Opened {
   stopping?: boolean;
   /** Its conversation is being handed off: Complete has not answered yet. */
   completing?: boolean;
-  /** When the window's Pi last said its conversation was handed off. */
-  ended?: number;
 }
 /** What pi-optchat says a Pi in RPC mode is to its profile: JSON in a `setStatus` with this key (its docs/connected-windows.md),
  * sent as the session starts, so before Pi's first answer; a Pi that has not sent it by then has no profile open. This is the
- * one place that reads it, and it reads only these two fields. */
+ * one place that reads it, and it reads only these fields. */
 const ROLE_STATUS = 'optchat.role';
-const Role = Type.Object({ profile: Type.String(), completed: Type.Optional(Type.Boolean()) });
+const Role = Type.Object({ profile: Type.String(), completed: Type.Optional(Type.Boolean()), after: Type.Optional(Type.Number()) });
 /** pi-optchat's role as it stands, or nothing: from another program, or a pi-optchat too old to say. */
 function role(status: unknown) {
   try {
@@ -77,8 +75,6 @@ export class Windows {
     const opened = this.get(window), pi = await this.started(opened);
     // It would steer the agent while it writes its handoff, and be part of neither conversation.
     if (opened.completing) throw new Error('This conversation is being handed to the main chat. Send your message once it is.');
-    // The next conversation is told from the one handed off by the clock: its first message is later, by a millisecond at least.
-    if (opened.ended === Date.now()) await new Promise(resolve => setTimeout(resolve, 1));
     // Always with a queueing behaviour, as T3 Code sends it: Pi then starts a run or queues the message, whichever is true by
     // the time it arrives, and a run that began meanwhile (a subagent's report) cannot make it fail.
     const send = () => pi.request({ type: 'prompt', message: text, ...images?.length && { images }, streamingBehavior: whenBusy });
@@ -258,15 +254,15 @@ export class Windows {
     }
   }
   /** `status` is pi-optchat's role as JSON, or nothing once its Pi has no profile open. All the app needs of it is whether a
-   * connected window's conversation is handed off: which Pi owns the profile and which is a window on it is the app's own doing.
-   * A conversation that is handed off stays the window's until its Pi says it is in another, which it does as your next message
-   * arrives and before the run: that one began after the last ended, and every message of it is later than that. Pi says a
-   * conversation is handed off before it answers Complete, and no message is passed on until it has, so none can be earlier. */
+   * connected window's conversation is handed off, and where the one it is in began (`after`, which pi-optchat says once a
+   * conversation goes on in a session that has one handed off: as your next message arrives, and before the run). Which Pi
+   * owns the profile and which is a window on it is the app's own doing. The cut outlives the Pi that said it, since the page
+   * still shows that Pi's messages; a Pi started later says none, and all it says is later than the cut there was. */
   private role(opened: Opened, status: unknown) {
-    const { state } = opened, completed = role(status)?.completed === true;
-    if ((state.completed ?? false) === completed) return;
-    if (completed) { state.completed = true; opened.ended = Date.now(); }
-    else { delete state.completed; if (opened.ended !== undefined) state.since = opened.ended; }
+    const { state } = opened, { completed = false, after = state.since } = role(status) ?? {};
+    if ((state.completed ?? false) === completed && state.since === after) return;
+    if (completed) state.completed = true; else delete state.completed;
+    if (after !== undefined) state.since = after;
     this.changed(opened);
   }
 }

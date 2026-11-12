@@ -48,7 +48,9 @@ async function pictures(browser: Browser, control: Client) {
     await page.getByRole('textbox', { name: 'Message' }).waitFor();
     return page;
   }
-  const shot = async (page: Page, name: string) => { await page.mouse.move(0, 0); await page.waitForTimeout(150); await page.screenshot({ path: join(out, `${name}.png`) }); console.log(join(out, `${name}.png`)); };
+  // A code block gets its colours once Shiki's chunks are fetched: the picture waits for the page to have nothing left to fetch,
+  // and then for what moves (a row that opens, 200 ms) to have come to rest.
+  const shot = async (page: Page, name: string) => { await page.mouse.move(0, 0); await page.waitForLoadState('networkidle'); await page.waitForTimeout(300); await page.screenshot({ path: join(out, `${name}.png`) }); console.log(join(out, `${name}.png`)); };
   const say = async (page: Page, text: string, key = 'Enter') => { await page.getByRole('textbox', { name: 'Message' }).fill(text); await page.keyboard.press(key); };
 
   const empty = await open(['empty']);

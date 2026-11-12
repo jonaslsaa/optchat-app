@@ -2,25 +2,13 @@ import { CheckIcon, PanelLeftIcon, XIcon } from 'lucide-react';
 import { Fragment, useEffect, useMemo, useState } from 'react';
 import { Composer } from './Composer.tsx';
 import { matches } from './keys.ts';
+import { ProfileName, Tabs } from './Profiles.tsx';
 import { Sidebar, title } from './Sidebar.tsx';
 import { app, mainOf, useApp, type State } from './store.ts';
 import { Timeline } from './Timeline.tsx';
 import { chat, idle, logged, said } from './transcript.ts';
-import { Button, cn } from './ui.tsx';
+import { Button } from './ui.tsx';
 
-/** The open profiles, as tabs. They are shown only once there are two: a profile is something you pick once. */
-function Tabs({ state }: { state: State }) {
-  return (
-    <div role="tablist" aria-label="Profiles" className="flex h-9 shrink-0 items-center gap-1 border-b bg-sidebar px-2">
-      {state.tabs.map(tab => (
-        <div key={tab} className={cn('group/tab flex h-6 max-w-44 shrink-0 items-center rounded-md text-xs', tab === state.profile ? 'bg-accent text-foreground' : 'text-muted-foreground hover:bg-accent/60 hover:text-foreground')}>
-          <button type="button" role="tab" aria-selected={tab === state.profile} onClick={() => void app.openProfile(tab)} className="min-w-0 truncate rounded-md py-1 pr-1 pl-2 font-medium focus-visible:ring-2 focus-visible:ring-ring">{tab}</button>
-          <button type="button" aria-label={`Close ${tab}`} onClick={() => app.closeTab(tab)} className="mr-1 rounded-sm p-0.5 opacity-0 hover:bg-foreground/10 focus-visible:opacity-100 group-hover/tab:opacity-100"><XIcon className="size-3" /></button>
-        </div>
-      ))}
-    </div>
-  );
-}
 /** One profile: its windows on the left, and the selected window's chat. */
 function Profile({ state, profile }: { state: State; profile: string }) {
   const [sidebar, setSidebar] = useState(() => innerWidth >= 768);
@@ -54,6 +42,7 @@ function Profile({ state, profile }: { state: State; profile: string }) {
       <main className="flex min-w-0 flex-1 flex-col bg-background">
         <header className="flex h-(--topbar-height) shrink-0 items-center gap-2 px-3 sm:px-5">
           <Button variant="ghost-muted" size="icon-sm" aria-label="Toggle the sidebar" aria-pressed={sidebar} onClick={() => setSidebar(!sidebar)}><PanelLeftIcon /></Button>
+          {state.tabs.length === 1 && <ProfileName state={state} profile={profile} />}
           <h1 className="min-w-0 truncate font-medium text-sm">{title(window, state)}</h1>
           {window.role === 'connected' && <span className="shrink-0 rounded-full border px-2 py-0.5 text-2xs text-muted-foreground">{window.completed ? 'Completed' : 'Connected window'}</span>}
           <span className="flex-1" />

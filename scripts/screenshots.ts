@@ -18,7 +18,6 @@ const home = realpathSync(mkdtempSync('/tmp/optchat-app-shots-home-'));
 createProfile(home, 'empty');
 seed(createProfile(home, 'work'), 95, NOW); // Ends with the turn that ran the tests.
 seed(createProfile(home, 'notes'), 2, NOW);
-rmSync(out, { recursive: true, force: true });
 mkdirSync(out, { recursive: true });
 
 await build({ logLevel: 'warn' });
@@ -70,7 +69,7 @@ await work.getByRole('button', { name: 'Complete' }).first().click();
 await work.getByText('Completed', { exact: true }).waitFor();
 await shot(work, '09-completed-window');
 
-await work.getByRole('button', { name: 'work', exact: true }).click();
+await work.getByRole('button', { name: 'Open a profile' }).click();
 await work.getByRole('option', { name: 'notes' }).click();
 await work.getByRole('tab', { name: 'notes' }).waitFor();
 await shot(work, '10-two-profile-tabs');

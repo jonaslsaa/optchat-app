@@ -53,7 +53,12 @@ test('a real Pi turn on a throwaway profile, end to end through the WebSocket', 
   const { messages } = await client.request('history', { profile: 'live' });
   assert.deepEqual(messages.map(m => [m.kind, m.text]), [['user', 'Reply with exactly this word and nothing else: pong'], ['talk', 'pong']]);
   // The UI shows a run from Pi's records until it is logged: both must read the same, down to the dates the two are joined by.
-  const run = pushes.reduce((live, push) => push.push === 'record' ? apply(live, push.record, push.seq) : live, idle());
+  // And the reply is there while Pi still writes it: its text shows before the message has ended.
+  const pushed = pushes.flatMap(push => push.push === 'record' ? [push] : []);
+  const ending = pushed.findIndex(push => said(push.record, 'assistant'));
+  const writing = pushed.slice(0, ending).reduce((live, push) => apply(live, push.record, push.seq), idle());
+  assert.partialDeepStrictEqual(chat([], writing).at(-1), { kind: 'talk', text: 'pong', streaming: true });
+  const run = pushed.reduce((live, push) => apply(live, push.record, push.seq), idle());
   assert.deepEqual(chat([], run).map(({ kind, text, date }) => ({ kind, text, date })), messages.map(({ kind, text, date }) => ({ kind, text, date })));
   assert.equal(chat(logged(messages), run).length, messages.length);
   assert.deepEqual((await client.request('view', { profile: 'live' })).lines.map(l => [l.id, l.n]), [[0, 1], [1, 1]]);

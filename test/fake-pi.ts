@@ -47,25 +47,24 @@ const user = (text: string) => { const message: Said = { role: 'user', content: 
 let running = false, queued: string[] = [], release: ((held: { aborted: boolean; answer?: string }) => void) | undefined;
 const held = () => new Promise<{ aborted: boolean; answer?: string }>(resolve => { release = held => { release = undefined; resolve(held); }; });
 
-/** Streams a reply block by block, as Pi does: a start, deltas, and the block's end, each with the whole reply so far (`partial`).
- * `pause` holds it before block `at` is finished. */
+/** Streams a reply block by block, in the records real Pi writes in RPC mode (test/pi-turn.jsonl is a capture): a start, deltas
+ * and the whole block at its end, each naming the block by `contentIndex` and none carrying the reply so far. `pause` holds it
+ * before block `at` is finished. */
 async function reply(content: Content[], stopReason: string, pause?: { at: number }) {
   const message: Said = { role: 'assistant', content: [], timestamp: now(), stopReason: 'pending' };
   write({ type: 'message_start', message });
+  const update = (assistantMessageEvent: object) => write({ type: 'message_update', assistantMessageEvent });
   for (const [contentIndex, block] of content.entries()) {
-    const kind = block.type === 'toolCall' ? 'toolcall' : block.type, done = content.slice(0, contentIndex);
-    /** The block as far as it is written: `part` of its text, or a tool call still without its arguments. */
-    const cut = (part: number): Content => block.type === 'text' ? { ...block, text: block.text.slice(0, Math.ceil(block.text.length * part)) }
-      : block.type === 'thinking' ? { ...block, thinking: block.thinking.slice(0, Math.ceil(block.thinking.length * part)) } : { ...block, arguments: {} };
-    const update = (type: string, part: number) => write({ type: 'message_update', assistantMessageEvent: { type: `${kind}_${type}`, contentIndex, partial: { ...message, content: [...done, part < 1 ? cut(part) : block] } } });
-    update('start', 0);
-    update('delta', 0.5);
+    const text = block.type === 'text' ? block.text : block.type === 'thinking' ? block.thinking : JSON.stringify(block.arguments);
+    const kind = block.type === 'toolCall' ? 'toolcall' : block.type, half = Math.ceil(text.length / 2);
+    update({ type: `${kind}_start`, contentIndex, ...block.type === 'toolCall' && { id: block.id, toolName: block.name } });
+    update({ type: `${kind}_delta`, contentIndex, delta: text.slice(0, half) });
     if (pause?.at === contentIndex && (await held()).aborted) {
-      ended({ ...message, content: done, stopReason: 'aborted' });
+      ended({ ...message, content: content.slice(0, contentIndex), stopReason: 'aborted' });
       return true;
     }
-    update('delta', 1);
-    update('end', 1);
+    update({ type: `${kind}_delta`, contentIndex, delta: text.slice(half) });
+    update(block.type === 'toolCall' ? { type: 'toolcall_end', contentIndex, toolCall: block } : { type: `${kind}_end`, contentIndex, content: text });
   }
   ended({ ...message, content, stopReason });
   return false;

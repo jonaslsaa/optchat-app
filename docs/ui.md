@@ -12,7 +12,7 @@ npm run screenshots       # a PNG of every main state, in /tmp/optchat-app-shots
 
 ## What you see
 
-- **Profile tabs** on top, only once two profiles are open. The profile's name in the sidebar opens the list of profiles; picking one opens its tab.
+- **Profile tabs** on top, only once two profiles are open, with a + that opens another. With one profile there is no tab bar: its name sits in the title bar and opens the list of profiles.
 - **Windows** on the left: the main chat, then connected windows, each with Complete and close. "New window" opens a connected window, which sends the main agent nothing until its first message.
 - **The chat** in the centre. The main chat is the profile's log, read from disk a page at a time as you scroll back, so it shows with no Pi running. A connected window shows its own conversation, which only its Pi has until Complete hands it over.
 - **The composer.** You can always type. While the agent runs, Enter steers it, ⌘Enter queues the message for after the run, and Esc stops the run and puts what was still queued back in the composer.

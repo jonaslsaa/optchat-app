@@ -14,12 +14,19 @@ function Dialog({ window, dialog }: { window: string; dialog: PiRecord }) {
   const id = String(dialog.id), options = Array.isArray(dialog.options) ? dialog.options.filter(option => typeof option === 'string') : [];
   const [value, setValue] = useState(typeof dialog.prefill === 'string' ? dialog.prefill : '');
   const answer = (response: { value?: string; confirmed?: boolean; cancelled?: boolean }) => void app.answer(window, { id, ...response });
+  // Pi stops waiting after the dialog's `timeout` and says nothing when it does.
+  const timeout = typeof dialog.timeout === 'number' && dialog.timeout > 0 ? dialog.timeout : undefined;
+  useEffect(() => {
+    if (timeout === undefined) return;
+    const timer = setTimeout(() => app.expire(window, id), timeout);
+    return () => clearTimeout(timer);
+  }, [window, id, timeout]);
   return (
     <div role="dialog" aria-label={String(dialog.title ?? 'Question')} className="rounded-2xl border border-warning/32 bg-warning-surface px-3.5 py-3 text-sm">
       <p className="font-medium">{String(dialog.title ?? 'Pi asks')}</p>
       {typeof dialog.message === 'string' && <p className="mt-0.5 text-muted-foreground">{dialog.message}</p>}
       {(dialog.method === 'input' || dialog.method === 'editor') && (
-        <input autoFocus value={value} placeholder={typeof dialog.placeholder === 'string' ? dialog.placeholder : ''} onChange={event => setValue(event.target.value)}
+        <input autoFocus aria-label={String(dialog.title ?? 'Answer')} value={value} placeholder={typeof dialog.placeholder === 'string' ? dialog.placeholder : ''} onChange={event => setValue(event.target.value)}
           onKeyDown={event => { if (event.key === 'Enter') answer({ value }); }} className="mt-2 h-8 w-full rounded-md border border-input bg-background px-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring" />
       )}
       <div className="mt-2.5 flex flex-wrap justify-end gap-2">
@@ -45,8 +52,8 @@ export function Composer({ window, live }: { window: WindowState; live: Live }) 
     const message = text.trim();
     if (!message || sending) return;
     setSending(true); change('');
-    // A message the server refused goes back where it was typed.
-    if (!await app.send(window.id, message, later)) change(message);
+    // A message the server refused goes back where it was typed, before what was typed since.
+    if (!await app.send(window.id, message, later)) change([message, drafts.get(window.id)].filter(Boolean).join('\n\n'));
     setSending(false);
   };
   const stop = async () => {
@@ -85,7 +92,7 @@ export function Composer({ window, live }: { window: WindowState; live: Live }) 
           <div className="relative px-4 pt-3.5 pb-2">
             <textarea
               ref={area} value={text} rows={1} aria-label="Message"
-              placeholder={running ? 'Steer the agent, or queue a message for later' : window.role === 'main' ? 'Message the main chat' : 'Message this window'}
+              placeholder={running ? 'Steer the agent, or queue a message for later' : window.role === 'main' ? 'Message the main chat' : window.completed ? 'A message starts a new connected window' : 'Message this window'}
               onChange={event => change(event.target.value)}
               onKeyDown={event => {
                 if (event.key === 'Enter' && !event.shiftKey && !event.altKey && !event.nativeEvent.isComposing) { event.preventDefault(); void send(event.metaKey || event.ctrlKey); }
@@ -97,6 +104,7 @@ export function Composer({ window, live }: { window: WindowState; live: Live }) 
             <p className="min-w-0 flex-1 truncate ps-2 text-muted-foreground text-xs">
               {window.status === 'starting' ? <span className="inline-flex items-center gap-1.5"><Spinner />Starting Pi</span>
                 : running ? <><Kbd>{label('enter')}</Kbd> steer · <Kbd>{label('mod+enter')}</Kbd> queue · <Kbd>Esc</Kbd> stop</>
+                : window.completed ? 'Completed: the main chat has this conversation'
                 : live.status.optchat?.replace(/^OptChat: /, '') ?? (window.status === 'stopped' ? 'Pi starts with your first message' : '')}
             </p>
             {running && !text.trim() ? (

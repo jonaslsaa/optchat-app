@@ -43,7 +43,7 @@ export function Spinner({ className }: { className?: string }) {
   return <LoaderCircleIcon aria-label="Working" className={cn('size-3.5 motion-safe:animate-spin', className)} />;
 }
 /** The dot that says what a window is doing. */
-export function StatusDot({ tone, pulse = false }: { tone: 'working' | 'failed' | 'done' | 'waiting'; pulse?: boolean }) {
-  const colour = { working: 'bg-sky-500 dark:bg-sky-300/80', failed: 'bg-red-500 dark:bg-red-300/90', done: 'bg-emerald-500 dark:bg-emerald-300/90', waiting: 'bg-amber-500 dark:bg-amber-300/90' }[tone];
+export function StatusDot({ tone, pulse = false }: { tone: 'working' | 'failed'; pulse?: boolean }) {
+  const colour = { working: 'bg-sky-500 dark:bg-sky-300/80', failed: 'bg-red-500 dark:bg-red-300/90' }[tone];
   return <span className="inline-flex size-3.5 shrink-0 items-center justify-center"><span className={cn('size-[9px] rounded-full', colour, pulse && 'motion-safe:animate-status-pulse')} /></span>;
 }

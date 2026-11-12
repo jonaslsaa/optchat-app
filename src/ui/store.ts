@@ -1,7 +1,7 @@
 import { useSyncExternalStore } from 'react';
 import { connect, type Client } from '../client.ts';
 import type { Message, Method, Params, Push, Result, WindowState } from '../protocol.ts';
-import { apply, idle, replay, type Live, type PiMessage } from './transcript.ts';
+import { apply, idle, replay, stopped, without, type Live, type PiMessage } from './transcript.ts';
 
 /** Everything the page knows, kept outside React: the connection to the server, and what it said. Components read it with
  * `useApp` and change it through `app`'s methods. */
@@ -52,13 +52,14 @@ class App {
     }
   }
 
-  /** Connects, and again a second after the connection is lost: windows live in the server, so nothing is lost with it. */
+  /** Connects, and again a second after the connection is lost: windows live in the server, so nothing is lost with it. A
+   * socket that never opened closes too, so its closing is the one place that tries again. */
   async start(url: string) {
     try {
       this.client = await connect(url, push => this.pushed(push), () => { this.client = undefined; this.set({ connection: 'lost' }); setTimeout(() => void this.start(url), 1000); });
       await this.sync();
-    } catch {
-      if (!this.client) setTimeout(() => void this.start(url), 1000);
+    } catch (error) {
+      if (this.client) this.set({ error: error instanceof Error ? error.message : String(error) });
     }
   }
   private async sync() {
@@ -98,7 +99,7 @@ class App {
     this.loading.add(id);
     try {
       const kept = await this.ask('records', { window: id });
-      if (kept) this.set({ live: { ...this.state.live, [id]: replay(kept, kept.seq) } });
+      if (kept) this.live(id, () => this.running(id) ? replay(kept, kept.seq) : stopped(replay(kept, kept.seq)));
     } finally { this.loading.delete(id); }
     await this.session(id);
   }
@@ -109,17 +110,28 @@ class App {
     const messages = isObject(answer?.data) && Array.isArray(answer.data.messages) ? answer.data.messages.filter(isMessage) : undefined;
     if (messages) this.set({ sessions: { ...this.state.sessions, [id]: messages } });
   }
+  /** Changes one window's run. */
+  private live(id: string, change: (live: Live) => Live) {
+    this.set({ live: { ...this.state.live, [id]: change(this.state.live[id] ?? idle()) } });
+  }
+  /** Whether the window has a Pi. */
+  private running(id: string) {
+    const status = this.state.windows.find(w => w.id === id)?.status;
+    return status !== undefined && status !== 'stopped' && status !== 'closed';
+  }
   private pushed(push: Push) {
     if (push.push === 'window') {
       const { window } = push, others = this.state.windows.filter(w => w.id !== window.id);
       const selected = window.status === 'closed' && this.state.selected[window.profile] === window.id ? { ...this.state.selected, [window.profile]: mainOf(window.profile) } : this.state.selected;
       this.set({ windows: window.status === 'closed' ? others : [...others, window].sort((a, b) => a.id.localeCompare(b.id, undefined, { numeric: true })), selected });
+      // A Pi that died in a run never says the run is over; what it had logged by then is in the log.
+      if (window.status === 'stopped' && this.state.live[window.id]?.running) { this.live(window.id, stopped); void this.read(window.profile); }
       return;
     }
     const { window, seq, record } = push, live = this.state.live[window] ?? idle();
     if (this.loading.has(window) || seq <= live.seq) return;
     if (seq !== live.seq + 1) { void this.catchUp(window); return; }
-    this.set({ live: { ...this.state.live, [window]: apply(live, record, seq) } });
+    this.live(window, live => apply(live, record, seq));
     // What the run said is in the log now, or for a connected window in its Pi's conversation.
     if (record.type === 'agent_settled') {
       const state = this.state.windows.find(w => w.id === window);
@@ -157,9 +169,10 @@ class App {
   async close(window: string) { await this.ask('close', { window }); }
   async answer(window: string, response: Omit<Params<'answer'>, 'window'>) {
     await this.ask('answer', { window, ...response });
-    const live = this.state.live[window];
-    if (live) this.set({ live: { ...this.state.live, [window]: { ...live, dialogs: live.dialogs.filter(dialog => dialog.id !== response.id) } } });
+    this.expire(window, response.id);
   }
+  /** Takes a dialog off the page: it was answered, or its time ran out and Pi went on without an answer. */
+  expire(window: string, id: string) { this.live(window, live => without(live, id)); }
   dismiss() { this.set({ error: undefined }); }
 }
 export const app = new App();

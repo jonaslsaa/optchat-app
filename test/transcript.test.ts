@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { test } from 'node:test';
 import type { Message, PiRecord } from '../src/protocol.ts';
-import { apply, chat, idle, logged, parts, replay, type Item, type PiMessage } from '../src/ui/transcript.ts';
+import { apply, chat, idle, logged, parts, replay, stopped, type Item, type PiMessage } from '../src/ui/transcript.ts';
 
 const T = Date.UTC(2026, 0, 1), at = (seconds: number) => new Date(T + seconds * 1000).toISOString();
 const user = (seconds: number, text: string): PiMessage => ({ role: 'user', timestamp: T + seconds * 1000, content: [{ type: 'text', text }] });
@@ -15,8 +17,10 @@ const entry = (i: number, kind: Message['kind'], seconds: number, text: string):
 
 test('a reply is the same items with the same keys while it streams, when it has ended, and once it is in the log', () => {
   const asked = [{ type: 'agent_start' }, ended(user(1, 'list the files'))];
-  const partial = { ...reply(2, text('Looking'), { type: 'toolCall', id: 'c1', name: 'bash', arguments: {} }), stopReason: 'pending' };
-  const streaming = run(...asked, { type: 'message_start', message: reply(2) }, { type: 'message_update', assistantMessageEvent: { type: 'toolcall_delta', contentIndex: 1, partial } });
+  const update = (assistantMessageEvent: object): PiRecord => ({ type: 'message_update', assistantMessageEvent });
+  const streaming = run(...asked, { type: 'message_start', message: reply(2) },
+    update({ type: 'text_start', contentIndex: 0 }), update({ type: 'text_delta', contentIndex: 0, delta: 'Loo' }), update({ type: 'text_delta', contentIndex: 0, delta: 'king' }),
+    update({ type: 'toolcall_start', contentIndex: 1, id: 'c1', toolName: 'bash' }));
   assert.deepEqual(chat([], streaming).map(item => [item.key, item.kind, item.text, item.streaming]), [
     [`${at(1)} 0`, 'user', 'list the files', undefined], [`${at(2)} 0`, 'talk', 'Looking', true], [`${at(2)} 1`, 'tool', 'bash {}', true],
   ]);
@@ -34,13 +38,45 @@ test('a reply is the same items with the same keys while it streams, when it has
   for (const length of [0, 1, 3, 4, 5]) assert.deepEqual(shown(chat(logged(log.slice(0, length)), done)), whole, `${length} entries logged`);
 });
 
+test('a turn as real Pi writes it in RPC mode shows while it streams: text as it grows, a tool call by name before its arguments', () => {
+  // test/pi-turn.jsonl is Pi 1.5.2's own output for one turn with a tool call, without its token counts and system prompt.
+  const records: PiRecord[] = readFileSync(join(import.meta.dirname, 'pi-turn.jsonl'), 'utf8').trim().split('\n').map(line => JSON.parse(line));
+  const seen: string[] = [];
+  let live = idle();
+  for (const [index, record] of records.entries()) {
+    live = apply(live, record, index + 1);
+    const last = chat([], live).at(-1), line = last && `${last.kind}${last.streaming ? ' (streaming)' : ''}: ${last.text}`;
+    if (line && line !== seen.at(-1)) seen.push(line);
+  }
+  assert.deepEqual(seen, [
+    'user: Use the bash tool to run: echo hi. Then reply with: done counting to five, one two three four five.',
+    'talk (streaming): I\'ll run the command',
+    'talk (streaming): I\'ll run the command first.',
+    'tool (streaming): bash {}',
+    'tool (streaming): bash {"…":"{\\"command\\": \\"echo"}',
+    'tool (streaming): bash {"…":"{\\"command\\": \\"echo hi"}',
+    'tool (streaming): bash {"…":"{\\"command\\": \\"echo hi\\", \\"timeout\\": null"}',
+    'tool (streaming): bash {"command":"echo hi","timeout":null}',
+    'tool: bash {"command":"echo hi","timeout":null}',
+    'echo: bash: hi\n',
+    'talk (streaming): done counting to five, one two',
+    'talk (streaming): done counting to five, one two three four five.',
+    'talk: done counting to five, one two three four five.',
+  ]);
+  assert.equal(live.running, false);
+});
+
 test('a client that connects late gets the same state from `records` as one that saw every record', () => {
   const status = { type: 'extension_ui_request', method: 'setStatus', statusKey: 'optchat', statusText: 'OptChat: work · 3 messages' };
   const dialog = { type: 'extension_ui_request', id: 'd1', method: 'confirm', title: 'Go on?' };
-  const records = [{ type: 'agent_start' }, ended(user(1, 'hello')), { type: 'queue_update', steering: ['and this'], followUp: [] }].map((record, index) => ({ seq: index + 5, record }));
+  // The run's records still have a dialog that was answered since; only `ui` says what is asked now.
+  const answered = { type: 'extension_ui_request', id: 'd0', method: 'confirm', title: 'Sure?' };
+  const records = [{ type: 'agent_start' }, answered, ended(user(1, 'hello')), { type: 'queue_update', steering: ['and this'], followUp: [] }].map((record, index) => ({ seq: index + 4, record }));
   const live = replay({ ui: [status, dialog], records }, 7);
   assert.partialDeepStrictEqual(live, { seq: 7, running: true, status: { optchat: 'OptChat: work · 3 messages' }, dialogs: [dialog], queued: { steering: ['and this'], followUp: [] } });
   assert.deepEqual(live.messages, [user(1, 'hello')]);
+  // Its Pi died in the run: what it said stays, and nothing runs or is asked any more.
+  assert.partialDeepStrictEqual(stopped(live), { seq: 7, running: false, dialogs: [], messages: [user(1, 'hello')] });
 });
 
 test('a reply is drawn as its work and then its answer: tool calls with their results in order, and what stopped it', () => {

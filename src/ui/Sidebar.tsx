@@ -17,7 +17,7 @@ export function Sidebar({ state, profile, selected }: { state: State; profile: s
       </div>
       <ul className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto px-2 pb-2">
         {windows.map((window, index) => {
-          const active = window.id === selected, name = title(window, state), connected = window.role === 'connected';
+          const active = window.id === selected, name = title(window, state), connected = window.role === 'connected', completes = canComplete(window);
           return (
             <li key={window.id} className="group/row relative">
               <button type="button" aria-current={active || undefined} onClick={() => app.select(window.id)}
@@ -26,15 +26,17 @@ export function Sidebar({ state, profile, selected }: { state: State; profile: s
                 {!connected ? <MessagesSquareIcon className="size-4 shrink-0 text-sidebar-muted-foreground" />
                   : window.completed ? <span title="Completed: handed to the main chat" className="flex"><CheckIcon aria-label="Completed" className="size-4 shrink-0 text-sidebar-muted-foreground" /></span>
                   : <MessageSquareIcon className="size-4 shrink-0 text-sidebar-muted-foreground" />}
-                <span className={cn('min-w-0 flex-1 truncate text-sm', active ? 'font-medium text-foreground' : 'text-sidebar-foreground/80', (window.completed || name === UNTITLED) && 'text-sidebar-muted-foreground')}>{name}</span>
-                {/* Complete and close take this place on a connected window's row while the pointer or the focus is on it. */}
-                <span className={cn('flex h-6 shrink-0 items-center justify-end gap-1', connected && 'group-focus-within/row:invisible group-hover/row:invisible')}>
+                {/* Complete and close stand at the end of a connected window's row while the pointer or the focus is on it, and always
+                    where there is no pointer to hover with. The title gives them room, so it is cut short before them. */}
+                <span className={cn('min-w-0 flex-1 truncate text-sm', active ? 'font-medium text-foreground' : 'text-sidebar-foreground/80', (window.completed || name === UNTITLED) && 'text-sidebar-muted-foreground',
+                  connected && (completes ? 'group-focus-within/row:pe-10 group-hover/row:pe-10 pointer-coarse:pe-10' : 'group-focus-within/row:pe-4 group-hover/row:pe-4 pointer-coarse:pe-4'))}>{name}</span>
+                <span className={cn('flex h-6 shrink-0 items-center justify-end gap-1', connected && 'group-focus-within/row:invisible group-hover/row:invisible pointer-coarse:invisible')}>
                   <WindowDot windows={[window]} />{hints && index < 9 && <Kbd className="bg-transparent text-2xs text-sidebar-muted-foreground/70 max-md:hidden">{label(`alt+${index + 1}`)}</Kbd>}
                 </span>
               </button>
               {connected && (
-                <span className="absolute inset-y-0 right-1.5 hidden items-center gap-0.5 group-focus-within/row:flex group-hover/row:flex">
-                  {canComplete(window) && <Button variant="ghost-muted" size="icon-xs" aria-label="Complete" title="Complete: hand this conversation to the main chat" onClick={() => void app.complete(window.id)}><CheckIcon /></Button>}
+                <span className="absolute inset-y-0 right-1.5 hidden items-center gap-0.5 group-focus-within/row:flex group-hover/row:flex pointer-coarse:flex">
+                  {completes && <Button variant="ghost-muted" size="icon-xs" aria-label="Complete" title="Complete: hand this conversation to the main chat" onClick={() => void app.complete(window.id)}><CheckIcon /></Button>}
                   <Button variant="ghost-muted" size="icon-xs" aria-label="Close window" title="Close window" onClick={() => void app.closeWindow(window.id)}><XIcon /></Button>
                 </span>
               )}

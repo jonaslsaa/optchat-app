@@ -280,31 +280,54 @@ function steps(items: readonly Item[]): Step[] {
   }
   return result;
 }
-/** How long a reply took, as 42s or 3m 05s. */
+/** How long a reply took, as 42s, 3m 05s or 1h 15m. */
 export function took(from: string, to: string) {
-  const seconds = Math.max(0, Math.round((Date.parse(to) - Date.parse(from)) / 1000));
-  return seconds < 60 ? `${seconds}s` : `${Math.floor(seconds / 60)}m ${String(seconds % 60).padStart(2, '0')}s`;
+  const seconds = Math.max(0, Math.round((Date.parse(to) - Date.parse(from)) / 1000)), minutes = Math.floor(seconds / 60), two = (count: number) => String(count).padStart(2, '0');
+  return seconds < 60 ? `${seconds}s` : minutes < 60 ? `${minutes}m ${two(seconds % 60)}s` : `${Math.floor(minutes / 60)}h ${two(minutes % 60)}m`;
 }
 
 const VERBS: Record<string, [doing: string, done: string]> = {
   bash: ['Running', 'Ran'], read: ['Reading', 'Read'], edit: ['Editing', 'Edited'], write: ['Writing', 'Wrote'],
   grep: ['Searching for', 'Searched for'], find: ['Finding', 'Found'], ls: ['Listing', 'Listed'],
+  zoom: ['Looking back at', 'Looked back at'], search: ['Searching memory for', 'Searched memory for'], date: ['Checking the date of', 'Checked the date of'], tell: ['Telling', 'Told'],
 };
-/** A tool call in words: what it does (`Ran`, or `Running` while it does; a tool that is not one of Pi's own goes by its name) and
- * to what, which is its command, pattern or path, the agents it starts, or else its first argument. `whole` says that the two
- * are all there is to the call. */
-export function act({ name, args, output }: Tool, live: boolean): { verb: string; subject: string; whole: boolean } {
+/** The argument a call is named by, the first of these it has, or else its first. */
+const NAMED = ['command', 'pattern', 'query', 'path', 'file_path', 'url', 'title'];
+/** A piece of what an opened call shows of itself. `change`: text an edit took out of the file, or put in. */
+export type Shown = { text: string; change?: 'removed' | 'added' };
+const changed = (change: 'removed' | 'added', text: unknown): Shown[] =>
+  typeof text === 'string' && text ? [{ change, text: text.replace(/\n$/, '').split('\n').map(line => `${change === 'added' ? '+' : '−'} ${line}`).join('\n') }] : [];
+/** A tool call in words: what it does (`Ran`, or `Running` while it does; a tool the app does not know goes by its name) and
+ * to what, which is its command, pattern or path, the agents it starts, or else its first argument. `detail` is what the call
+ * shows of itself when it is opened, which is only what the line does not say: an edit as the lines it took out and put in, the
+ * text written to a file or told to an agent, a command too long for the line, and for anything else the arguments as given. */
+export function act({ name, args, output }: Tool, live: boolean): { verb: string; subject: string; detail: Shown[] } {
   const pending = live && output === undefined;
   if (name === 'spawn' && Array.isArray(args.tasks)) {
-    const titles = args.tasks.flatMap((task: unknown) => isObject(task) && typeof task.title === 'string' ? [task.title] : []), many = args.tasks.length !== 1;
-    return { verb: `${pending ? 'Starting' : 'Started'} ${many ? `${args.tasks.length} agents` : 'an agent'}${titles.length ? ':' : ''}`, subject: titles.join(', '), whole: false };
+    const tasks = args.tasks.filter(isObject), titles = tasks.flatMap(task => typeof task.title === 'string' ? [task.title] : []), many = args.tasks.length !== 1;
+    return {
+      verb: `${pending ? 'Starting' : 'Started'} ${many ? `${args.tasks.length} agents` : 'an agent'}${titles.length ? ':' : ''}`, subject: titles.join(', '),
+      detail: tasks.map(task => ({ text: [task.title, task.task].filter(part => typeof part === 'string').join('\n') })),
+    };
   }
-  const value = args.command ?? args.pattern ?? args.query ?? args.path ?? args.file_path ?? args.url ?? args.title ?? Object.values(args)[0];
-  return {
-    verb: VERBS[name]?.[pending ? 0 : 1] ?? name,
-    subject: typeof value === 'string' ? value : value === undefined ? '' : JSON.stringify(value),
-    whole: Object.keys(args).length <= 1 && typeof (value ?? '') === 'string',
-  };
+  // Pi gives null for an argument the agent left out.
+  const given = Object.fromEntries(Object.entries(args).filter(([, value]) => value != null));
+  const key = NAMED.find(key => key in given) ?? Object.keys(given)[0] ?? '', first = given[key], { path, offset, limit, n, edits, content, message } = given;
+  let subject = typeof first === 'string' ? first : first === undefined ? '' : JSON.stringify(first), detail: Shown[] | undefined;
+  // How long a command may take is nobody's news.
+  const said = [key, ...name === 'bash' ? ['timeout'] : []];
+  if (name === 'read' && (typeof offset === 'number' || typeof limit === 'number')) {
+    const from = typeof offset === 'number' ? offset : 1;
+    subject += typeof limit === 'number' ? `, lines ${from}–${from + limit - 1}` : `, from line ${from}`;
+    said.push('offset', 'limit');
+  } else if ((name === 'grep' || name === 'find') && typeof path === 'string') { subject += ` in ${path}`; said.push('path'); }
+  else if (name === 'zoom' && typeof n === 'number') { subject += `+${n}`; said.push('n'); }
+  else if (name === 'edit' && Array.isArray(edits)) detail = edits.filter(isObject).flatMap((edit, index) => [...index ? [{ text: '…' }] : [], ...changed('removed', edit.oldText), ...changed('added', edit.newText)]);
+  else if (name === 'write' && typeof content === 'string') detail = [{ text: content }];
+  else if (name === 'tell' && typeof message === 'string') detail = [{ text: message }];
+  detail ??= Object.keys(given).some(key => !said.includes(key)) ? [{ text: JSON.stringify(given, null, 2) }]
+    : subject.length > 80 || subject.includes('\n') ? [{ text: subject }] : [];
+  return { verb: VERBS[name]?.[pending ? 0 : 1] ?? name, subject, detail };
 }
 /** What pi-optchat's status line says that is news. It is written for a terminal (`OptChat: work · 350 messages · 2 pending ·
  * 1 agents`, a window's `OptChat: work · connected window · main window not reachable`): the profile, the size of the log and

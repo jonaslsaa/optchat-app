@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import type { Message, PiRecord } from '../src/protocol.ts';
-import { act, apply, chat, failure, idle, logged, merged, news, parts, replay, spoken, stopped, without, type Item, type PiMessage, type Tool } from '../src/ui/transcript.ts';
+import { act, apply, chat, failure, idle, logged, merged, news, parts, replay, spoken, stopped, took, without, type Item, type PiMessage, type Tool } from '../src/ui/transcript.ts';
 
 const T = Date.UTC(2026, 0, 1), at = (seconds: number) => new Date(T + seconds * 1000).toISOString();
 const user = (seconds: number, text: string): PiMessage => ({ role: 'user', timestamp: T + seconds * 1000, content: [{ type: 'text', text }] });
@@ -160,14 +160,39 @@ test('a report is named by the title its agent was started under, once the chat 
 
 test('a tool call is said in words: what it did or is doing, and to what', () => {
   const call = (name: string, args: Record<string, unknown>, output?: string): Tool => ({ key: 0, type: 'tool', name, args, failed: false, ...output !== undefined && { output } });
-  assert.deepEqual(act(call('bash', { command: 'npm test' }, 'ok'), false), { verb: 'Ran', subject: 'npm test', whole: true });
-  assert.deepEqual(act(call('bash', { command: 'npm test' }), true), { verb: 'Running', subject: 'npm test', whole: true });
-  // What a call searches for says more than where; its other arguments are left for when it is opened.
-  assert.deepEqual(act(call('grep', { path: 'src', pattern: 'retry' }, ''), false), { verb: 'Searched for', subject: 'retry', whole: false });
-  assert.deepEqual(act(call('spawn', { tasks: [{ title: 'Why it flakes', task: 'Look.' }] }, 'Started: 1a2b3c4d.'), false), { verb: 'Started an agent:', subject: 'Why it flakes', whole: false });
-  assert.deepEqual(act(call('spawn', { tasks: [{ title: 'One', task: '…' }, { title: 'Two', task: '…' }] }), true), { verb: 'Starting 2 agents:', subject: 'One, Two', whole: false });
-  // A tool that is not one of Pi's own goes by its name.
-  assert.deepEqual(act(call('zoom', { id: 128, n: 4 }, '…'), false), { verb: 'zoom', subject: '128', whole: false });
+  assert.deepEqual(act(call('bash', { command: 'npm test' }, 'ok'), false), { verb: 'Ran', subject: 'npm test', detail: [] });
+  assert.deepEqual(act(call('bash', { command: 'npm test', timeout: null }), true), { verb: 'Running', subject: 'npm test', detail: [] });
+  assert.deepEqual(act(call('read', { path: 'src/client.ts', offset: 40, limit: 60 }, '…'), false), { verb: 'Read', subject: 'src/client.ts, lines 40–99', detail: [] });
+  assert.deepEqual(act(call('grep', { path: 'src', pattern: 'retry' }, ''), false), { verb: 'Searched for', subject: 'retry in src', detail: [] });
+  assert.deepEqual(act(call('spawn', { tasks: [{ title: 'Why it flakes', task: 'Look.' }] }, 'Started: 1a2b3c4d.'), false), { verb: 'Started an agent:', subject: 'Why it flakes', detail: [{ text: 'Why it flakes\nLook.' }] });
+  assert.partialDeepStrictEqual(act(call('spawn', { tasks: [{ title: 'One', task: '…' }, { title: 'Two', task: '…' }] }), true), { verb: 'Starting 2 agents:', subject: 'One, Two' });
+  // OptChat's own tools are said in words too. A tool the app does not know goes by its name.
+  assert.deepEqual(act(call('zoom', { id: 128, n: 4 }, '…'), false), { verb: 'Looked back at', subject: '128+4', detail: [] });
+  assert.deepEqual(act(call('tell', { id: '1a2b3c4d', message: 'Stop there.' }, 'Sent.'), false), { verb: 'Told', subject: '1a2b3c4d', detail: [{ text: 'Stop there.' }] });
+  assert.deepEqual(act(call('fetch', { url: 'https://pi.dev' }, '…'), false), { verb: 'fetch', subject: 'https://pi.dev', detail: [] });
+});
+
+test('an opened tool call shows what its line does not say, and no JSON for a call the app knows', () => {
+  const shown = (name: string, args: Record<string, unknown>) => act({ key: 0, type: 'tool', name, args, failed: false, output: '' }, false).detail;
+  // An edit is the lines it took out and put in, one edit after the other.
+  assert.deepEqual(shown('edit', { path: 'a.ts', edits: [{ oldText: 'let a = 1;\nlet b;', newText: 'const a = 1;' }, { oldText: 'unused();\n', newText: '' }] }), [
+    { change: 'removed', text: '− let a = 1;\n− let b;' }, { change: 'added', text: '+ const a = 1;' }, { text: '…' }, { change: 'removed', text: '− unused();' },
+  ]);
+  assert.deepEqual(shown('write', { path: 'notes.md', content: '# Notes\n\nOne.\n' }), [{ text: '# Notes\n\nOne.\n' }]);
+  // A command is shown only when the line cannot hold it.
+  const long = `npm test -- ${'--test-name-pattern reconnect '.repeat(4)}`;
+  assert.deepEqual(shown('bash', { command: long }), [{ text: long }]);
+  assert.deepEqual(shown('bash', { command: 'cd src\nls' }), [{ text: 'cd src\nls' }]);
+  // What the line leaves out of a call is shown as it was given.
+  assert.deepEqual(shown('grep', { pattern: 'retry', glob: '*.ts', limit: null }), [{ text: '{\n  "pattern": "retry",\n  "glob": "*.ts"\n}' }]);
+});
+
+test('how long a reply took is said in hours past an hour', () => {
+  const after = (seconds: number) => took('2026-01-01T00:00:00Z', new Date(Date.UTC(2026, 0, 1) + seconds * 1000).toISOString());
+  assert.deepEqual([42, 185, 4503].map(after), ['42s', '3m 05s', '1h 15m']);
+});
+
+test('a tool call that failed is marked so', () => {
   // That a command failed is read off what Pi's bash adds under its output.
   const ran = (output: string) => parts(logged([entry(0, 'tool', 0, 'bash {"command":"npm test"}'), entry(1, 'echo', 1, `bash: ${output}`)]))[0];
   assert.partialDeepStrictEqual(ran('✖ one test\n\nCommand exited with code 1'), { steps: [{ failed: true }] });

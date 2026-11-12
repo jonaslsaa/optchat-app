@@ -44,7 +44,7 @@ function Failure({ error }: { error: string }) {
       <CircleAlertIcon className="mt-0.5 size-4 shrink-0 text-error-foreground" />
       <div className="min-w-0">
         <p className="font-medium text-error-foreground">{title}</p>
-        <p className="mt-0.5 whitespace-pre-wrap text-error-foreground/90">{detail}</p>
+        <p className="mt-0.5 whitespace-pre-wrap text-foreground/80">{detail}</p>
         <p className="mt-1 text-muted-foreground">{next}</p>
       </div>
     </div>
@@ -53,9 +53,8 @@ function Failure({ error }: { error: string }) {
 
 /** Where you type. You can always type: while the agent runs, Enter steers it and ⌘Enter queues your message for when it has
  * stopped, and Esc stops it. The line under it says only what is news: how to steer a run, that Pi is starting, agents at
- * work. `fresh`: nothing has been said in the window yet. The look is T3 Code's composer (MIT, see THIRD_PARTY_NOTICES.md),
- * over a plain textarea. */
-export function Composer({ window, live, fresh }: { window: WindowState; live: Live; fresh: boolean }) {
+ * work. The look is T3 Code's composer (MIT, see THIRD_PARTY_NOTICES.md), over a plain textarea. */
+export function Composer({ window, live }: { window: WindowState; live: Live }) {
   const [text, setText] = useState(drafts.get(window.id) ?? ''), [sending, setSending] = useState(false);
   const area = useRef<HTMLTextAreaElement>(null);
   const running = window.status === 'running', queued = [...live.queued.steering, ...live.queued.followUp];
@@ -109,7 +108,7 @@ export function Composer({ window, live, fresh }: { window: WindowState; live: L
             <p className="min-w-0 flex-1 truncate ps-2 text-muted-foreground text-xs">
               {window.status === 'starting' ? <span className="inline-flex items-center gap-1.5"><Spinner />Starting Pi…</span>
                 : running ? <><Kbd>{label('enter')}</Kbd> steer · <Kbd>{label('mod+enter')}</Kbd> queue · <Kbd>Esc</Kbd> stop</>
-                : window.status === 'stopped' ? fresh && !window.error && 'Pi starts with your first message'
+                : window.status === 'stopped' ? null
                 : news(live.status.optchat).join(' · ')}
             </p>
             {running && !text.trim() ? (

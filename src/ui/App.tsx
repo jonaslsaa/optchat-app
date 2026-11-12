@@ -57,7 +57,7 @@ function Profile({ state, profile }: { state: State; profile: string }) {
               </p>
             </div>
           ) : <Timeline items={items} live={live} running={window.status === 'running'} profile={profile} loading={log?.loading} older={more ? () => void app.older(profile) : undefined} />}
-          <Composer window={window} live={live} fresh={fresh} />
+          <Composer window={window} live={live} />
           {fresh && <div className="flex-[1.6]" />}
         </Fragment>
       </main>

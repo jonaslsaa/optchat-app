@@ -34,6 +34,8 @@ The client sends `{ id, method, params }` and gets `{ id, result }` or `{ id, er
 | `history { profile, before?, limit? }` | A page of the log, read from disk: the messages before `before`, newest page by default. |
 | `view { profile }` | The lines the agent sees this turn, as `{ id, n, text? }`: the `n` messages from `id` on. |
 | `zoom { profile, id, n }` | Opens a line into the two lines under it. |
+| `agents { profile, limit? }` | The profile's subagents, from pi-optchat's records of them on disk: those at work, and the newest `limit` (30) of those that ended, with `more` for how many that leaves out. Each has its `state`, title, task, times, the agent that started it (`parent`), the tool calls it is waiting on (`doing`) and the first line of its report (`headline`). One saved as working is `interrupted` when no Pi has the profile open. |
+| `agent { profile, id, after? }` | An agent's chat, from its Pi session file: its messages from number `after` on, of `total`, its whole `report`, and when it `ended`. The first message is its task alone, and images are left out. |
 | `windows` | Every window and its state. |
 | `open { profile, role?, cwd? }` | The profile's main window (always the same one), or a new connected window. Starts nothing. `cwd` is where the window runs, set when it is first opened. |
 | `prompt { window, text, images?, whenBusy? }` | Sends your message, starting the window's Pi if it has none. In a run it is queued (`steer` by default, or `followUp`). Answers Pi's `disposition`: `started`, `queued` or `handled`. |

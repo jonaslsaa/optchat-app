@@ -33,7 +33,7 @@ Status: the local server ([docs/server.md](docs/server.md)) and a first usable U
 2. ~~The local server: profiles and history from disk, one `pi --mode rpc` per window, one typed protocol.~~ Done.
 3. ~~The first usable UI, as a web page: profile tabs, windows sidebar, chat, composer, Complete.~~ Done.
 4. ~~Setup: the app's settings, installing Pi and pi-optchat from the app, and a profile a terminal already has open.~~ Done ([docs/setup.md](docs/setup.md)). Logging in to a model from the app is there too (macOS).
-5. The agents panel.
+5. The agents panel. Its first part is done: the main chat's agents, live, and each one's chat to read ([docs/ui.md](docs/ui.md#agents)). Steering, stopping and resuming one from the panel are next.
 6. The clickable memory tree.
 7. The GitHub list, then tracking.
 8. The Electron shell around the same page.

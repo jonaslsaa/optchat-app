@@ -1,6 +1,8 @@
-import { CheckIcon, PanelLeftIcon, SettingsIcon, XIcon } from 'lucide-react';
-import { Fragment, useMemo, useState } from 'react';
+import { BotIcon, CheckIcon, PanelLeftIcon, SettingsIcon, XIcon } from 'lucide-react';
+import { Fragment, useCallback, useMemo, useState } from 'react';
 import { canComplete, current } from '../window.ts';
+import { AgentsPanel } from './Agents.tsx';
+import { busy } from './agents.ts';
 import { Composer } from './Composer.tsx';
 import { useShortcuts } from './keys.ts';
 import { Outside } from './Outside.tsx';
@@ -16,9 +18,11 @@ import { Button, cn } from './ui.tsx';
 /** A window that has not run yet. */
 const NOTHING = idle();
 
-/** One profile: its windows on the left, and the selected window's chat. */
+/** One profile: its windows on the left, the selected window's chat, and beside the main chat its agents, when they are opened. */
 function Profile({ state, profile, onSettings }: { state: State; profile: string; onSettings: () => void }) {
   const [sidebar, setSidebar] = useState(() => innerWidth >= 768);
+  // The agents are the main chat's: `panel.agent` is the one whose chat is open in the panel.
+  const [panel, setPanel] = useState<{ agent?: string }>(), openAgent = useCallback((agent?: string) => setPanel({ agent }), []);
   const windows = state.windows.filter(window => window.profile === profile), ids = windows.map(window => window.id).join(' ');
   const window = windows.find(w => w.id === state.selected[profile]) ?? windows.find(w => w.id === mainOf(profile));
   const live = (window && state.live[window.id]) ?? NOTHING, log = state.logs[profile], session = window && state.sessions[window.id];
@@ -33,6 +37,10 @@ function Profile({ state, profile, onSettings }: { state: State; profile: string
     'mod+b': () => setSidebar(shown => !shown),
     ...Object.fromEntries(ids.split(' ').slice(0, 9).map((id, index) => [`alt+${index + 1}`, () => app.select(id)])),
   }), [profile, ids]);
+  // What of the main chat says its agents changed: its Pi started or stopped, an agent was started or ended, a report came.
+  const pulse = [window?.status, live.status.optchat, live.messages.length, log?.total].join(' ');
+  // A Pi that has stopped counts nothing: its last status line still stands, and is about agents that went with it.
+  const agentsWork = busy(window?.status === 'stopped' ? undefined : live.status.optchat, panel && state.agents[profile]?.agents);
   if (!window) return <p className="m-auto text-muted-foreground text-sm">Opening {profile}…</p>;
   const more = !own && log && log.entries.length > 0 && log.entries[0].i > 0;
   // Nothing has been said here, as far as is known: a window that may have a conversation waits for it rather than say so.
@@ -49,6 +57,11 @@ function Profile({ state, profile, onSettings }: { state: State; profile: string
           {own && <span className="shrink-0 rounded-full border px-2 py-0.5 text-2xs text-muted-foreground">{window.completed ? 'Completed' : 'Connected window'}</span>}
           <span className="flex-1" />
           {canComplete(window) && <Button variant="outline" title="Complete: hand this conversation to the main chat" onClick={() => void app.complete(window.id)}><CheckIcon />Complete</Button>}
+          {!own && (
+            <Button variant="ghost-muted" size="icon-sm" aria-label="Agents" title={agentsWork ? 'Agents: some are working' : 'Agents'} aria-pressed={panel !== undefined} onClick={() => setPanel(panel ? undefined : {})}>
+              <BotIcon />{agentsWork && <span className="absolute top-0.5 right-0.5 size-1.5 rounded-full bg-sky-500 dark:bg-sky-300/80" />}
+            </Button>
+          )}
           <Button variant="ghost-muted" size="icon-sm" aria-label="Settings" title="Settings" onClick={onSettings}><SettingsIcon /></Button>
         </header>
         <Fragment key={window.id}>
@@ -60,11 +73,14 @@ function Profile({ state, profile, onSettings }: { state: State; profile: string
                 {!own ? 'One chat that remembers everything.' : window.completed ? 'The main chat has this conversation. Your next message starts a new one.' : 'Its own conversation, with this profile\'s memory. Complete hands it to the main chat.'}
               </p>
             </div>
-          ) : <Timeline items={items} live={live} running={window.status === 'running'} profile={profile} loading={log?.loading} older={more ? () => void app.older(profile) : undefined} />}
+          ) : <Timeline items={items} live={live} running={window.status === 'running'} profile={profile} loading={log?.loading} older={more ? () => void app.older(profile) : undefined} onAgent={own ? undefined : openAgent} />}
           {window.outside ? <Outside window={window} outside={window.outside} /> : <Composer window={window} live={live} />}
           {fresh && <div className="flex-[1.6]" />}
         </Fragment>
       </main>
+      {/* Beside the chat where there is room for both, and over it where there is not, as the sidebar is. */}
+      {panel && !own && <button type="button" aria-label="Close the agents" onClick={() => setPanel(undefined)} className="fixed inset-0 z-30 bg-black/20 lg:hidden" />}
+      {panel && !own && <div className="max-lg:fixed max-lg:inset-y-0 max-lg:right-0 max-lg:z-40 max-lg:shadow-xl"><AgentsPanel state={state} profile={profile} agent={panel.agent} pulse={pulse} outside={window.outside !== undefined} onAgent={openAgent} onClose={() => setPanel(undefined)} /></div>}
     </div>
   );
 }

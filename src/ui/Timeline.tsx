@@ -2,14 +2,15 @@ import { ChevronDownIcon } from 'lucide-react';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { HandoffRow, NoteRow, ReplyRow, ReportRow, UserRow, Waiting, type Working } from './Rows.tsx';
 import { parts, thinking, type Item, type Live, type Part } from './transcript.ts';
-import { Button } from './ui.tsx';
+import { Button, cn } from './ui.tsx';
 
 /** How near the end counts as at the end, in pixels. */
 const EDGE = 48;
 
 /** The chat, oldest at the top. It stays at the end while you are there, and stays where you are while you read back; older
- * pages of the log are read as you reach the top. `running` says the agent is in a run, and `live` what it is doing in it. */
-export function Timeline({ items, live, running, profile, older, loading }: { items: Item[]; live: Live; running: boolean; profile: string; older?: () => void; loading?: boolean }) {
+ * pages of the log are read as you reach the top. `running` says the agent is in a run, and `live` what it is doing in it.
+ * `onAgent` opens the agent a report is from; `narrow` is for a chat in a panel, which has no room for wide margins. */
+export function Timeline({ items, live, running, profile, older, loading, onAgent, narrow = false }: { items: Item[]; live: Live; running: boolean; profile: string; older?: () => void; loading?: boolean; onAgent?: (agent: string) => void; narrow?: boolean }) {
   const scroller = useRef<HTMLDivElement>(null), content = useRef<HTMLDivElement>(null);
   const atEnd = useRef(true), before = useRef({ first: items[0]?.key, height: 0, top: 0, sent: -1 });
   const [away, setAway] = useState(false);
@@ -54,7 +55,7 @@ export function Timeline({ items, live, running, profile, older, loading }: { it
 
   return (
     <div className="relative min-h-0 flex-1">
-      <div ref={scroller} onScroll={scrolled} tabIndex={-1} className="h-full overflow-y-auto overflow-x-hidden overscroll-y-contain px-3 [mask-image:linear-gradient(to_bottom,transparent,black_1.5rem,black_calc(100%-2.5rem),transparent)] [overflow-anchor:none] focus:outline-none sm:px-12">
+      <div ref={scroller} onScroll={scrolled} tabIndex={-1} className={cn('h-full overflow-y-auto overflow-x-hidden overscroll-y-contain px-3 [mask-image:linear-gradient(to_bottom,transparent,black_1.5rem,black_calc(100%-2.5rem),transparent)] [overflow-anchor:none] focus:outline-none', narrow ? 'px-4' : 'sm:px-12')}>
         {/* The chat fades out under the header and above the composer (as T3 Code's does under its top bar), so no line is cut
             through; the room under the last line lets it be read clear of the fade. */}
         <div ref={content} className="mx-auto w-full min-w-0 max-w-(--chat-content-max-width) pt-6 pb-10">
@@ -64,7 +65,7 @@ export function Timeline({ items, live, running, profile, older, loading }: { it
             </button>
           )}
           {blocks.map(part => part.type === 'user' ? <UserRow key={part.key} part={part} profile={profile} />
-            : part.type === 'work' ? <ReportRow key={part.key} part={part} />
+            : part.type === 'work' ? <ReportRow key={part.key} part={part} onAgent={onAgent} />
             : part.type === 'note' ? <NoteRow key={part.key} part={part} />
             : part.type === 'handoff' ? <HandoffRow key={part.key} part={part} writing={running && part === last} />
             : <ReplyRow key={part.key} part={part} working={running && part === last ? working : undefined} latest={part === latest} />)}

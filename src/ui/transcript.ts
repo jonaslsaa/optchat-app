@@ -210,11 +210,12 @@ export function parts(items: readonly Item[], previous: readonly Part[] = []): P
     const old = before.get(group[0].key);
     return old && old.items.length === group.length && old.items.every((item, at) => same(item, group[at])) ? old : part(group);
   });
-  // A report is named by its agent's number; the call that started the agent, where the chat reaches back to it, has its title.
+  // A report that does not say its agent's title is named by its number; the call that started the agent, where the chat
+  // reaches back to it, has the title.
   const titles = new Map(made.flatMap(part => part.type === 'reply' ? part.steps.flatMap(spawned) : []));
   return made.map(part => {
-    const title = part.type === 'work' && part.agent ? titles.get(part.agent) : undefined;
-    return part.type !== 'work' || part.title === title ? part : { ...part, title };
+    const title = part.type === 'work' && part.agent && part.title === undefined ? titles.get(part.agent) : undefined;
+    return part.type === 'work' && title !== undefined ? { ...part, title } : part;
   });
 }
 /** The agents a `spawn` call started, each with the title it was given: pi-optchat answers `Started: <id>, <id>.`, in the order
@@ -241,9 +242,10 @@ function part(items: readonly Item[]): Part {
   if (first.kind === 'user') return { ...common, type: 'user', date: first.date, text: first.text.replace(IMAGE, '').trim(), images: [...first.text.matchAll(IMAGE)].map(match => match[1]) };
   if (first.kind === 'note') return { ...common, type: 'note', text: first.text };
   if (first.kind === 'work') {
-    // pi-optchat names the agent in front of its report: `[1a2b3c4d] …`.
-    const [, agent, body = first.text] = /^\[([\w-]+)\] ([\s\S]*)$/.exec(first.text) ?? [];
-    return { ...common, type: 'work', date: first.date, ...agent && { agent }, body };
+    // pi-optchat names the agent in front of its report, with its title if it has one (`[1a2b3c4d · Why it flakes] …`), and
+    // under it tells the main agent how to read the agent's chat, which here is a click on the report.
+    const [, agent, title, body = first.text] = /^\[([\w-]+)(?: · ([^\]\n]*))?\] ([\s\S]*)$/.exec(first.text) ?? [];
+    return { ...common, type: 'work', date: first.date, ...agent && { agent }, ...title && { title }, body: body.replace(/\n\nFull chat: zoom\("[\w-]+"\)$/, '') };
   }
   // What the agent was saying when it was stopped stays in view, as its answer does.
   const cut = last.kind === 'echo' && last.text.startsWith('Agent aborted'), answer = closing(cut ? items.slice(0, -1) : items);

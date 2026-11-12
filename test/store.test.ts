@@ -6,8 +6,9 @@ import { setTimeout as sleep } from 'node:timers/promises';
 import { test, type TestContext } from 'node:test';
 import type { Push, WindowState } from '../src/protocol.ts';
 import { startServer } from '../src/server/server.ts';
+import { transcript } from '../src/ui/agents.ts';
 import { App, type State } from '../src/ui/store.ts';
-import { createProfile, temporaryHome } from './support.ts';
+import { createProfile, temporaryHome, writeRun } from './support.ts';
 
 const pi = { command: process.execPath, args: [join(import.meta.dirname, 'fake-pi.ts')] };
 /** The page's store, without a page: what it would keep in the browser stays in `saved`. */
@@ -173,4 +174,28 @@ test('the first profile is made from the page: pi-optchat makes it, and it opens
   app.dismiss();
   assert.equal(await app.createProfile('first'), false);
   assert.match(app.state.error ?? '', /Profile already exists: first/);
+});
+
+test('an agent\'s chat is read on from where the page has it, and a report that is not its last answer closes it', async t => {
+  const profile = createProfile(directory, 'team'), server = await startServer({ home: directory, cwd: directory, pi });
+  t.after(() => server.close());
+  const message = (role: string, text: string, timestamp: number) => ({ role, content: [{ type: 'text', text }], timestamp });
+  writeRun(profile, { id: 'aaaaaaaa', state: 'running', started: 1000, task: 'Count the files.' }, [message('user', 'a view\n\nYour task:\nCount the files.', 1000), message('assistant', 'Counting.', 2000)]);
+  const { app, until } = page(t);
+  void app.start(server.url);
+  await until(state => state.connection === 'open');
+
+  const texts = () => transcript(app.state.chats['team/aaaaaaaa'], true).map(({ kind, text }) => [kind, text]);
+  await app.readAgent('team', 'aaaaaaaa');
+  assert.deepEqual(texts(), [['user', 'Count the files.'], ['talk', 'Counting.']]);
+  // It goes on, and fails, while the page asks twice at once, as a timer and a change of the main chat can. The two answers
+  // start at the same message and need not end at the same one: what it said since is there once, and how it ended comes last.
+  const early = app.readAgent('team', 'aaaaaaaa');
+  writeRun(profile, { id: 'aaaaaaaa', state: 'failed', started: 1000, ended: 4000, task: 'Count the files.', report: 'Task error: overloaded' },
+    [message('user', 'a view\n\nYour task:\nCount the files.', 1000), message('assistant', 'Counting.', 2000), message('assistant', 'Twelve so far.', 3000)]);
+  await Promise.all([early, app.readAgent('team', 'aaaaaaaa'), app.readAgent('team', 'aaaaaaaa')]);
+  assert.deepEqual(texts(), [['user', 'Count the files.'], ['talk', 'Counting.'], ['talk', 'Twelve so far.'], ['work', 'Task error: overloaded']]);
+  assert.equal(transcript(app.state.chats['team/aaaaaaaa'], true).at(-1)?.date, new Date(4000).toISOString());
+  // An agent that answered has said its report already.
+  assert.deepEqual(transcript({ ...app.state.chats['team/aaaaaaaa'], report: ' Twelve so far.\n' }, true).length, 3);
 });

@@ -1,0 +1,39 @@
+import assert from 'node:assert/strict';
+import { test } from 'node:test';
+import type { Agent } from '../src/protocol.ts';
+import { busy, doing, listed, named, polled } from '../src/ui/agents.ts';
+
+const agent = (id: string, state: Agent['state'], started: number, more: Partial<Agent> = {}): Agent => ({ id, task: `Task of ${id}\nand more`, model: 'm', state, started, doing: [], ...more });
+
+test('the agents are listed with those at work first, then the newest, each one\'s own agents under it', () => {
+  const agents = [
+    agent('old', 'completed', 1), agent('new', 'completed', 5), agent('busy', 'running', 2), agent('lost', 'failed', 4, { parent: 'gone' }),
+    agent('child', 'completed', 3, { parent: 'busy' }), agent('grandchild', 'waiting', 6, { parent: 'child' }),
+  ];
+  assert.deepEqual(listed(agents).map(({ agent, depth }) => [agent.id, depth]), [['busy', 0], ['child', 1], ['grandchild', 2], ['new', 0], ['lost', 0], ['old', 0]]);
+});
+
+test('an agent\'s row says what it is doing now, or how it ended', () => {
+  const bash = (command: string) => ({ name: 'bash', args: { command } });
+  assert.equal(doing(agent('a', 'running', 0, { doing: [bash('npm test')] })), 'Running npm test');
+  assert.equal(doing(agent('a', 'running', 0, { doing: [bash('npm test'), bash('ls'), bash('pwd')] })), 'Running npm test and 2 more');
+  assert.equal(doing(agent('a', 'running', 0)), 'Thinking');
+  assert.equal(doing(agent('a', 'waiting', 0)), 'Waiting for its agents');
+  assert.equal(doing(agent('a', 'completed', 0, { headline: '## **All green** in `npm test`.' })), 'All green in npm test.');
+  assert.equal(doing(agent('a', 'failed', 0, { headline: 'Launch failed: no such model' })), 'Launch failed: no such model');
+  // What an agent that was cut off was doing is not what it is doing.
+  assert.equal(doing(agent('a', 'interrupted', 0, { doing: [bash('npm test')], headline: 'Pi closed before this agent finished.' })), 'Cut off when its Pi closed');
+  assert.equal(named(agent('a', 'running', 0)), 'Task of a');
+  assert.equal(named(agent('a', 'running', 0, { title: 'Run the tests' })), 'Run the tests');
+});
+
+test('the agents\' button has its dot by the Pi\'s own count, and the open panel looks for itself only where nothing tells it', () => {
+  const working = [agent('a', 'running', 0)], ended = [agent('a', 'completed', 0)];
+  assert.equal(busy('OptChat: work · 350 messages · 0 pending · 12 agents · importing'), true);
+  // The list is as the panel last read it, which may be long ago: the count is the word on it, and says none work now.
+  assert.equal(busy('OptChat: work · 350 messages · 0 pending · 0 agents', working), false);
+  // No count, as when a Pi in a terminal has the chat: the open panel's list says, and a closed panel says nothing.
+  assert.deepEqual([busy(undefined, working), busy(undefined, ended), busy(undefined)], [true, false, false]);
+  // That Pi sends the app nothing, so an agent it starts later is found only by looking.
+  assert.deepEqual([polled(ended, false), polled(working, false), polled(ended, true), polled([], true)], [false, true, true, true]);
+});

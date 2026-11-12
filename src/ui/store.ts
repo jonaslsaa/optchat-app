@@ -22,6 +22,10 @@ export interface State {
   live: Record<string, Live>;
   /** A connected window's conversation, which only its Pi has. */
   sessions: Record<string, PiMessage[]>;
+  /** Each profile's agents as last read from its files, and the chats of those that were opened, by profile and agent
+   * (`work/1a2b3c4d`): the messages read so far, of the `total` the server counted them from. */
+  agents: Record<string, Result<'agents'>>;
+  chats: Record<string, { total: number; messages: PiMessage[]; report?: string; ended?: number }>;
   /** Why the last thing you asked for failed. */
   error?: string;
   /** The app's settings, and what a chat needs with whether it is there, once the server has said. */
@@ -43,7 +47,7 @@ export function title(window: WindowState, state: State) {
 }
 
 export class App {
-  state: State = { connection: 'connecting', profiles: [], tabs: [], windows: [], selected: {}, logs: {}, live: {}, sessions: {} };
+  state: State = { connection: 'connecting', profiles: [], tabs: [], windows: [], selected: {}, logs: {}, live: {}, sessions: {}, agents: {}, chats: {} };
   private client?: Client;
   private retrying?: ReturnType<typeof setTimeout>;
   private closed = false;
@@ -263,6 +267,21 @@ export class App {
     if (!opened) return;
     this.put(opened.window);
     this.set({ selected: { ...this.state.selected, [profile]: opened.window.id } });
+  }
+  /** A profile's agents as its files have them now: those at work, and the newest `limit` of the others. */
+  async readAgents(profile: string, limit?: number) {
+    const agents = await this.ask('agents', { profile, limit });
+    // It is asked for every two seconds while an agent works: the page is drawn again only when something changed.
+    if (agents && JSON.stringify(agents) !== JSON.stringify(this.state.agents[profile])) this.set({ agents: { ...this.state.agents, [profile]: agents } });
+  }
+  /** An agent's chat: what was written of it since it was last read. */
+  async readAgent(profile: string, id: string) {
+    const key = `${profile}/${id}`, after = this.state.chats[key]?.total ?? 0, read = await this.ask('agent', { profile, id, after });
+    const had = this.state.chats[key], total = had?.total ?? 0;
+    // Asked twice at once, two answers start at the same message: of each, only what goes on from what is here is added, and
+    // one with nothing new changes nothing.
+    if (!read || read.total < total || (had && read.total === total && read.report === had.report)) return;
+    this.set({ chats: { ...this.state.chats, [key]: { total: read.total, messages: [...had?.messages ?? [], ...read.messages.slice(total - after).filter(isMessage)], report: read.report, ended: read.ended } } });
   }
   /** Sends your message. In a run it steers the agent, or with `later` waits until the agent has stopped. */
   async send(window: string, text: string, later = false) {

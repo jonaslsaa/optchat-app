@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict';
-import { existsSync, mkdtempSync } from 'node:fs';
+import { existsSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { connect } from '../src/client.ts';
-import type { PiRecord, Push, Setup } from '../src/protocol.ts';
+import type { PiRecord, Push, Result, Setup } from '../src/protocol.ts';
 import { startServer } from '../src/server/server.ts';
-import { apply, chat, idle, isMessage, isObject, logged, words } from '../src/ui/transcript.ts';
+import { transcript } from '../src/ui/agents.ts';
+import { apply, chat, idle, isMessage, isObject, logged, parts, words, type Part } from '../src/ui/transcript.ts';
 import { current } from '../src/window.ts';
 import { createProfile, temporaryHome } from './support.ts';
 
@@ -111,6 +112,49 @@ test('a connected window reads the profile\'s memory, and Complete hands its con
   assert.ok(isObject(kept) && Array.isArray(kept.messages) && kept.messages.every(isMessage));
   assert.ok(kept.messages.some(message => /marzipan/.test(JSON.stringify(message))));
   assert.deepEqual(current(after, kept.messages).map(message => [message.role, words(message.content)]), [['user', 'Reply with exactly: here'], ['assistant', 'here']]);
+});
+
+test('an agent the main chat starts is listed while it works and once it has reported, with its chat', { timeout: 180_000 }, async t => {
+  const home = temporaryHome(), cwd = mkdtempSync(join(home, 'cwd-'));
+  createProfile(home, 'live');
+  writeFileSync(join(cwd, 'notes.txt'), 'the answer is 42\n');
+  const server = await startServer({ home, cwd, flags });
+  t.after(() => server.close());
+  const client = await connect(server.url);
+  const { window } = await client.request('open', { profile: 'live' });
+  const task = 'Run `sleep 4` with bash, then read notes.txt, and report the answer in it.';
+  await client.request('prompt', { window: window.id, text: `Use spawn to start ONE subagent titled "Read the notes" with exactly this task: "${task}" Then say only: started.` });
+
+  // The list is read from the profile's files, again and again, as the page does: the agent is there at work, then done.
+  const seen: Result<'agents'>['agents'] = [];
+  while (seen.at(-1)?.state !== 'completed') {
+    await new Promise(resolve => setTimeout(resolve, 250));
+    const { agents } = await client.request('agents', { profile: 'live' });
+    assert.ok(agents.length <= 1);
+    if (agents[0] && JSON.stringify(agents[0]) !== JSON.stringify(seen.at(-1))) seen.push(agents[0]);
+  }
+  const { id } = seen[0], last = seen.at(-1)!;
+  assert.deepEqual(seen.map(agent => agent.state).filter((state, k, all) => state !== all[k - 1]), ['running', 'completed']);
+  assert.partialDeepStrictEqual(last, { id, title: 'Read the notes', task, doing: [] });
+  assert.match(last.headline ?? '', /42/);
+  // While it worked, the list said on what: the tool calls it was waiting on.
+  assert.ok(seen.some(agent => agent.doing.some(call => call.name === 'bash' && call.args.command === 'sleep 4')), JSON.stringify(seen.map(agent => agent.doing)));
+
+  // Its chat is its Pi session: the task alone first, its tool calls, and its last answer, which is what it reported.
+  const { messages, report } = await client.request('agent', { profile: 'live', id });
+  const own = messages.filter(isMessage);
+  assert.partialDeepStrictEqual(own[0], { role: 'user', content: task });
+  assert.ok(own.some(message => message.role === 'toolResult' && message.toolName === 'read' && words(message.content).includes('the answer is 42')));
+  assert.equal(words(own.at(-1)?.content), report);
+  assert.deepEqual(transcript({ messages: own, report }, true).at(-1)?.kind, 'talk');
+
+  // And the main chat got the report, named by the agent and its title: the card that opens this chat.
+  let reports: Part[] = [];
+  while (!reports.length) {
+    await new Promise(resolve => setTimeout(resolve, 250));
+    reports = parts(logged((await client.request('history', { profile: 'live' })).messages)).filter(part => part.type === 'work');
+  }
+  assert.partialDeepStrictEqual(reports, [{ agent: id, title: 'Read the notes', body: report }]);
 });
 
 test('the app installs Pi into its own folder, that Pi runs a chat, and it installs pi-optchat with Pi\'s own installer', { timeout: 240_000 }, async t => {

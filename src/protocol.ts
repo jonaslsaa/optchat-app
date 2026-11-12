@@ -1,4 +1,5 @@
 import type { Entry } from 'pi-optchat/core';
+import type { RunState } from 'pi-optchat/files';
 import { Type, type Static, type TSchema } from 'typebox';
 
 /** The protocol between the app's server and its UI: one WebSocket carrying JSON. The client sends requests and gets one response
@@ -71,6 +72,18 @@ export const Setup = Type.Object({
 });
 export type Setup = Static<typeof Setup>;
 
+/** A subagent of a profile's main agent, from the record pi-optchat keeps of it (its `RunInfo`). `state` is pi-optchat's:
+ * `running`, `waiting` (for its own agents' reports), `paused`, `stopping`, or ended as `completed`, `failed`, `stopped` or
+ * `interrupted`; one saved as working in a profile that no Pi has open is `interrupted`, since its Pi is gone. `started` and
+ * `ended` are times in milliseconds, `parent` the agent that started it, when one did. `doing`: the tool calls it is waiting on
+ * now. `headline`: the first line of what it reported. */
+export const Agent = Type.Object({
+  id: Type.String(), title: Type.Optional(Type.String()), task: Type.String(), model: Type.String(), state: Type.Unsafe<RunState>(Type.String()),
+  started: Type.Number(), ended: Type.Optional(Type.Number()), parent: Type.Optional(Type.String()),
+  doing: Type.Array(Type.Object({ name: Type.String(), args: Type.Record(Type.String(), Type.Unknown()) })), headline: Type.Optional(Type.String()),
+});
+export type Agent = Static<typeof Agent>;
+
 const Image = Type.Object({ type: Type.Literal('image'), data: Type.String(), mimeType: Type.String() });
 const target = Type.Object({ window: Type.String() });
 const none = Type.Object({});
@@ -91,6 +104,15 @@ export const methods = {
   view: method(Type.Object({ profile: Type.String() }), Type.Object({ total: id, lines: Type.Array(Line) })),
   /** Opens line `id`+`n` into the two lines of `n`/2 under it (`n` at least 2; a single message is a `history` page of one). */
   zoom: method(Type.Object({ profile: Type.String(), id, n: Type.Integer({ minimum: 2 }) }), Type.Object({ lines: Type.Array(Line) })),
+
+  /** A profile's subagents, read from disk: those at work, and the newest `limit` of those that have ended (30 unless said);
+   * `more` is how many ended ones that leaves out. No Pi is asked, so the list is there whether or not one runs. */
+  agents: method(Type.Object({ profile: Type.String(), limit: Type.Optional(Type.Integer({ minimum: 0 })) }), Type.Object({ agents: Type.Array(Agent), more: id })),
+  /** One agent's chat, from its Pi session file: its messages as Pi wrote them (Pi's docs: session.md), from number `after` on,
+   * of `total`. The first is its task, without the view of the profile's memory it was sent with, and images are left out.
+   * `report` is what it reported, whole, and `ended` when it ended. An agent there is no record of has no messages. */
+  agent: method(Type.Object({ profile: Type.String(), id: Type.String(), after: Type.Optional(id) }),
+    Type.Object({ total: id, messages: Type.Array(Type.Unknown()), report: Type.Optional(Type.String()), ended: Type.Optional(Type.Number()) })),
 
   /** Every window the server knows. */
   windows: method(none, Type.Object({ windows: Type.Array(WindowState) })),

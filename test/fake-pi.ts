@@ -4,7 +4,8 @@ import { appendFileSync } from 'node:fs';
  * prompt's words, so the server's tests need no model. A prompt holding "wait" stays mid-message until a `release` command or an
  * abort; one holding "ask" asks a dialog first and replies with its answer; "crash" kills it without an answer. It says it owns
  * its profile, or with `--optchat-connect join` that it is a window on it. Profile `busy` fails as a profile another Pi owns;
- * profile `stuck` ignores the request to shut down, and profile `mute` never answers a command. */
+ * profile `stuck` ignores the request to shut down, profile `mute` never answers a command, profile `bare` is a Pi without
+ * pi-optchat, and in profile `noisy` another extension fails. */
 const profile = process.argv[process.argv.indexOf('--optchat-profile') + 1], joins = process.argv.includes('--optchat-connect');
 const role = (completed = false) => write({ type: 'extension_ui_request', id: 'r', method: 'setStatus', statusKey: 'optchat.role',
   statusText: JSON.stringify(joins ? { role: 'window', profile, id: 'w1', connected: true, completed } : { role: 'owner', profile }) });
@@ -46,7 +47,11 @@ const commands: Record<string, (command: Record<string, unknown>) => unknown> = 
 };
 
 if (profile === 'busy') write({ type: 'extension_error', extensionPath: 'pi-optchat', event: 'session_start', error: `Profile already running: ${profile} · PID 1` });
-else role();
+else if (profile !== 'bare') {
+  if (profile === 'noisy') write({ type: 'extension_error', extensionPath: 'something-else', event: 'session_start', error: 'No API key' });
+  write({ type: 'extension_ui_request', id: 's', method: 'setStatus', statusKey: 'optchat', statusText: `OptChat: ${profile} · 0 messages` });
+  role();
+}
 let buffer = '';
 process.stdin.on('data', chunk => {
   buffer += String(chunk);

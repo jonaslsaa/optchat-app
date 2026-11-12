@@ -64,7 +64,7 @@ A run's finished messages are in `history` as soon as pi-optchat has logged them
 - **Main window.** `open` gives it at once; its Pi starts on the first `prompt`, with `--optchat-profile <name>`. Until then nothing holds the profile, so a terminal Pi can still open it.
 - **Connected windows.** A second Pi on a profile joins the first as a connected window: its own conversation, the profile's memory read-only, and a handoff to the main chat on Complete. The server starts it with `--optchat-connect join`, after the main window's Pi if the profile has no owner yet. This needs the pi-optchat after 0.11.8 (its "RPC hosts" change).
 - **`role` is the window's place in the app and never changes.** What its Pi is to the profile is `owner`, read from pi-optchat's `optchat.role` status: a main window whose Pi found the profile held by a Pi outside the app has `owner: false`.
-- **A Pi that cannot open its profile** is stopped, and the prompt fails with pi-optchat's reason (for example `Profile already running: …`), instead of a window that looks idle and answers nothing.
+- **A Pi that did not open its profile** is stopped, and the prompt fails with the reason (for example pi-optchat's `Profile already running: …`, or that pi-optchat is not installed), instead of a window that looks idle and answers nothing. The server knows the profile is open by pi-optchat's `optchat` status line, so another extension's failure does not count.
 - **Stopping.** The server closes Pi's stdin, which is Pi's request for an orderly shutdown, and kills it only if it has not exited after 15 seconds. A Pi that is still starting is stopped the same way.
 
 ## Who may connect

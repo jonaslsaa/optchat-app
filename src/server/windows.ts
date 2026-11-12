@@ -23,12 +23,16 @@ interface Opened {
   dropped: number;
   /** What Pi's extensions show now, by what it is: outside `records`, since a status set at startup still stands runs later. */
   ui: Map<string, PiRecord>;
-  /** Why pi-optchat could not open the profile in this Pi. */
+  /** What an extension said went wrong as the session started: why pi-optchat has no profile, if it has none. */
   fault?: string;
+  /** A connected window on its way out: it starts no Pi, and leaves the list once its Pi has exited. */
+  closed?: boolean;
 }
 /** What pi-optchat says a Pi in RPC mode is to its profile: JSON in a `setStatus` with this key (its docs/connected-windows.md).
  * This is the one place that reads it, and it reads only these two fields. */
 const ROLE_STATUS = 'optchat.role';
+/** pi-optchat's status line, which it sets once it has opened the profile. */
+const OPENED_STATUS = 'status optchat';
 const Role = Type.Object({ role: Type.Enum(['owner', 'window']), completed: Type.Optional(Type.Boolean()) });
 const DIALOGS = ['select', 'confirm', 'input', 'editor'];
 const mainId = (profile: string) => `${profile}/main`;
@@ -80,9 +84,9 @@ export class Windows {
   }
   async close({ window }: Params<'close'>): Promise<Result<'close'>> {
     const opened = this.get(window);
-    if (!isMain(opened)) this.windows.delete(window); // A start that still waits for the main window's Pi sees it is gone.
+    if (!isMain(opened)) opened.closed = true;
     await this.stop(opened);
-    if (!isMain(opened)) { opened.state.status = 'closed'; this.changed(opened); }
+    if (opened.closed && this.windows.delete(window)) { opened.state.status = 'closed'; this.changed(opened); }
     return {};
   }
   records({ window, after = 0 }: Params<'records'>): Result<'records'> {
@@ -127,7 +131,7 @@ export class Windows {
     const { state } = opened, { home, pi: { command, args }, grace } = this.options, joins = !isMain(opened);
     // The first Pi on a profile owns it and a connected window is a later one, so the main window's Pi goes first.
     if (joins) await this.started(this.get(this.open({ profile: state.profile }).window.id));
-    if (this.closing || this.windows.get(state.id) !== opened) throw new Error(`${state.id} was closed before it started.`);
+    if (this.closing || opened.closed) throw new Error(`${state.id} was closed before it started.`);
     Object.assign(opened, { records: [], dropped: state.seq, fault: undefined });
     opened.ui.clear();
     state.status = 'starting'; delete state.error; this.changed(opened);
@@ -139,9 +143,9 @@ export class Windows {
       // Pi answers once its extensions have started the session, so by now pi-optchat has the profile or has said why not.
       // Without its profile it takes every prompt and answers nothing, so such a Pi is stopped, not left looking idle.
       await pi.request({ type: 'get_state' });
-      if (opened.fault) throw new Error(opened.fault);
+      if (!opened.ui.has(OPENED_STATUS)) throw new Error(opened.fault ?? 'pi-optchat did not open the profile. Is it installed in this Pi? (pi install npm:pi-optchat)');
     } catch (error) {
-      opened.fault ??= reason(error);
+      opened.fault = reason(error);
       await pi.stop(grace);
       throw error;
     }
@@ -150,14 +154,14 @@ export class Windows {
   }
   /** Stops the window's Pi, one that is still starting too: it need not answer first. */
   private async stop(opened: Opened) {
-    // With no Pi yet, a start is waiting for the main window's Pi, and spawns nothing once it sees the window closed.
+    // With no Pi yet, a start is waiting for the main window's Pi, and spawns none for a window that is closed.
     if (!opened.pi) return;
     await opened.pi.stop(this.options.grace);
     await opened.starting?.catch(() => {});
   }
   private exited(opened: Opened, pi: Pi, error?: string) {
     if (opened.pi !== pi) return;
-    const { state } = opened, why = opened.fault ?? error;
+    const { state } = opened, why = state.status === 'starting' ? opened.fault ?? error : error;
     opened.pi = undefined; opened.ui.clear();
     state.status = 'stopped'; delete state.owner; delete state.completed;
     if (why) state.error = why;
@@ -192,7 +196,7 @@ export class Windows {
     } else if (typeof id === 'string' && typeof method === 'string' && DIALOGS.includes(method)) {
       keep(`dialog ${id}`);
       // Pi answers a dialog itself when its time is up.
-      if (typeof timeout === 'number') setTimeout(() => opened.ui.delete(`dialog ${id}`), timeout).unref();
+      if (typeof timeout === 'number' && timeout > 0) setTimeout(() => opened.ui.delete(`dialog ${id}`), timeout).unref();
     }
   }
   private role(opened: Opened, status: string) {

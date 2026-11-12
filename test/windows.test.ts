@@ -9,7 +9,7 @@ import { startServer, type ServerOptions } from '../src/server/server.ts';
 import { createProfile, temporaryHome } from './support.ts';
 
 const home = temporaryHome();
-for (const name of ['work', 'busy', 'stuck', 'mute']) createProfile(home, name);
+for (const name of ['work', 'busy', 'stuck', 'mute', 'bare', 'noisy']) createProfile(home, name);
 const fake = { command: process.execPath, args: [join(import.meta.dirname, 'fake-pi.ts')] };
 
 /** A server over the fake Pi, and a client that remembers what it was pushed. */
@@ -45,7 +45,7 @@ test('a window starts its Pi on the first prompt, and what Pi writes reaches the
   assert.deepEqual(await request('prompt', { window: window.id, text: 'hello' }), { disposition: 'started' });
   await record('agent_settled');
   assert.deepEqual(statuses(window.id), ['stopped', 'starting', 'idle', 'running', 'idle']);
-  assert.deepEqual(types(), ['extension_ui_request', 'agent_start', 'message_start', 'message_end', 'message_start', 'message_update', 'message_update', 'message_end', 'agent_end', 'agent_settled']);
+  assert.deepEqual(types(), ['extension_ui_request', 'extension_ui_request', 'agent_start', 'message_start', 'message_end', 'message_start', 'message_update', 'message_update', 'message_end', 'agent_end', 'agent_settled']);
   const numbers = pushes.flatMap(push => push.push === 'record' ? [push.seq] : []);
   assert.deepEqual(numbers, numbers.map((_, k) => k + 1));
 
@@ -94,10 +94,10 @@ test('what Pi shows stands for a client that connects late: a status from before
 
   const late = await client(t, server.url), shown = async () => (await late.request('records', { window: window.id })).ui.map(r => r.method);
   assert.equal((await late.request('records', { window: window.id })).records.some(r => r.record.method === 'setStatus'), false);
-  assert.deepEqual(await shown(), ['setStatus', 'confirm']);
+  assert.deepEqual(await shown(), ['setStatus', 'setStatus', 'confirm']);
   await late.request('answer', { window: window.id, id: 'dialog-1', confirmed: true });
   assert.match(JSON.stringify((await record('message_end', (await record('agent_start')).seq + 2)).record), /confirmed: true/);
-  assert.deepEqual(await shown(), ['setStatus']);
+  assert.deepEqual(await shown(), ['setStatus', 'setStatus']);
 });
 
 test('two prompts to a stopped window share one start', async t => {
@@ -105,7 +105,7 @@ test('two prompts to a stopped window share one start', async t => {
   const { window } = await request('open', { profile: 'work' });
   const answers = await Promise.all(['wait for me', 'and then this'].map(text => request('prompt', { window: window.id, text })));
   assert.deepEqual(answers.map(answer => answer.disposition), ['started', 'queued']);
-  assert.equal(types().filter(type => type === 'extension_ui_request').length, 1, 'one Pi said what it is to the profile');
+  assert.equal(types().filter(type => type === 'extension_ui_request').length, 2, 'one Pi showed its status and its role');
 });
 
 test('a Pi that dies in a run leaves its window stopped with the reason, and the prompt it had not answered fails', async t => {
@@ -136,6 +136,10 @@ test('a Pi that could not open the profile is stopped, and the prompt fails with
   await assert.rejects(request('prompt', { window: window.id, text: 'hello' }), /Profile already running: busy/);
   assert.partialDeepStrictEqual((await status('stopped')).window, { id: 'busy/main' });
   assert.partialDeepStrictEqual((await request('windows', {})).windows[0], { status: 'stopped', error: 'Profile already running: busy · PID 1' });
+
+  // A Pi without pi-optchat opens no profile either. Another extension's failure is not pi-optchat's.
+  await assert.rejects(request('prompt', { window: (await request('open', { profile: 'bare' })).window.id, text: 'hello' }), /pi-optchat did not open the profile/);
+  assert.deepEqual(await request('prompt', { window: (await request('open', { profile: 'noisy' })).window.id, text: 'hello' }), { disposition: 'started' });
 });
 
 test('a message sent during a run is queued, and abort hands back what was still queued', async t => {

@@ -3,7 +3,7 @@ import { createServer } from 'node:net';
 import { join } from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { test, type TestContext } from 'node:test';
-import type { Push } from '../src/protocol.ts';
+import type { Push, WindowState } from '../src/protocol.ts';
 import { startServer } from '../src/server/server.ts';
 import { App, type State } from '../src/ui/store.ts';
 import { createProfile, temporaryHome } from './support.ts';
@@ -63,14 +63,21 @@ test('a server that started again numbers its records from one, and the page fol
   assert.deepEqual(after.live['work/main'].messages.map(message => message.role), ['user', 'assistant']);
 });
 
-test('a dialog goes when its time is up, as Pi stops waiting then without saying so', async t => {
+test('a dialog goes when its time is up, when its answer has arrived, and with its window', async t => {
   const { app, until } = page(t);
+  const window = (status: WindowState['status']): Push => ({ push: 'window', window: { id: 'work/1', profile: 'work', role: 'connected', cwd: '/tmp', status, seq: 0 } });
+  app.receive(window('idle'));
   const ask = (id: string, timeout?: number): Push => ({ push: 'record', window: 'work/1', seq: id === 'a' ? 1 : 2, record: { type: 'extension_ui_request', id, method: 'confirm', title: 'Go on?', ...timeout && { timeout } } });
   app.receive(ask('a', 30));
   app.receive(ask('b'));
   assert.deepEqual(app.state.live['work/1'].dialogs.map(dialog => dialog.id), ['a', 'b']);
   // No window is shown here: the time runs in the store, not in the dialog on the page.
   assert.deepEqual((await until(state => state.live['work/1'].dialogs.length === 1)).live['work/1'].dialogs.map(dialog => dialog.id), ['b']);
+  // An answer that did not reach the server (there is none here) leaves the question to be answered again.
+  await app.answer('work/1', { id: 'b', confirmed: true });
+  assert.deepEqual([app.state.live['work/1'].dialogs.length, app.state.error], [1, 'Not connected to the server.']);
+  app.receive(window('closed'));
+  assert.deepEqual([app.state.windows, app.state.live], [[], {}]);
 });
 
 test('records the page missed are read again from the server, so it shows what a page that saw them all shows', async t => {

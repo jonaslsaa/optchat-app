@@ -18,7 +18,11 @@ function Dialog({ window, dialog }: { window: string; dialog: PiRecord }) {
     <div role="dialog" aria-label={String(dialog.title ?? 'Question')} className="rounded-2xl border border-warning/32 bg-warning-surface px-3.5 py-3 text-sm">
       <p className="font-medium">{String(dialog.title ?? 'Pi asks')}</p>
       {typeof dialog.message === 'string' && <p className="mt-0.5 text-muted-foreground">{dialog.message}</p>}
-      {(dialog.method === 'input' || dialog.method === 'editor') && (
+      {dialog.method === 'editor' && (
+        <textarea autoFocus rows={4} aria-label={String(dialog.title ?? 'Answer')} value={value} onChange={event => setValue(event.target.value)}
+          onKeyDown={event => { if (event.key === 'Enter' && (event.metaKey || event.ctrlKey) && !event.nativeEvent.isComposing) answer({ value }); }} className="mt-2 block max-h-64 w-full resize-y rounded-md border border-input bg-background px-2 py-1.5 font-mono text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring" />
+      )}
+      {dialog.method === 'input' && (
         <input autoFocus aria-label={String(dialog.title ?? 'Answer')} value={value} placeholder={typeof dialog.placeholder === 'string' ? dialog.placeholder : ''} onChange={event => setValue(event.target.value)}
           onKeyDown={event => { if (event.key === 'Enter' && !event.nativeEvent.isComposing) answer({ value }); }} className="mt-2 h-8 w-full rounded-md border border-input bg-background px-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring" />
       )}

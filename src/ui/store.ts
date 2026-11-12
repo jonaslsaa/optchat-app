@@ -112,7 +112,11 @@ export class App {
   private put(window: WindowState) {
     const others = this.state.windows.filter(w => w.id !== window.id), gone = window.status === 'closed';
     const selected = gone && this.state.selected[window.profile] === window.id ? { ...this.state.selected, [window.profile]: mainOf(window.profile) } : this.state.selected;
-    this.set({ windows: gone ? others : ordered([...others, window]), selected });
+    if (!gone) { this.set({ windows: ordered([...others, window]), selected }); return; }
+    // What a closed window said and asked goes with it.
+    const { [window.id]: _run, ...live } = this.state.live, { [window.id]: _conversation, ...sessions } = this.state.sessions;
+    for (const [key, deadline] of this.deadlines) if (key.startsWith(`${window.id} `)) { clearTimeout(deadline); this.deadlines.delete(key); }
+    this.set({ windows: others, selected, live, sessions });
   }
   /** Reads a page of a profile's log into what is read of it already: the newest page, or the one before entry `before`. */
   private async read(profile: string, before?: number) {
@@ -146,7 +150,7 @@ export class App {
     try {
       const kept = await this.ask('records', { window: id });
       // A Pi that died in its run never said the run was over.
-      if (kept) this.live(id, () => this.window(id)?.status === 'stopped' ? stopped(replay(kept, kept.seq)) : replay(kept, kept.seq));
+      if (kept && this.window(id)) this.live(id, () => this.window(id)?.status === 'stopped' ? stopped(replay(kept, kept.seq)) : replay(kept, kept.seq));
     } finally { this.loading.delete(id); }
   }
   /** What a window's runs said is in the profile's log, or for a connected window in its Pi's conversation. */
@@ -159,7 +163,7 @@ export class App {
     if (window?.role !== 'connected' || window.status === 'stopped') return;
     const answer = await this.client?.request('command', { window: id, command: { type: 'get_messages' } }).catch(() => undefined);
     const messages = isObject(answer?.data) && Array.isArray(answer.data.messages) ? answer.data.messages.filter(isMessage) : undefined;
-    if (messages) this.set({ sessions: { ...this.state.sessions, [id]: messages } });
+    if (messages && this.window(id)) this.set({ sessions: { ...this.state.sessions, [id]: messages } });
   }
   /** What the server pushes: a window that changed, or one of Pi's records. Records are numbered; when one is missing, the
    * window's run is asked for again. */
@@ -209,9 +213,9 @@ export class App {
   }
   async complete(window: string) { await this.ask('complete', { window }); }
   async closeWindow(window: string) { await this.ask('close', { window }); }
+  /** Answers a dialog, which then goes; one whose answer did not arrive stays to be answered again. */
   async answer(window: string, response: Omit<Params<'answer'>, 'window'>) {
-    await this.ask('answer', { window, ...response });
-    this.expire(window, response.id);
+    if (await this.ask('answer', { window, ...response })) this.expire(window, response.id);
   }
   /** Takes a dialog off the page: it was answered, or its time ran out and Pi went on without an answer. */
   private expire(window: string, id: string) {

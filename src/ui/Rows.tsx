@@ -111,17 +111,20 @@ const NO_TOOLS = {};
 export const ReplyRow = memo(function ReplyRow({ part, working }: { part: Of<'reply'>; working?: Working }) {
   const [open, setOpen] = useState(false);
   const { steps, answer } = part, count = steps.filter(step => step.type === 'tool').length;
+  // Why a reply failed is said outside the fold too, or a failed turn would look like one that answered nothing.
+  const faults = part.stopped ? [] : steps.filter(step => step.type === 'fault');
   return (
     <div className="group/reply pb-2">
       {!working && steps.length > 0 && (
         <div className="border-border/60 border-b pt-1 pb-2">
           <button type="button" aria-expanded={open} onClick={() => setOpen(!open)} className="flex select-none items-center gap-1 rounded-md px-1 text-muted-foreground text-sm tabular-nums leading-relaxed transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/70">
             <ChevronRightIcon className={cn('size-3.5 transition-transform duration-200', open && 'rotate-90')} />
-            {part.stopped ? 'Stopped after' : 'Worked for'} {took(part.from, part.to)}{count > 0 && ` · ${count} tool ${count === 1 ? 'call' : 'calls'}`}
+            {part.stopped ? 'Stopped after' : faults.length ? 'Failed after' : 'Worked for'} {took(part.from, part.to)}{count > 0 && ` · ${count} tool ${count === 1 ? 'call' : 'calls'}`}
           </button>
         </div>
       )}
       {(working || open) && steps.length > 0 && <div className="flex min-w-0 flex-col py-1">{steps.map(step => <StepRow key={step.key} step={step} tools={working?.tools ?? NO_TOOLS} />)}</div>}
+      {!working && !open && faults.map(step => <StepRow key={step.key} step={step} tools={NO_TOOLS} />)}
       {answer && <div className="relative min-w-0 px-1 py-0.5 pt-2"><Markdown text={answer.text} streaming={answer.streaming} /></div>}
       {working && (
         <div className="flex h-6 min-w-0 items-baseline gap-2 px-1 pt-2 text-muted-foreground text-sm tabular-nums leading-relaxed">

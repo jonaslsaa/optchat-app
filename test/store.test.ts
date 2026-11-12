@@ -142,6 +142,12 @@ test('a sign-in waits for Pi to say it is done, and stops asking when you cancel
   writeFileSync(state, JSON.stringify({ version: '1.5.2', providers: ['anthropic'], packages: {} }));
   await sleep(150);
   assert.equal(app.state.setup?.login.state, 'missing');
+
+  // Pi that cannot read its own logins ends the wait, and the page says why instead of going quiet.
+  writeFileSync(state, JSON.stringify({ version: '1.5.2', providers: [], packages: {}, broken: true }));
+  await app.signIn('github-copilot');
+  assert.equal(app.state.signingIn, undefined);
+  assert.match(app.state.error ?? '', /Pi could not say whether it is signed in\. Try in a terminal: .*fake-pi\.ts auth check --provider github-copilot$/);
 });
 
 test('the first profile is made from the page: pi-optchat makes it, and it opens', async t => {

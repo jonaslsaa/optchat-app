@@ -17,7 +17,8 @@ import { join } from 'node:path';
 /** Pi outside a chat, as the app's setup asks it: its version, its packages (`list`, `install`, `update`), and the models it has
  * credentials for. FAKE_PI_HOME stands for Pi's own folder: `state.json` there says which Pi this is, and `install` puts a
  * package under it as Pi does. Without it this is Pi 1.5.2 with no packages and no login. */
-interface Installed { version: string; providers: string[]; packages: Record<string, string> }
+/** `broken`: Pi cannot read its own logins, and says `invalid` when asked about one. */
+interface Installed { version: string; providers: string[]; packages: Record<string, string>; broken?: boolean }
 const folder = process.env.FAKE_PI_HOME, kept = folder && join(folder, 'state.json');
 const installed: Installed = { version: '1.5.2', providers: [], packages: {}, ...kept && existsSync(kept) && JSON.parse(readFileSync(kept, 'utf8')) };
 const [verb, source = ''] = process.argv.slice(2);
@@ -31,6 +32,7 @@ if (verb === 'list') {
 if (verb === 'auth' && source === 'login') { console.error('"pi auth login <provider> [--api-key] [--no-browser]" requires an interactive terminal'); process.exit(1); }
 if (verb === 'auth' && source === 'check') {
   const provider = process.argv[process.argv.indexOf('--provider') + 1], ready = installed.providers.includes(provider);
+  if (installed.broken) { console.log(JSON.stringify({ status: 'invalid', provider, reason: 'invalid_state' })); process.exit(2); }
   console.log(JSON.stringify(ready ? { status: 'ready', provider, authType: 'oauth' } : { status: 'not_ready', provider, reason: 'credentials_not_configured' }));
   process.exit(ready ? 0 : 1);
 }

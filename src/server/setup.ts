@@ -164,11 +164,14 @@ export class Setup {
   }
   /** Whether Pi can use `provider` now. Pi is asked for its word only: it refreshes nothing, and prints no credential. */
   async signedIn({ provider }: Params<'signedIn'>): Promise<Result<'signedIn'>> {
-    const { output } = await this.ask(await this.launch(), ['auth', 'check', '--provider', provider, '--json', '--no-refresh'], 20_000);
+    const pi = await this.launch(), check = ['auth', 'check', '--provider', provider];
+    const { output } = await this.ask(pi, [...check, '--json', '--no-refresh'], 20_000);
     let answer: unknown;
     try { answer = JSON.parse(output.split('\n').findLast(line => line.startsWith('{')) ?? ''); } catch {} // Its answer, past any warning.
-    if (!Value.Check(methods.signedIn.result, answer)) throw new Error('Pi did not say whether it is signed in.');
-    return { status: answer.status };
+    if (Value.Check(methods.signedIn.result, answer)) return { status: answer.status };
+    // Pi's third word is `invalid`: it cannot read its own logins. Asking again would not change that; asking in a terminal shows it.
+    const folder = process.env.PI_CODING_AGENT_DIR; // Asked where this Pi keeps its files, as the sign-in is.
+    throw new Error(`Pi could not say whether it is signed in. Try in a terminal: ${folder ? `PI_CODING_AGENT_DIR=${word(folder)} ` : ''}${shown(pi, check)}`);
   }
   /** Ends what is running: the server is closing. What an install left half done, the next one puts right. */
   close() { this.closing.abort(); clearTimeout(this.pushing); }

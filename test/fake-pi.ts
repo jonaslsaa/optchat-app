@@ -11,7 +11,8 @@ import { join } from 'node:path';
  * - FAKE_PI_SCRIPT names a JSON file of longer replies (`Script`), for the screenshots: a prompt holding one of its words gets
  *   that word's turns and answer.
  * - Profile `busy` fails as a profile another Pi owns, `stuck` ignores the request to shut down, `mute` never answers a command,
- *   `bare` is a Pi without pi-optchat, and in `noisy` another extension fails. */
+ *   `bare` is a Pi without pi-optchat, `old` one whose pi-optchat is from before 0.11.9 and names no role, and in `noisy`
+ *   another extension fails. */
 const profile = process.argv[process.argv.indexOf('--optchat-profile') + 1], joins = process.argv[process.argv.indexOf('--optchat-connect') + 1] === 'join';
 const write = (record: object) => process.stdout.write(`${JSON.stringify(record)}\n`);
 const status = (statusKey: string, statusText: string) => write({ type: 'extension_ui_request', id: statusKey, method: 'setStatus', statusKey, statusText });
@@ -132,7 +133,7 @@ if (profile === 'busy') {
 } else if (profile !== 'bare') {
   if (profile === 'noisy') write({ type: 'extension_error', extensionPath: 'something-else', event: 'session_start', error: 'No API key' });
   status('optchat', joins ? `OptChat: ${profile} · connected window` : `OptChat: ${profile} · ${logged} messages · 0 pending · 0 agents`);
-  role();
+  if (profile !== 'old') role();
 }
 let buffer = '';
 process.stdin.on('data', chunk => {

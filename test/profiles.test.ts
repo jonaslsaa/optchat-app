@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { appendFileSync, mkdirSync, readdirSync, statSync, writeFileSync } from 'node:fs';
+import { appendFileSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { get } from 'node:http';
 import { test } from 'node:test';
@@ -61,6 +61,16 @@ test('what the owning Pi wrote since the last read is there on the next one', as
   assert.equal((await profiles.history({ profile: 'live' })).total, 2);
   appendFileSync(join(directory, 'main', '2026-01-01.jsonl'), entry(2, 'a new message'));
   assert.partialDeepStrictEqual((await profiles.history({ profile: 'live' })).messages.at(-1), { i: 2, text: 'a new message' });
+});
+
+test('a log that could not be read is read again, though its size is the same', async () => {
+  const directory = createProfile(home, 'torn'), log = join(directory, 'main', '2026-01-01.jsonl');
+  writeMemory(directory, 2);
+  const whole = readFileSync(log, 'utf8');
+  writeFileSync(log, whole.replace('"kind"', '"kind!'));
+  await assert.rejects(profiles.history({ profile: 'torn' }));
+  writeFileSync(log, whole);
+  assert.equal((await profiles.history({ profile: 'torn' })).total, 2);
 });
 
 test('after an import the active memory generation is read, and an old import\'s header is not part of its message', async () => {

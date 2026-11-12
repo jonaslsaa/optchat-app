@@ -32,12 +32,11 @@ npm run screenshots       # a PNG of every main state, in /tmp/optchat-app-shots
 | --- | --- |
 | `src/ui/transcript.ts` | The chat as data, with no DOM: folds Pi's records into a window's state, joins that with the log, joins the log's pages, and works out what each row says (`parts`). Tested in `test/transcript.test.ts`. |
 | `src/ui/store.ts` | Everything the page knows, outside React: the connection (and reconnecting), the logs, each window's run. Components read it with `useApp`. Tested against the server in `test/store.test.ts`. |
-| `src/ui/conversation.ts` | Which of the conversations a connected window's Pi has had is the one it shows: the one since its last Complete. Tested in `test/conversation.test.ts`. |
 | `src/ui/App.tsx`, `Profiles.tsx`, `Sidebar.tsx`, `Timeline.tsx`, `Rows.tsx`, `Composer.tsx`, `Markdown.tsx` | The components. They only draw: a row gets its part, and is drawn again only when that part changed. |
 | `src/ui/safe.ts` | What Markdown may do: see below. Tested in `test/markdown.test.ts`. |
 | `src/ui/keys.ts` | Shortcuts, and `useShortcuts`. |
 | `src/ui/ui.tsx`, `WorkLog.tsx`, `markdownStreamBlocks.ts`, `index.css` | Buttons, tool-call rows, the Markdown splitter and the design tokens, from T3 Code. |
-| `src/window.ts` | What a window can do (`canComplete`), for the server and the page alike. |
+| `src/window.ts` | What a window can do (`canComplete`) and which of its Pi's messages are the conversation it is in (`current`), for the server and the page alike. |
 
 **One chat, three sources.** Every item in the chat is a log entry, or what a message Pi has not logged yet will be logged as (`said` mirrors pi-optchat's own). So a reply looks the same while it streams, when it has ended and after a restart, and keeps what you opened in it. The live test checks that the two readings agree on a real turn.
 

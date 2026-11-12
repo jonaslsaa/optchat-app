@@ -28,6 +28,8 @@ interface Opened {
   fault?: string;
   /** A connected window on its way out: it starts no Pi, and leaves the list once its Pi has exited. */
   closed?: boolean;
+  /** When the window's Pi last said its conversation was handed off. */
+  ended?: number;
 }
 /** What pi-optchat says a Pi in RPC mode is to its profile: JSON in a `setStatus` with this key (its docs/connected-windows.md),
  * sent as the session starts, so before Pi's first answer; a Pi that has not sent it by then has no profile open. This is the
@@ -209,11 +211,14 @@ export class Windows {
     }
   }
   /** `status` is pi-optchat's role as JSON, or nothing once its Pi has no profile open. All the app needs of it is whether a
-   * connected window's conversation is handed off: which Pi owns the profile and which is a window on it is the app's own doing. */
+   * connected window's conversation is handed off: which Pi owns the profile and which is a window on it is the app's own doing.
+   * A conversation that is handed off stays the window's until its Pi says it is in another, which it does as your next message
+   * arrives and before the run: that one began after the last ended, and every message of it is later than that. */
   private role(opened: Opened, status: unknown) {
     const { state } = opened, completed = role(status)?.completed === true;
     if ((state.completed ?? false) === completed) return;
-    if (completed) state.completed = true; else delete state.completed;
+    if (completed) { state.completed = true; opened.ended = Date.now(); }
+    else { delete state.completed; if (opened.ended !== undefined) state.since = opened.ended; }
     this.changed(opened);
   }
 }

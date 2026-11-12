@@ -26,14 +26,15 @@ export type PiRecord = Static<typeof PiRecord>;
  * profile's `main` chat, or a `connected` window beside it, whose conversation ends in a handoff to the main chat.
  * The main window's Pi owns the profile, or fails to start when a Pi outside the app holds it; a connected window's Pi only
  * ever joins. `completed` is pi-optchat's word that a connected window's conversation is handed off; its next prompt begins a
- * new conversation in it.
+ * new conversation in it, and `since` is then when the last one was handed off: what its Pi said up to then belongs to
+ * conversations the main chat has.
  * `stopped`: no process (not started yet, closed, or it exited: `error` says why if it failed). `idle` and `running`: whether the
  * agent is in a run. `closed`: a connected window that is gone, pushed once as it leaves the list. `seq` is the number of the last
  * record the window pushed. `cwd` is where its Pi runs, set when the window is first opened. */
 export const WindowState = Type.Object({
   id: Type.String(), profile: Type.String(), role: Type.Enum(['main', 'connected']), cwd: Type.String(),
   status: Type.Enum(['stopped', 'starting', 'idle', 'running', 'closed']), seq: id,
-  completed: Type.Optional(Type.Boolean()), error: Type.Optional(Type.String()),
+  completed: Type.Optional(Type.Boolean()), since: Type.Optional(Type.Number()), error: Type.Optional(Type.String()),
 });
 export type WindowState = Static<typeof WindowState>;
 

@@ -42,6 +42,37 @@ test('a server that is away is tried again one connection at a time, and found o
   assert.deepEqual((await until(state => state.connection === 'open' && state.windows.length > 0)).windows.map(window => window.id), ['work/main']);
 });
 
+test('a server that started again numbers its records from one, and the page follows them', async t => {
+  const first = await startServer({ home: directory, cwd: directory, pi });
+  const { app, until } = page(t, 25);
+  const answered = (replies: number) => until(state => state.windows[0]?.status === 'idle' && state.logs.work?.entries.filter(entry => entry.kind === 'talk').length === replies);
+  await app.start(first.url);
+  await until(state => state.windows.length > 0);
+  await app.send('work/main', 'hello');
+  const before = (await answered(1)).live['work/main'].seq;
+  await first.close();
+  await until(state => state.connection === 'lost');
+
+  const second = await startServer({ port: first.port, home: directory, cwd: directory, pi });
+  t.after(() => second.close());
+  await until(state => state.connection === 'open' && state.windows.length > 0);
+  await app.send('work/main', 'hello again');
+  const after = await answered(2);
+  // The new server's window began at one again; records under the old number were not taken for ones already seen.
+  assert.ok(after.live['work/main'].seq <= before, `${after.live['work/main'].seq} after ${before}`);
+  assert.deepEqual(after.live['work/main'].messages.map(message => message.role), ['user', 'assistant']);
+});
+
+test('a dialog goes when its time is up, as Pi stops waiting then without saying so', async t => {
+  const { app, until } = page(t);
+  const ask = (id: string, timeout?: number): Push => ({ push: 'record', window: 'work/1', seq: id === 'a' ? 1 : 2, record: { type: 'extension_ui_request', id, method: 'confirm', title: 'Go on?', ...timeout && { timeout } } });
+  app.receive(ask('a', 30));
+  app.receive(ask('b'));
+  assert.deepEqual(app.state.live['work/1'].dialogs.map(dialog => dialog.id), ['a', 'b']);
+  // No window is shown here: the time runs in the store, not in the dialog on the page.
+  assert.deepEqual((await until(state => state.live['work/1'].dialogs.length === 1)).live['work/1'].dialogs.map(dialog => dialog.id), ['b']);
+});
+
 test('records the page missed are read again from the server, so it shows what a page that saw them all shows', async t => {
   const server = await startServer({ home: directory, cwd: directory, pi });
   t.after(() => server.close());
@@ -52,7 +83,8 @@ test('records the page missed are read again from the server, so it shows what a
     if (push.push === 'record' && (push.record.type === 'message_update' || push.record.type === 'message_end')) dropped.push(push.seq); else receive(push);
   };
   await Promise.all([whole, gaps].map(async ({ app, until }) => { await app.start(server.url); await until(state => state.windows.length > 0); }));
-  const settled = ({ until }: typeof whole) => until(state => state.windows[0].status === 'idle' && state.live['work/main']?.running === false && state.logs.work?.total === 2);
+  const logged = whole.app.state.logs.work.total;
+  const settled = ({ until }: typeof whole) => until(state => state.windows[0].status === 'idle' && state.live['work/main']?.running === false && state.logs.work?.total === logged + 2);
 
   assert.equal(await whole.app.send('work/main', 'hello'), true);
   const [seen, caught] = await Promise.all([settled(whole), settled(gaps)]);

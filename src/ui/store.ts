@@ -41,6 +41,7 @@ export class App {
   private closed = false;
   private readonly listeners = new Set<() => void>();
   private readonly loading = new Set<string>();
+  private readonly deadlines = new Map<string, ReturnType<typeof setTimeout>>();
   private readonly storage: () => Pick<Storage, 'getItem' | 'setItem'>;
   private readonly retry: number;
 
@@ -68,6 +69,7 @@ export class App {
   close() {
     this.closed = true;
     clearTimeout(this.retrying);
+    for (const deadline of this.deadlines.values()) clearTimeout(deadline);
     this.client?.close();
   }
   subscribe = (listener: () => void) => { this.listeners.add(listener); return () => { this.listeners.delete(listener); }; };
@@ -96,7 +98,9 @@ export class App {
     const tabs = before.length ? before : names.slice(0, 1);
     const profile = isObject(saved) && typeof saved.profile === 'string' && tabs.includes(saved.profile) ? saved.profile : tabs[0];
     const selected = isObject(saved) && isObject(saved.selected) ? Object.fromEntries(Object.entries(saved.selected).filter((entry): entry is [string, string] => typeof entry[1] === 'string')) : {};
-    this.set({ connection: 'open', profiles: names, tabs, profile, selected, windows: ordered(windows.windows), error: undefined });
+    // A server that started again numbers its windows' records from one: what was kept of a window it does not have is let go.
+    const kept = <T>(by: Record<string, T>) => Object.fromEntries(Object.entries(by).filter(([id]) => windows.windows.some(window => window.id === id)));
+    this.set({ connection: 'open', profiles: names, tabs, profile, selected, windows: ordered(windows.windows), live: kept(this.state.live), sessions: kept(this.state.sessions), error: undefined });
     await Promise.all([...tabs.map(tab => this.opened(tab)), ...windows.windows.map(async window => { await this.replayed(window.id); await this.session(window.id); })]);
   }
   /** A profile's tab needs its main window to exist, and the end of its log. */
@@ -126,7 +130,13 @@ export class App {
   }
   /** Changes one window's run. */
   private live(id: string, change: (live: Live) => Live) {
-    this.set({ live: { ...this.state.live, [id]: change(this.state.live[id] ?? idle()) } });
+    const live = change(this.state.live[id] ?? idle());
+    this.set({ live: { ...this.state.live, [id]: live } });
+    // Pi stops waiting after a dialog's `timeout` and says nothing when it does: the dialog goes then, in whichever window.
+    for (const { id: dialog, timeout } of live.dialogs) {
+      const key = `${id} ${dialog}`;
+      if (typeof timeout === 'number' && timeout > 0 && !this.deadlines.has(key)) this.deadlines.set(key, setTimeout(() => this.expire(id, String(dialog)), timeout));
+    }
   }
   private window(id: string) { return this.state.windows.find(window => window.id === id); }
   /** A window's latest run and what its Pi shows, from the server. */
@@ -204,7 +214,12 @@ export class App {
     this.expire(window, response.id);
   }
   /** Takes a dialog off the page: it was answered, or its time ran out and Pi went on without an answer. */
-  expire(window: string, id: string) { this.live(window, live => without(live, id)); }
+  private expire(window: string, id: string) {
+    const key = `${window} ${id}`;
+    clearTimeout(this.deadlines.get(key));
+    this.deadlines.delete(key);
+    this.live(window, live => without(live, id));
+  }
   dismiss() { this.set({ error: undefined }); }
 }
 export const app = new App();

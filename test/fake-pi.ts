@@ -88,15 +88,17 @@ async function run(text: string) {
   let aborted = false, answer = 'reply';
   if (text.includes('ask')) {
     write({ type: 'extension_ui_request', id: 'dialog-1', method: 'confirm', title: 'Go on?', message: 'The agent wants to continue.' });
-    answer = (await held()).answer ?? answer;
+    const answered = await held();
+    aborted = answered.aborted;
+    answer = answered.answer ?? answer;
   }
   const scripted = Object.entries(script.replies).find(([word]) => text.includes(word))?.[1];
-  for (const { content, results } of scripted?.turns ?? []) {
+  // A run stopped at its dialog says nothing more.
+  for (const { content, results } of aborted ? [] : scripted?.turns ?? []) {
     await reply(content, 'toolUse');
     content.filter(block => block.type === 'toolCall').forEach((call, at) => tool(call, results[at]));
   }
-  answer = scripted?.answer ?? answer;
-  aborted = await reply([{ type: 'text', text: answer }], 'stop', text.includes('wait') ? { at: 0 } : undefined);
+  if (!aborted) aborted = await reply([{ type: 'text', text: scripted?.answer ?? answer }], 'stop', text.includes('wait') ? { at: 0 } : undefined);
   write({ type: 'agent_end', messages: [] });
   const next = aborted ? undefined : steering.shift() ?? followUp.shift();
   if (next !== undefined) { write({ type: 'queue_update', steering, followUp }); return run(next); }

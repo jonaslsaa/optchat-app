@@ -14,20 +14,13 @@ function Dialog({ window, dialog }: { window: string; dialog: PiRecord }) {
   const id = String(dialog.id), options = Array.isArray(dialog.options) ? dialog.options.filter(option => typeof option === 'string') : [];
   const [value, setValue] = useState(typeof dialog.prefill === 'string' ? dialog.prefill : '');
   const answer = (response: { value?: string; confirmed?: boolean; cancelled?: boolean }) => void app.answer(window, { id, ...response });
-  // Pi stops waiting after the dialog's `timeout` and says nothing when it does.
-  const timeout = typeof dialog.timeout === 'number' && dialog.timeout > 0 ? dialog.timeout : undefined;
-  useEffect(() => {
-    if (timeout === undefined) return;
-    const timer = setTimeout(() => app.expire(window, id), timeout);
-    return () => clearTimeout(timer);
-  }, [window, id, timeout]);
   return (
     <div role="dialog" aria-label={String(dialog.title ?? 'Question')} className="rounded-2xl border border-warning/32 bg-warning-surface px-3.5 py-3 text-sm">
       <p className="font-medium">{String(dialog.title ?? 'Pi asks')}</p>
       {typeof dialog.message === 'string' && <p className="mt-0.5 text-muted-foreground">{dialog.message}</p>}
       {(dialog.method === 'input' || dialog.method === 'editor') && (
         <input autoFocus aria-label={String(dialog.title ?? 'Answer')} value={value} placeholder={typeof dialog.placeholder === 'string' ? dialog.placeholder : ''} onChange={event => setValue(event.target.value)}
-          onKeyDown={event => { if (event.key === 'Enter') answer({ value }); }} className="mt-2 h-8 w-full rounded-md border border-input bg-background px-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring" />
+          onKeyDown={event => { if (event.key === 'Enter' && !event.nativeEvent.isComposing) answer({ value }); }} className="mt-2 h-8 w-full rounded-md border border-input bg-background px-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring" />
       )}
       <div className="mt-2.5 flex flex-wrap justify-end gap-2">
         <Button variant="ghost-muted" onClick={() => answer(dialog.method === 'confirm' ? { confirmed: false } : { cancelled: true })}>{dialog.method === 'confirm' ? 'No' : 'Cancel'}</Button>

@@ -152,8 +152,12 @@ export const spoken = (messages: readonly PiMessage[]): Item[] => messages.flatM
  * number the log will give them. */
 export function chat(before: readonly Item[], live: Live): Item[] {
   const dates = new Set(before.map(item => item.date)), next = (before.at(-1)?.key ?? -1) + 1;
-  const fresh = live.messages.slice(live.messages.findLastIndex(message => dates.has(date(message))) + 1).flatMap(message => said(message));
-  return [...before, ...[...fresh, ...live.streaming ? writing(live.streaming) : []].map((line, n) => ({ ...line, key: next + n }))];
+  const last = live.messages.findLastIndex(message => dates.has(date(message)));
+  // The log does not name a tool call; the run does, and what a call that is still running has printed goes by that name.
+  const calls = new Map(live.messages.slice(0, last + 1).map(message => [date(message), said(message).flatMap(line => line.call ?? [])]));
+  const named = before.map(item => { const call = item.kind === 'tool' ? calls.get(item.date)?.shift() : undefined; return call ? { ...item, call } : item; });
+  const fresh = live.messages.slice(last + 1).flatMap(message => said(message));
+  return [...named, ...[...fresh, ...live.streaming ? writing(live.streaming) : []].map((line, n) => ({ ...line, key: next + n }))];
 }
 /** A profile's log with one more page read: the entries of both by their number, and of those the unbroken run up to the
  * newest, since a page that does not reach what was loaded leaves a gap nobody has read. */

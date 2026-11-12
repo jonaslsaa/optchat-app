@@ -35,6 +35,10 @@ test('a reply is the same items under the same keys while it streams, when it ha
   // pi-optchat logs the run as it goes: whatever the log has is shown from the log, and the rest from the run, once each.
   const log = [entry(40, 'user', 1, 'list the files'), entry(41, 'talk', 2, 'Looking'), entry(42, 'tool', 2, 'bash {"command":"ls"}'), entry(43, 'echo', 3, 'bash: a.ts\nb.ts'), entry(44, 'talk', 4, 'Two files.')];
   for (const length of [0, 1, 3, 4, 5]) assert.deepEqual(shown(chat([...earlier, ...logged(log.slice(0, length))], done)).slice(2), whole, `${length} entries logged`);
+  // The log does not name a tool call, and what a running call has printed goes by its name: the run gives the logged call its name.
+  const calling = run(...asked, ended(messages[0]), { type: 'tool_execution_update', toolCallId: 'c1', partialResult: { content: [text('a.ts')] } });
+  assert.deepEqual(chat(logged(log.slice(0, 3)), calling).map(item => item.call), [undefined, undefined, 'c1']);
+  assert.deepEqual(calling.tools, { c1: 'a.ts' });
   // A connected window's conversation is not in the log: its items are numbered by their place in it.
   assert.deepEqual(shown(chat(spoken([user(1, 'list the files'), messages[0]]), done)), whole.map(([key, ...rest]) => [Number(key) - 40, ...rest]));
 });

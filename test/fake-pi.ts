@@ -51,12 +51,13 @@ if ((verb === 'install' || verb === 'update') && folder && kept) {
 const profile = process.argv[process.argv.indexOf('--optchat-profile') + 1], joins = process.argv[process.argv.indexOf('--optchat-connect') + 1] === 'join';
 const write = (record: object) => process.stdout.write(`${JSON.stringify(record)}\n`);
 const status = (statusKey: string, statusText: string) => write({ type: 'extension_ui_request', id: statusKey, method: 'setStatus', statusKey, statusText });
-const role = (completed = false) => status('optchat.role', JSON.stringify(joins ? { role: 'window', profile, id: 'w1', connected: true, completed } : { role: 'owner', profile }));
+/** pi-optchat's role. `after`: when the conversation before this one was handed off, which it says from the next message on. */
+const role = (completed = false, after?: number) => status('optchat.role', JSON.stringify(joins ? { role: 'window', profile, id: 'w1', connected: true, completed, ...after !== undefined && { after } } : { role: 'owner', profile }));
 
 export type Content = { type: 'text'; text: string } | { type: 'thinking'; thinking: string } | { type: 'toolCall'; id: string; name: string; arguments: Record<string, unknown> };
 interface Said { role: string; content: Content[]; timestamp: number; stopReason?: string; errorMessage?: string; toolCallId?: string; toolName?: string; customType?: string; display?: boolean }
 const messages: Said[] = [];
-let completed = false;
+let completed = false, marked: number | undefined, after: number | undefined;
 /** Replies by a word of the prompt: turns of the agent's work, each a reply with tool calls and what those print, and then its
  * answer. With `clock` the messages' times start there and go up a second a message, where they are otherwise the time it is.
  * `handoff` is what a window writes for the main chat when it is completed. */
@@ -166,11 +167,11 @@ const commands: Record<string, (command: Record<string, unknown>) => unknown> = 
     const text = String(message);
     if (text === '/complete') {
       // A reply being written is stopped first, and the handoff follows once that run has ended.
-      const hand = () => { handoff(); role(completed = true); };
+      const hand = () => { handoff(); marked = now(); role(completed = true, after); };
       if (running) { release?.({ aborted: true }); void settled.then(hand); } else hand();
       return { disposition: 'handled' };
     }
-    if (completed) role(completed = false); // The next message begins a new conversation, and pi-optchat says so before the run.
+    if (completed) role(completed = false, after = marked); // The next message begins a new conversation, and pi-optchat says so, and from when, before the run.
     if (text.includes('crash')) { process.stderr.write('out of memory\n'); process.exit(3); }
     if (running) { (streamingBehavior === 'followUp' ? followUp : steering).push(text); write({ type: 'queue_update', steering, followUp }); return { disposition: 'queued' }; }
     settled = run(text); return { disposition: 'started' };

@@ -1,3 +1,4 @@
+import { said as recorded } from 'pi-optchat/core';
 import type { Message, PiRecord } from '../protocol.ts';
 
 /** What the chat shows, and how it gets there. The chat is the profile's log: every item is a log entry, or what a message Pi
@@ -111,28 +112,22 @@ export const stopped = (live: Live): Live => ({ ...live, running: false, streami
 export const without = (live: Live, id: unknown): Live => ({ ...live, dialogs: live.dialogs.filter(dialog => dialog.id !== id) });
 
 const date = (message: PiMessage) => new Date(message.timestamp).toISOString();
-/** What pi-optchat logs a message as (its `said`): your words as `user`, a reply's text as `talk` and its tool calls as `tool`,
- * a tool's result and a failed reply as `echo`, and what OptChat itself puts in the chat (a subagent's report) as `work`. */
+/** What pi-optchat logs a message as, by its own `said`: your words as `user`, a reply's text as `talk` and its tool calls as
+ * `tool`, a tool's result and a failed reply as `echo`. What OptChat itself puts in the chat (a subagent's report) is Pi's
+ * custom message, which pi-optchat logs as `work` where it sends it. A tool call keeps its id, which the log does not have,
+ * and an image is named as one: the log names it by its file, which is not written yet. */
 export function said(message: PiMessage, streaming = false): Line[] {
-  const at = date(message), lines: Line[] = [];
-  const add = (kind: Line['kind'], text: string, call?: string) => lines.push({ kind, text, date: at, ...streaming && { streaming }, ...call && { call } });
-  if (message.role === 'user') add('user', words(message.content));
-  else if (message.role === 'custom' && message.display !== false && words(message.content)) add('work', words(message.content));
-  else if (message.role === 'toolResult') add('echo', `${message.toolName}: ${words(message.content)}`);
-  else if (message.role === 'assistant' && Array.isArray(message.content)) {
-    for (const block of message.content) {
-      if (!isObject(block)) continue;
-      if (block.type === 'text' && typeof block.text === 'string' && block.text.trim()) add('talk', block.text);
-      if (block.type === 'toolCall') add('tool', `${block.name} ${JSON.stringify(block.arguments ?? {})}`, String(block.id));
-    }
-    if (message.stopReason === 'error' || message.stopReason === 'aborted') add('echo', `Agent ${message.stopReason}: ${message.errorMessage ?? 'No further details'}`);
-  }
-  return lines;
+  const report = message.role === 'custom' && message.display !== false && words(message.content);
+  const calls = Array.isArray(message.content) ? message.content.flatMap(block => isObject(block) && block.type === 'toolCall' ? String(block.id) : []) : [];
+  return (report ? [['work', report] as const] : recorded(message, { imageRef: () => '[image]' })).map(([kind, text]) => {
+    const call = kind === 'tool' ? calls.shift() : undefined;
+    return { kind, text, date: date(message), ...streaming && { streaming }, ...call && { call } };
+  });
 }
 /** The reply being written, as the lines it will become. A tool call is shown with its arguments as far as they parse. */
 function writing({ timestamp, blocks }: NonNullable<Live['streaming']>): Line[] {
   // A block can be missing: the array has a hole where a later block started first.
-  const content = Array.from(blocks, block => block?.type === 'toolCall' && block.arguments === undefined ? { ...block, arguments: partial(block.json) } : block);
+  const content = Array.from(blocks, block => block?.type === 'toolCall' && block.arguments === undefined ? { ...block, arguments: partial(block.json) } : block).filter(block => block !== undefined);
   return said({ role: 'assistant', timestamp, content }, true);
 }
 function partial(json: string): unknown {

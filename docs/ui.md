@@ -44,7 +44,7 @@ npm run screenshots       # a PNG of every main state, in /tmp/optchat-app-shots
 | `src/ui/ui.tsx`, `WorkLog.tsx`, `markdownStreamBlocks.ts`, `index.css` | Buttons, tool-call rows, the Markdown splitter and the design tokens, from T3 Code. |
 | `src/window.ts` | What a window can do (`canComplete`) and which of its Pi's messages are the conversation it is in (`current`), for the server and the page alike. |
 
-**One chat, three sources.** Every item in the chat is a log entry, or what a message Pi has not logged yet will be logged as (`said` mirrors pi-optchat's own). So a reply looks the same while it streams, when it has ended and after a restart, and keeps what you opened in it. The live test checks that the two readings agree on a real turn.
+**One chat, three sources.** Every item in the chat is a log entry, or what a message Pi has not logged yet will be logged as (by pi-optchat's own `said`, from `pi-optchat/core`). So a reply looks the same while it streams, when it has ended and after a restart, and keeps what you opened in it. The live test checks that the two readings agree on a real turn.
 
 **Joining the log with the run.** pi-optchat dates an entry with its message's time and logs a run in order, so a message of the run counts as logged once the log has an entry of its time, and so does everything before it. That is an interim rule: a run number published by pi-optchat would be sound where timestamps are not.
 

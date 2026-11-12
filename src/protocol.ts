@@ -59,12 +59,12 @@ const Installed = Type.Enum(['pi', 'optchat']);
 /** The providers the app starts a sign-in for, by Pi's name for them: the ones Pi signs in to with an account, in the browser.
  * A sign-in is only ever started for one of these. */
 const Account = Type.Enum(['anthropic', 'openai-codex', 'github-copilot']);
-/** What the app needs, and whether it is there: Pi (`run`: what runs it in a terminal; `shell`: for the Pi the app installed
+/** What the app needs, and whether it is there: Pi (`shell`: for the Pi the app installed
  * into its own folder, the line that puts it on your PATH), pi-optchat in that Pi, and a model provider that is logged in
  * (`providers`: those that are; `terminal`: the app can open a terminal here for Pi's sign-in, `signIn`). `job` is an install the app is running, or the last one it ran: `line` is the latest line it
  * printed, and `output` the end of everything it printed once it has failed. */
 export const Setup = Type.Object({
-  pi: Type.Intersect([Need, Type.Object({ run: Type.Optional(Type.String()), shell: Type.Optional(Type.String()) })]),
+  pi: Type.Intersect([Need, Type.Object({ shell: Type.Optional(Type.String()) })]),
   optchat: Need,
   login: Type.Intersect([Need, Type.Object({ providers: Type.Array(Type.String()), terminal: Type.Optional(Type.Boolean()) })]),
   job: Type.Optional(Type.Object({ what: Installed, state: Type.Enum(['running', 'done', 'failed']), line: Type.String(), output: Type.Optional(Type.String()) })),
@@ -80,6 +80,9 @@ const method = <P extends TSchema, R extends TSchema>(params: P, result: R) => (
 export const methods = {
   /** The profiles on disk. */
   profiles: method(none, Type.Object({ profiles: Type.Array(Type.Object({ name: Type.String() })) })),
+  /** Makes a new, empty profile, as pi-optchat makes one (its `createProfile`): refused when the name is not one pi-optchat
+   * takes, or is taken. The one thing the app writes among pi-optchat's files; a profile that exists is Pi's alone to write. */
+  createProfile: method(Type.Object({ name: Type.String() }), none),
   /** A page of a profile's log, read from disk: the `limit` messages before message `before` (the newest ones by default),
    * oldest first. `total` is how many messages the log has. */
   history: method(Type.Object({ profile: Type.String(), before: Type.Optional(id), limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 500 })) }),

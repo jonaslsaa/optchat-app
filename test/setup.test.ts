@@ -104,13 +104,14 @@ test('with no Pi on the machine the app installs one into its own folder, and wi
   await assert.rejects(request('prompt', { window: window.id, text: 'hello' }), /Pi is not installed/);
 
   await request('install', { what: 'pi' });
-  const bin = join(folder, 'pi', 'node_modules', '.bin'), { pi, job } = await ended();
+  const bin = join(folder, 'pi', 'node_modules', '.bin'), { pi, job, optchat } = await ended();
   assert.partialDeepStrictEqual({ pi, job }, { pi: { state: 'ok', path: join(bin, 'pi') }, job: { what: 'pi', state: 'done' } });
   assert.deepEqual(await request('prompt', { window: window.id, text: 'hello' }), { disposition: 'started' });
-  // The line for your shell's profile puts that folder on the PATH as it is, and the line that runs Pi runs that Pi.
+  // The line for your shell's profile puts that folder on the PATH as it is, and a command the page shows runs that Pi.
   const sh = (line: string) => execFileSync('/bin/sh', ['-c', line], { encoding: 'utf8', env: { ...process.env, PATH: '/usr/bin:/bin' } }).trim();
   assert.equal(sh(`${pi.shell}; command -v pi`), join(bin, 'pi'));
-  assert.equal(sh(`${pi.run} --version`), '1.5.2');
+  assert.match(optchat.command ?? '', / install npm:pi-optchat$/);
+  assert.equal(sh(optchat.command!.replace(/ install npm:pi-optchat$/, ' --version')), '1.5.2');
 });
 
 test('the pi on the PATH is run by its whole path, and a PATH entry that is not a whole path is passed over', async t => {
@@ -126,7 +127,7 @@ test('the pi on the PATH is run by its whole path, and a PATH entry that is not 
 
   process.env.PATH = `${bin}${delimiter}${path}`;
   const whole = await setup(t, { pi: { command: 'pi-whole', args: [] } }, { version: '1.5.2', providers: [], packages: {} });
-  assert.partialDeepStrictEqual(await whole.request('setup', {}), { pi: { state: 'ok', path: join(bin, 'pi-whole'), run: 'pi-whole' } });
+  assert.partialDeepStrictEqual(await whole.request('setup', {}), { pi: { state: 'ok', path: join(bin, 'pi-whole') } });
   const { window } = await whole.request('open', { profile: 'work' });
   assert.deepEqual(await whole.request('prompt', { window: window.id, text: 'hello' }), { disposition: 'started' });
 });
@@ -138,7 +139,7 @@ test('the app\'s own Pi stays the app\'s to update once its folder is on your PA
   const { ended, request } = await setup(t, { app, pi: { command: 'pi', args: [] } });
   await request('install', { what: 'pi' });
   const { pi } = await ended();
-  assert.partialDeepStrictEqual(pi, { state: 'ok', path: join(bin, 'pi'), run: 'pi' });
+  assert.partialDeepStrictEqual(pi, { state: 'ok', path: join(bin, 'pi') });
   assert.equal(pi.shell, undefined);
 
   mkdirSync(join(app, 'pi', 'home'));

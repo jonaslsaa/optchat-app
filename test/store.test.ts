@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { createServer } from 'node:net';
-import { existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { test, type TestContext } from 'node:test';
@@ -142,4 +142,29 @@ test('a sign-in waits for Pi to say it is done, and stops asking when you cancel
   writeFileSync(state, JSON.stringify({ version: '1.5.2', providers: ['anthropic'], packages: {} }));
   await sleep(150);
   assert.equal(app.state.setup?.login.state, 'missing');
+});
+
+test('the first profile is made from the page: pi-optchat makes it, and it opens', async t => {
+  const home = temporaryHome();
+  const server = await startServer({ home, app: mkdtempSync(join(home, 'app-')), cwd: home, pi });
+  t.after(() => server.close());
+  const { app } = page(t);
+  await app.start(server.url);
+  assert.deepEqual([app.state.profiles, app.state.profile], [[], undefined]);
+
+  // What makes a name is pi-optchat's to say, and the page says it after it.
+  assert.equal(await app.createProfile('My Chat'), false);
+  assert.match(app.state.error ?? '', /Profile names: 1–64 lowercase letters, digits, hyphens, or underscores\./);
+  assert.equal(await app.createProfile('../elsewhere'), false);
+  assert.equal(existsSync(join(home, 'profiles')), false, 'and nothing is written for a name that will not do');
+
+  assert.equal(await app.createProfile('first'), true);
+  assert.deepEqual([app.state.profiles, app.state.profile, app.state.windows.map(window => window.id)], [['first'], 'first', ['first/main']]);
+  // The profile is pi-optchat's own: its settings and its instructions, where pi-optchat keeps them.
+  assert.deepEqual(readdirSync(join(home, 'profiles', 'first')).sort(), ['AGENTS.md', 'config.json']);
+  assert.equal(await app.send('first/main', 'hello'), true);
+  // One that is there is not made again, nor written over.
+  app.dismiss();
+  assert.equal(await app.createProfile('first'), false);
+  assert.match(app.state.error ?? '', /Profile already exists: first/);
 });

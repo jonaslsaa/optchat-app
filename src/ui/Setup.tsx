@@ -1,5 +1,5 @@
-import { CheckIcon, CircleAlertIcon, CircleDashedIcon, CopyIcon, LogInIcon, RefreshCwIcon } from 'lucide-react';
-import { useState, type ReactNode } from 'react';
+import { CheckIcon, CircleAlertIcon, CircleDashedIcon, CopyIcon, LogInIcon, PlusIcon, RefreshCwIcon } from 'lucide-react';
+import { useState, type FormEvent, type ReactNode } from 'react';
 import type { Params, Setup as SetupState } from '../protocol.ts';
 import { app, type State } from './store.ts';
 import { Button, cn, Spinner } from './ui.tsx';
@@ -70,6 +70,19 @@ function SignIn({ signingIn }: { signingIn?: Provider }) {
   );
 }
 
+/** The first profile: a name, and pi-optchat makes it. The server says so when the name will not do. */
+function NewProfile() {
+  const [name, setName] = useState(''), [making, setMaking] = useState(false);
+  const make = (event: FormEvent) => { event.preventDefault(); setMaking(true); void app.createProfile(name.trim()).finally(() => setMaking(false)); };
+  return (
+    <form onSubmit={make} className="mt-2 flex flex-wrap items-center gap-2">
+      <input aria-label="Profile name" value={name} onChange={event => setName(event.target.value)} placeholder="work" autoCapitalize="off" autoCorrect="off" spellCheck={false} maxLength={64}
+        className="h-7 w-48 rounded-md border bg-background px-2 text-sm outline-none placeholder:text-muted-foreground/70 focus-visible:ring-2 focus-visible:ring-ring" />
+      <Button type="submit" variant="outline" disabled={making || !name.trim()}>{making ? <Spinner /> : <PlusIcon />}Create profile</Button>
+    </form>
+  );
+}
+
 export function Setup({ state }: { state: State }) {
   const { setup } = state, job = setup?.job, busy = job?.state === 'running';
   const [checking, setChecking] = useState(false);
@@ -96,8 +109,10 @@ export function Setup({ state }: { state: State }) {
         <Step name="A model" need={login} found={login?.providers.length ? `logged in: ${login.providers.join(', ')}` : undefined}>
           {login?.terminal && login.state === 'missing' && <SignIn signingIn={state.signingIn} />}
         </Step>
-        <Step name="A profile" need={state.profiles.length ? { state: 'ok' } : pi?.version ? { state: 'missing', message: 'A profile is one chat that never ends. The first one is made in a terminal: run Pi there, choose "+ Create profile", then check again here.', command: pi.run } : { state: 'unknown' }}
-          found={state.profiles.length ? state.profiles.join(', ') : undefined} />
+        <Step name="A profile" need={state.profiles.length ? { state: 'ok' } : { state: 'missing', message: 'A profile is one chat that never ends. Name your first: lowercase letters, digits, hyphens and underscores.' }}
+          found={state.profiles.length ? state.profiles.join(', ') : undefined}>
+          {!state.profiles.length && <NewProfile />}
+        </Step>
       </ul>
       <Button variant="ghost-muted" className="mt-1" disabled={checking || busy} onClick={check}>{checking ? <Spinner /> : <RefreshCwIcon />}Check again</Button>
     </section>

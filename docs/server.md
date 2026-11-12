@@ -30,6 +30,7 @@ The client sends `{ id, method, params }` and gets `{ id, result }` or `{ id, er
 | Method | What it does |
 | --- | --- |
 | `profiles` | The profiles on disk. |
+| `createProfile { name }` | Makes a new, empty profile with pi-optchat's own `createProfile`. Refused when pi-optchat does not take the name, or it is taken. |
 | `history { profile, before?, limit? }` | A page of the log, read from disk: the messages before `before`, newest page by default. |
 | `view { profile }` | The lines the agent sees this turn, as `{ id, n, text? }`: the `n` messages from `id` on. |
 | `zoom { profile, id, n }` | Opens a line into the two lines under it. |

@@ -1,6 +1,6 @@
 import type { Part } from 'pi-optchat/core';
 import { existsSync } from 'node:fs';
-import { fingerprint, listProfiles, memoryDirectory, profilePath, readImage, readMemory, type Memory } from 'pi-optchat/files';
+import { createProfile, fingerprint, listProfiles, memoryDirectory, profilePath, readImage, readMemory, type Memory } from 'pi-optchat/files';
 import type { Line, Params, Result } from '../protocol.ts';
 
 const PAGE = 50;
@@ -21,6 +21,8 @@ export class Profiles {
   constructor(home: string) { this.home = home; }
 
   list(): Result<'profiles'> { return { profiles: listProfiles(this.home).map(name => ({ name })) }; }
+  /** A new, empty profile, made by pi-optchat's own hand: its name is pi-optchat's to judge, and its files pi-optchat's to write. */
+  create({ name }: Params<'createProfile'>): Result<'createProfile'> { createProfile(name, this.home); return {}; }
   /** The profile's memory as its files are now: read again only when they changed. */
   private memory(profile: string) {
     // An import moves the profile's memory to another directory, which is a change too.

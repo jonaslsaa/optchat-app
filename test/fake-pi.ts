@@ -46,10 +46,13 @@ const commands: Record<string, (command: Record<string, unknown>) => unknown> = 
   extension_ui_response: ({ confirmed }) => { finish?.(false, `confirmed: ${confirmed}`); },
 };
 
-if (profile === 'busy') write({ type: 'extension_error', extensionPath: 'pi-optchat', event: 'session_start', error: `Profile already running: ${profile} · PID 1` });
-else if (profile !== 'bare') {
+const status = (statusText: string) => write({ type: 'extension_ui_request', id: 's', method: 'setStatus', statusKey: 'optchat', statusText });
+if (profile === 'busy') {
+  status('OptChat: choose profile');
+  write({ type: 'extension_error', extensionPath: 'pi-optchat', event: 'session_start', error: `Profile already running: ${profile} · PID 1` });
+} else if (profile !== 'bare') {
   if (profile === 'noisy') write({ type: 'extension_error', extensionPath: 'something-else', event: 'session_start', error: 'No API key' });
-  write({ type: 'extension_ui_request', id: 's', method: 'setStatus', statusKey: 'optchat', statusText: `OptChat: ${profile} · 0 messages` });
+  status(`OptChat: ${profile} · 0 messages`);
   role();
 }
 let buffer = '';

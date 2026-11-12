@@ -71,7 +71,9 @@ export class Pi {
     const kill = setTimeout(() => {
       const { pid } = this.child;
       if (pid === undefined || this.child.exitCode !== null || this.child.signalCode !== null) return;
-      try { process.kill(process.platform === 'win32' ? pid : -pid, 'SIGKILL'); } catch {}
+      // With everything it started: its process group, or on Windows its process tree.
+      if (process.platform === 'win32') spawn('taskkill', ['/pid', String(pid), '/T', '/F']).on('error', () => {});
+      else try { process.kill(-pid, 'SIGKILL'); } catch {}
     }, grace);
     await this.exited;
     clearTimeout(kill);

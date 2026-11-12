@@ -31,8 +31,8 @@ interface Opened {
 /** What pi-optchat says a Pi in RPC mode is to its profile: JSON in a `setStatus` with this key (its docs/connected-windows.md).
  * This is the one place that reads it, and it reads only these two fields. */
 const ROLE_STATUS = 'optchat.role';
-/** pi-optchat's status line, which it sets once it has opened the profile. */
-const OPENED_STATUS = 'status optchat';
+/** pi-optchat's status line: `OptChat: <profile> · ...` once it has opened the profile, and something else before. */
+const opens = ({ ui, state }: Opened) => { const line = ui.get('status optchat')?.statusText; return typeof line === 'string' && line.startsWith(`OptChat: ${state.profile} ·`); };
 const Role = Type.Object({ role: Type.Enum(['owner', 'window']), completed: Type.Optional(Type.Boolean()) });
 const DIALOGS = ['select', 'confirm', 'input', 'editor'];
 const mainId = (profile: string) => `${profile}/main`;
@@ -143,7 +143,7 @@ export class Windows {
       // Pi answers once its extensions have started the session, so by now pi-optchat has the profile or has said why not.
       // Without its profile it takes every prompt and answers nothing, so such a Pi is stopped, not left looking idle.
       await pi.request({ type: 'get_state' });
-      if (!opened.ui.has(OPENED_STATUS)) throw new Error(opened.fault ?? 'pi-optchat did not open the profile. Is it installed in this Pi? (pi install npm:pi-optchat)');
+      if (!opens(opened)) throw new Error(opened.fault ?? 'pi-optchat did not open the profile. Is it installed in this Pi? (pi install npm:pi-optchat)');
     } catch (error) {
       opened.fault = reason(error);
       await pi.stop(grace);
@@ -192,20 +192,21 @@ export class Windows {
     else if (method === 'setWidget') keep(`widget ${String(widgetKey)}`, widgetLines !== undefined);
     else if (method === 'setStatus') {
       keep(`status ${String(statusKey)}`, statusText !== undefined);
-      if (statusKey === ROLE_STATUS && typeof statusText === 'string') this.role(opened, statusText);
+      if (statusKey === ROLE_STATUS) this.role(opened, statusText);
     } else if (typeof id === 'string' && typeof method === 'string' && DIALOGS.includes(method)) {
       keep(`dialog ${id}`);
       // Pi answers a dialog itself when its time is up.
       if (typeof timeout === 'number' && timeout > 0) setTimeout(() => opened.ui.delete(`dialog ${id}`), timeout).unref();
     }
   }
-  private role(opened: Opened, status: string) {
+  /** `status` is pi-optchat's role as JSON, or nothing once its Pi has no profile open. */
+  private role(opened: Opened, status: unknown) {
     let role: unknown;
-    try { role = JSON.parse(status); } catch { return; }
-    if (!Value.Check(Role, role)) return;
-    const { state } = opened, owner = role.role === 'owner', completed = role.completed || undefined;
+    try { role = JSON.parse(String(status)); } catch {}
+    const { state } = opened, said = Value.Check(Role, role) ? role : undefined;
+    const owner = said && said.role === 'owner', completed = said?.completed || undefined;
     if (state.owner === owner && state.completed === completed) return;
-    state.owner = owner;
+    if (owner === undefined) delete state.owner; else state.owner = owner;
     if (completed) state.completed = true; else delete state.completed;
     this.changed(opened);
   }

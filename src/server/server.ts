@@ -1,5 +1,6 @@
 import { createServer, type IncomingMessage } from 'node:http';
 import { homedir } from 'node:os';
+import { resolve } from 'node:path';
 import type { AddressInfo } from 'node:net';
 import { Value } from 'typebox/value';
 import { WebSocket, WebSocketServer } from 'ws';
@@ -21,6 +22,7 @@ const loopback = (url: string) => { try { return LOOPBACK.includes(new URL(url).
 /** Starts the app's server on this machine only: the protocol of `protocol.ts` on a WebSocket at `/ws`, and a profile's images at
  * `/images/<profile>/<name>`. `close` stops every Pi it started and waits for them. */
 export async function startServer({ port = 0, origins = [], home = defaultHome(), cwd = homedir(), pi = { command: 'pi', args: [] }, grace = 15_000 }: ServerOptions = {}) {
+  home = resolve(home); // Pi runs in each window's directory, and has to find the same profiles from there.
   const profiles = new Profiles(home), sockets = new WebSocketServer({ noServer: true });
   let closing = false;
   const send = (socket: WebSocket, message: ServerMessage) => { if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify(message)); };

@@ -13,7 +13,7 @@ import { killTree, Pi } from './pi.ts';
  * one state per thing with one message that names the exact command, and installs that push their latest line as they run. */
 
 /** The Pi and pi-optchat this app is tested with; older ones are told to update. */
-export const MINIMUM_PI = '1.5.2', MINIMUM_OPTCHAT = '0.11.9';
+export const MINIMUM_PI = '1.5.2', MINIMUM_OPTCHAT = '0.11.10';
 const PI_PACKAGE = '@earendil-works/pi-coding-agent', OPTCHAT = 'npm:pi-optchat';
 /** A command, and the arguments that are part of it (a script's path, for a Pi that is run through Node). */
 export interface Launch { command: string; args: readonly string[] }

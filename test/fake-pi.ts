@@ -40,7 +40,7 @@ if ((verb === 'install' || verb === 'update') && folder && kept) {
     const name = source.replace('npm:', ''), path = join(folder, 'npm', 'node_modules', name);
     console.log(`Installing ${source}...\n`);
     mkdirSync(path, { recursive: true });
-    writeFileSync(join(path, 'package.json'), JSON.stringify({ name, version: '0.11.9' }));
+    writeFileSync(join(path, 'package.json'), JSON.stringify({ name, version: '0.11.10' }));
     installed.packages[source] = path;
     console.log(`added 1 package in 409ms\nInstalled ${source}`);
   }

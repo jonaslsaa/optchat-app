@@ -167,8 +167,8 @@ test('a tool call is said in words: what it did or is doing, and to what', () =>
   assert.deepEqual(act(call('spawn', { tasks: [{ title: 'Why it flakes', task: 'Look.' }] }, 'Started: 1a2b3c4d.'), false), { verb: 'Started an agent:', subject: 'Why it flakes', detail: [{ text: 'Why it flakes\nLook.' }] });
   assert.partialDeepStrictEqual(act(call('spawn', { tasks: [{ title: 'One', task: '…' }, { title: 'Two', task: '…' }] }), true), { verb: 'Starting 2 agents:', subject: 'One, Two' });
   // OptChat's own tools are said in words too. A tool the app does not know goes by its name.
-  assert.deepEqual(act(call('zoom', { id: 128, n: 4 }, '…'), false), { verb: 'Looked back at', subject: '128+4', detail: [] });
-  assert.deepEqual(act(call('tell', { id: '1a2b3c4d', message: 'Stop there.' }, 'Sent.'), false), { verb: 'Told', subject: '1a2b3c4d', detail: [{ text: 'Stop there.' }] });
+  assert.deepEqual(act(call('zoom', { n: 4, id: 128 }, '…'), false), { verb: 'Looked back at', subject: '128+4', detail: [] });
+  assert.deepEqual(act(call('tell', { message: 'Stop there.', id: '1a2b3c4d' }, 'Sent.'), false), { verb: 'Told', subject: '1a2b3c4d', detail: [{ text: 'Stop there.' }] });
   assert.deepEqual(act(call('fetch', { url: 'https://pi.dev' }, '…'), false), { verb: 'fetch', subject: 'https://pi.dev', detail: [] });
 });
 
@@ -179,9 +179,7 @@ test('an opened tool call shows what its line does not say, and no JSON for a ca
     { change: 'removed', text: '− let a = 1;\n− let b;' }, { change: 'added', text: '+ const a = 1;' }, { text: '…' }, { change: 'removed', text: '− unused();' },
   ]);
   assert.deepEqual(shown('write', { path: 'notes.md', content: '# Notes\n\nOne.\n' }), [{ text: '# Notes\n\nOne.\n' }]);
-  // A command is shown only when the line cannot hold it.
-  const long = `npm test -- ${'--test-name-pattern reconnect '.repeat(4)}`;
-  assert.deepEqual(shown('bash', { command: long }), [{ text: long }]);
+  // A command is said by its line, unless it is more than a line.
   assert.deepEqual(shown('bash', { command: 'cd src\nls' }), [{ text: 'cd src\nls' }]);
   // What the line leaves out of a call is shown as it was given.
   assert.deepEqual(shown('grep', { pattern: 'retry', glob: '*.ts', limit: null }), [{ text: '{\n  "pattern": "retry",\n  "glob": "*.ts"\n}' }]);

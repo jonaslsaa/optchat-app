@@ -69,8 +69,8 @@ export const NoteRow = memo(function NoteRow({ part }: { part: Of<'note'> }) {
 
 const ICONS: [RegExp, LucideIcon][] = [[/bash|shell|exec/, TerminalIcon], [/read|view|cat/, EyeIcon], [/write|edit|patch/, SquarePenIcon], [/grep|find|search|ls|glob/, SearchIcon], [/web|fetch|http/, GlobeIcon], [/spawn|tell|agent/, BotIcon], [/zoom|date/, HistoryIcon]];
 const Output = ({ children }: { children: ReactNode }) => <pre className="max-h-64 cursor-text select-text overflow-auto whitespace-pre-wrap break-words rounded-md border border-border/60 bg-secondary px-2.5 py-2 font-mono text-2xs text-secondary-label leading-relaxed dark:border-transparent dark:bg-input/32">{children}</pre>;
-/** A tool call as one line saying what it did, which opens to what the line does not say of the call (the lines an edit
- * changed, a command cut short) and what it printed. `live`: the agent is still at work; `running` is the call's output so far, while Pi runs it. */
+/** A tool call as one line saying what it did. Opened, the line is there whole, with under it what it does not say of the call
+ * (the lines an edit changed, the text of a file) and what the call printed. `live`: the agent is still at work; `running` is the call's output so far, while Pi runs it. */
 function ToolRow({ step, live, running }: { step: Tool; live: boolean; running?: string }) {
   const [open, setOpen] = useState(false);
   const Icon = ICONS.find(([pattern]) => pattern.test(step.name))?.[1] ?? WrenchIcon, printed = step.output ?? running, { verb, subject, detail } = act(step, live);
@@ -81,7 +81,7 @@ function ToolRow({ step, live, running }: { step: Tool; live: boolean; running?:
       onKeyDown={event => { if (event.target === event.currentTarget && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); setOpen(!open); } }}
       icon={<span className="flex size-4 items-center justify-center text-icon-muted"><Icon className="block size-4 shrink-0 stroke-2" /></span>}
       label={<><span className={cn('font-medium', step.failed && 'text-destructive')}>{verb}</span> <span className={cn('opacity-80', step.name === 'bash' && 'font-mono')}>{subject}</span></>}
-      trailing={<span className="flex h-6 items-center gap-1">
+      trailing={<span className="flex h-6 items-center gap-1 self-start">
         {running !== undefined && step.output === undefined && <Spinner className="text-icon-muted" />}
         {step.failed && <XIcon aria-label="Failed" className="size-3 shrink-0 text-tool-error-icon/60" />}
         <ChevronRightIcon className={cn('size-3 shrink-0 text-icon-muted opacity-70 transition-transform duration-200', open && 'rotate-90')} />

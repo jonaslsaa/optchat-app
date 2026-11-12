@@ -3,10 +3,10 @@ import { createServer, type IncomingMessage } from 'node:http';
 import { homedir } from 'node:os';
 import { extname, join, resolve, sep } from 'node:path';
 import type { AddressInfo } from 'node:net';
+import { dataHome } from 'pi-optchat/files';
 import { Value } from 'typebox/value';
 import { WebSocket, WebSocketServer } from 'ws';
 import { Envelope, methods, type Method, type Params, type Result, type ServerMessage } from '../protocol.ts';
-import { defaultHome } from './disk.ts';
 import { reason } from './pi.ts';
 import { Profiles } from './profiles.ts';
 import { Windows, type WindowsOptions } from './windows.ts';
@@ -25,7 +25,7 @@ const loopback = (url: string) => { try { return LOOPBACK.includes(new URL(url).
 
 /** Starts the app's server on this machine only: the protocol of `protocol.ts` on a WebSocket at `/ws`, a profile's images at
  * `/images/<profile>/<name>`, and the UI's page everywhere else. `close` stops every Pi it started and waits for them. */
-export async function startServer({ port = 0, origins = [], ui = join(import.meta.dirname, '../../dist/ui'), home = defaultHome(), cwd = homedir(), pi = { command: 'pi', args: [] }, grace = 15_000 }: ServerOptions = {}) {
+export async function startServer({ port = 0, origins = [], ui = join(import.meta.dirname, '../../dist/ui'), home = dataHome(), cwd = homedir(), pi = { command: 'pi', args: [] }, grace = 15_000 }: ServerOptions = {}) {
   ui = resolve(ui);
   home = resolve(home); // Pi runs in each window's directory, and has to find the same profiles from there.
   const profiles = new Profiles(home), sockets = new WebSocketServer({ noServer: true });

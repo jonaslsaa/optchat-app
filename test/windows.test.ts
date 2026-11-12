@@ -208,7 +208,8 @@ test('only this machine\'s pages connect, and a request the server cannot serve 
 
   // @ts-expect-error: the compiler refuses it too.
   await assert.rejects(request('history', { profile: 'work', limit: 'all' }), /Invalid history request/);
-  await assert.rejects(request('open', { profile: '../etc' }), /No profile named/);
+  await assert.rejects(request('open', { profile: '../etc' }), /Profile names:/);
+  await assert.rejects(request('open', { profile: 'nobody' }), /No profile named nobody/);
   const { window } = await request('open', { profile: 'work' });
   await request('prompt', { window: window.id, text: 'hello' });
   await assert.rejects(request('command', { window: window.id, command: { type: 'extension_ui_response', id: 'dialog-1' } }), /Send it with `answer`/);

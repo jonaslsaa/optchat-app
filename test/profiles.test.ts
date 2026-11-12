@@ -20,22 +20,22 @@ test('a long history is paged from disk, and reading a profile writes nothing to
   writeMemory(directory, 20_000);
   const before = files(directory);
 
-  const newest = profiles.history({ profile: 'long' });
+  const newest = await profiles.history({ profile: 'long' });
   assert.equal(newest.total, 20_000);
   assert.deepEqual(newest.messages.map(m => m.i), Array.from({ length: 50 }, (_, k) => 19_950 + k));
   assert.deepEqual(newest.messages.at(-1), { i: 19_999, kind: 'talk', date: '2026-01-01T05:33:19.000Z', text: 'message 19999' });
-  const older = profiles.history({ profile: 'long', before: newest.messages[0].i, limit: 100 });
+  const older = await profiles.history({ profile: 'long', before: newest.messages[0].i, limit: 100 });
   assert.deepEqual([older.messages[0].i, older.messages.at(-1)?.i, older.messages.length], [19_850, 19_949, 100]);
-  assert.deepEqual((profiles.history({ profile: 'long', before: 3 })).messages.map(m => m.i), [0, 1, 2]);
+  assert.deepEqual((await profiles.history({ profile: 'long', before: 3 })).messages.map(m => m.i), [0, 1, 2]);
 
-  profiles.view({ profile: 'long' });
+  await profiles.view({ profile: 'long' });
   assert.deepEqual(files(directory), before);
   assert.deepEqual(profiles.list(), { profiles: [{ name: 'long' }] });
 });
 
 test('the view tiles the whole log, and a line opens into the two under it', async () => {
   writeMemory(createProfile(home, 'tree'), 20_000, i => `message ${i} ${'x'.repeat(200)}`);
-  const { total, lines } = profiles.view({ profile: 'tree' });
+  const { total, lines } = await profiles.view({ profile: 'tree' });
   let covered = 0;
   for (const line of lines) { assert.equal(line.id, covered); covered += line.n; }
   assert.equal(covered, total);
@@ -43,24 +43,24 @@ test('the view tiles the whole log, and a line opens into the two under it', asy
   assert.ok(n >= 2 && lines.length < total / 4, 'the old end of a long log is folded into summaries');
   assert.equal(lines[0].text, `summary of 0+${n}`);
 
-  assert.deepEqual(profiles.zoom({ profile: 'tree', id: 0, n }), { lines: [{ id: 0, n: half, text: `summary of 0+${half}` }, { id: half, n: half, text: `summary of ${half}+${half}` }] });
-  assert.match((profiles.zoom({ profile: 'tree', id: 6, n: 2 })).lines[1].text ?? '', /^talk: message 7 /);
-  assert.throws(() => profiles.zoom({ profile: 'tree', id: 3, n: 2 }), /No line 3\+2/);
+  assert.deepEqual(await profiles.zoom({ profile: 'tree', id: 0, n }), { lines: [{ id: 0, n: half, text: `summary of 0+${half}` }, { id: half, n: half, text: `summary of ${half}+${half}` }] });
+  assert.match((await profiles.zoom({ profile: 'tree', id: 6, n: 2 })).lines[1].text ?? '', /^talk: message 7 /);
+  await assert.rejects(profiles.zoom({ profile: 'tree', id: 3, n: 2 }), /No line 3\+2/);
 });
 
 test('a summary the owning Pi has not built yet is a line without text: the app summarizes nothing', async () => {
   const directory = createProfile(home, 'unbuilt'), long = 'long '.repeat(200);
   mkdirSync(join(directory, 'main'));
   writeFileSync(join(directory, 'main', '2026-01-02.jsonl'), [0, 1, 2, 3].map(i => entry(i, long)).join(''));
-  assert.deepEqual((profiles.view({ profile: 'unbuilt' })).lines, [0, 1, 2, 3].map(id => ({ id, n: 1, text: undefined })));
+  assert.deepEqual((await profiles.view({ profile: 'unbuilt' })).lines, [0, 1, 2, 3].map(id => ({ id, n: 1, text: undefined })));
 });
 
 test('what the owning Pi wrote since the last read is there on the next one', async () => {
   const directory = createProfile(home, 'live');
   writeMemory(directory, 2);
-  assert.equal((profiles.history({ profile: 'live' })).total, 2);
+  assert.equal((await profiles.history({ profile: 'live' })).total, 2);
   appendFileSync(join(directory, 'main', '2026-01-01.jsonl'), entry(2, 'a new message'));
-  assert.partialDeepStrictEqual((profiles.history({ profile: 'live' })).messages.at(-1), { i: 2, text: 'a new message' });
+  assert.partialDeepStrictEqual((await profiles.history({ profile: 'live' })).messages.at(-1), { i: 2, text: 'a new message' });
 });
 
 test('after an import the active memory generation is read, and an old import\'s header is not part of its message', async () => {
@@ -71,7 +71,7 @@ test('after an import the active memory generation is read, and an old import\'s
   writeFileSync(join(directory, generation, 'main', '2026-01-02.jsonl'),
     entry(0, '[Historical claude · 2026-03-27T13:24:25.262Z · conversation 5f130903 · An old chat]\nwhat it said', { origin }));
   writeFileSync(join(directory, 'active-memory.json'), JSON.stringify(generation));
-  assert.deepEqual((profiles.history({ profile: 'imported' })).messages, [{ i: 0, kind: 'user', date: '2026-01-02T00:00:00.000Z', text: 'what it said', origin }]);
+  assert.deepEqual((await profiles.history({ profile: 'imported' })).messages, [{ i: 0, kind: 'user', date: '2026-01-02T00:00:00.000Z', text: 'what it said', origin }]);
 });
 
 test('a profile\'s images are served over HTTP', async t => {

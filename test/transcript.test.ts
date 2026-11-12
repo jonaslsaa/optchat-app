@@ -209,6 +209,10 @@ test('Complete\'s handoff is a part of its own under the conversation, and not t
   // Your next message is a conversation again.
   assert.deepEqual(kinds(spoken([...conversation, asks, handoff, user(20, 'and the host?'), reply(21, text('localhost'))])), [...whole, answered, ['reply', 'localhost']]);
 
+  // An answer in several blocks is one answer, and none of it is folded away with the work.
+  assert.partialDeepStrictEqual(parts(spoken([user(1, 'and?'), reply(2, text('On it.'), bash('c1', 'ls')), result(3, 'a.ts'), reply(4, text('One file.'), text('It is a.ts.'))]))[1],
+    { steps: [{ type: 'talk', text: 'On it.' }, { type: 'tool' }], answer: { text: 'One file.\n\nIt is a.ts.' } });
+
   // Complete stops a reply that is being written: what it had said by then stays in view, and is said to have been stopped.
   const cut = parts(spoken([user(1, 'what is the port?'), { ...reply(2, text('It is 80')), stopReason: 'aborted' }, asks, handoff]));
   assert.partialDeepStrictEqual(cut, [{ type: 'user' }, { type: 'reply', stopped: true, answer: { text: 'It is 80' }, steps: [{ type: 'fault' }] }, { type: 'handoff' }]);

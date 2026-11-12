@@ -229,13 +229,19 @@ function spawned(step: Step): [id: string, title: string][] {
   const ids = step.type === 'tool' ? /^Started: ([^.]+)\./.exec(step.output ?? '')?.[1].split(', ') ?? [] : [];
   return ids.flatMap((id, at): [string, string][] => { const task: unknown = tasks[at]; return isObject(task) && typeof task.title === 'string' ? [[id, task.title]] : []; });
 }
+/** The text a message ended on: pi-optchat logs each block of it as an entry of its own, under the message's date. */
+function closing(items: readonly Item[]): Item[] {
+  const last = items.at(-1);
+  return items.slice(items.findLastIndex(item => item.kind !== 'talk' || item.date !== last?.date) + 1);
+}
+const text = (items: Item[]) => items.map(item => item.text).join('\n\n');
 const IMAGE = /\[image ([0-9a-f]{16})\]/g;
 function part(items: readonly Item[]): Part {
   const [first] = items, last = items.at(-1)!, common = { key: first.key, items };
   if (first.handoff) {
     // The handoff is the text of the agent's last message, if that was text and no tool call, as pi-optchat reads it (its `handoffText`).
-    const written = last.kind === 'talk' && !last.streaming && !items.some(item => item.kind === 'tool' && item.date === last.date);
-    return { ...common, type: 'handoff', date: last.date, body: written ? items.filter(item => item.kind === 'talk' && item.date === last.date).map(item => item.text).join('\n\n') : '' };
+    const written = !last.streaming && !items.some(item => item.kind === 'tool' && item.date === last.date);
+    return { ...common, type: 'handoff', date: last.date, body: written ? text(closing(items)) : '' };
   }
   if (first.kind === 'user') return { ...common, type: 'user', date: first.date, text: first.text.replace(IMAGE, '').trim(), images: [...first.text.matchAll(IMAGE)].map(match => match[1]) };
   if (first.kind === 'note') return { ...common, type: 'note', text: first.text };
@@ -245,11 +251,11 @@ function part(items: readonly Item[]): Part {
     return { ...common, type: 'work', date: first.date, ...agent && { agent }, body };
   }
   // What the agent was saying when it was stopped stays in view, as its answer does.
-  const cut = last.kind === 'echo' && last.text.startsWith('Agent aborted'), end = cut ? items.at(-2) : last;
-  const answer = end?.kind === 'talk' ? end : undefined, work = steps(items.filter(item => item !== answer));
+  const cut = last.kind === 'echo' && last.text.startsWith('Agent aborted'), answer = closing(cut ? items.slice(0, -1) : items);
+  const work = steps(items.filter(item => !answer.includes(item)));
   return {
     ...common, type: 'reply', steps: work, from: first.date, to: last.date, stopped: cut || work.some(step => step.type === 'fault' && step.text.startsWith('Agent aborted')),
-    ...answer && { answer: { text: answer.text, ...answer.streaming && { streaming: true } } },
+    ...answer.length > 0 && { answer: { text: text(answer), ...answer.at(-1)?.streaming && { streaming: true } } },
   };
 }
 /** What Pi's bash adds under a command's output when it failed. */

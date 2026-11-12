@@ -32,7 +32,7 @@ Status: the local server ([docs/server.md](docs/server.md)) and a first usable U
 1. ~~pi-optchat: let a Pi process in RPC mode join a busy profile as a connected window.~~ Done.
 2. ~~The local server: profiles and history from disk, one `pi --mode rpc` per window, one typed protocol.~~ Done.
 3. ~~The first usable UI, as a web page: profile tabs, windows sidebar, chat, composer, Complete.~~ Done.
-4. Setup: the app's settings, installing Pi and pi-optchat from the app, and a profile a terminal already has open.
+4. ~~Setup: the app's settings, installing Pi and pi-optchat from the app, and a profile a terminal already has open.~~ Done ([docs/setup.md](docs/setup.md)). Logging in to a model from the app comes next.
 5. The agents panel.
 6. The clickable memory tree.
 7. The GitHub list, then tracking.

@@ -122,6 +122,26 @@ test('a Pi that dies in a run leaves its window stopped with the reason, and the
   assert.deepEqual(await request('prompt', { window: window.id, text: 'hello' }), { disposition: 'started' });
 });
 
+test('a main window closed while its start is still finding its Pi starts none, and starts on the next prompt', async t => {
+  const { request, statuses } = await setup(t);
+  const { window } = await request('open', { profile: 'work' });
+  // The first prompt on a server looks for Pi, which takes a moment: the close comes in the middle of that.
+  const prompt = request('prompt', { window: window.id, text: 'hello' });
+  await request('close', { window: window.id });
+  await assert.rejects(prompt, /was closed before it started/);
+  assert.deepEqual(statuses(window.id), ['stopped']);
+  assert.deepEqual(await request('prompt', { window: window.id, text: 'hello' }), { disposition: 'started' });
+});
+
+test('a connected window closed while its start is still finding out who holds the profile starts no Pi, not the main window\'s either', async t => {
+  const { request, statuses } = await setup(t);
+  const { window } = await request('open', { profile: 'work', role: 'connected' });
+  const prompt = request('prompt', { window: window.id, text: 'hello' });
+  await request('close', { window: window.id });
+  await assert.rejects(prompt, /was closed before it started/);
+  assert.deepEqual(statuses('work/main'), ['stopped']);
+});
+
 test('a Pi that never answers its start can still be closed', async t => {
   const { request, status } = await setup(t);
   const { window } = await request('open', { profile: 'mute' });

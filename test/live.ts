@@ -3,7 +3,7 @@ import { existsSync, mkdtempSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { connect } from '../src/client.ts';
-import type { PiRecord, Push } from '../src/protocol.ts';
+import type { PiRecord, Push, Setup } from '../src/protocol.ts';
 import { startServer } from '../src/server/server.ts';
 import { apply, chat, idle, isMessage, isObject, logged, words } from '../src/ui/transcript.ts';
 import { current } from '../src/window.ts';
@@ -13,7 +13,7 @@ import { createProfile, temporaryHome } from './support.ts';
  * Anthropic and costs about a cent. Pi keeps no session file, and the real ~/.optchat is never opened.
  * `PI_OPTCHAT=<a pi-optchat checkout>` runs that pi-optchat in place of the one installed in Pi. */
 const checkout = process.env.PI_OPTCHAT;
-const pi = { command: 'pi', args: [...checkout ? ['--no-extensions', '-e', join(checkout, 'src/index.ts')] : [], '--no-session', '--model', 'anthropic/claude-haiku-5-5', '--thinking', 'off'] };
+const flags = [...checkout ? ['--no-extensions', '-e', join(checkout, 'src/index.ts')] : [], '--no-session', '--model', 'anthropic/claude-haiku-5-5', '--thinking', 'off'];
 /** Pi's records as they are pushed, and a wait for one. */
 function watch() {
   const pushes: Push[] = [], waiting = new Set<() => void>();
@@ -30,7 +30,7 @@ const said = (record: PiRecord, role: string) => record.type === 'message_end' &
 
 test('a real Pi turn on a throwaway profile, end to end through the WebSocket', { timeout: 120_000 }, async t => {
   const home = temporaryHome(), profile = createProfile(home, 'live');
-  const server = await startServer({ home, cwd: mkdtempSync(join(home, 'cwd-')), pi });
+  const server = await startServer({ home, cwd: mkdtempSync(join(home, 'cwd-')), flags });
   t.after(() => server.close());
   assert.deepEqual(await (await connect(server.url)).request('history', { profile: 'live' }), { total: 0, messages: [] });
 
@@ -76,7 +76,7 @@ test('a real Pi turn on a throwaway profile, end to end through the WebSocket', 
 test('a connected window reads the profile\'s memory, and Complete hands its conversation to the main chat', { timeout: 180_000 }, async t => {
   const home = temporaryHome();
   createProfile(home, 'live');
-  const server = await startServer({ home, cwd: mkdtempSync(join(home, 'cwd-')), pi });
+  const server = await startServer({ home, cwd: mkdtempSync(join(home, 'cwd-')), flags });
   t.after(() => server.close());
   const { pushes, record, onPush } = watch(), client = await connect(server.url, onPush);
   const main = (await client.request('open', { profile: 'live' })).window.id;
@@ -111,4 +111,49 @@ test('a connected window reads the profile\'s memory, and Complete hands its con
   assert.ok(isObject(kept) && Array.isArray(kept.messages) && kept.messages.every(isMessage));
   assert.ok(kept.messages.some(message => /marzipan/.test(JSON.stringify(message))));
   assert.deepEqual(current(after, kept.messages).map(message => [message.role, words(message.content)]), [['user', 'Reply with exactly: here'], ['assistant', 'here']]);
+});
+
+test('the app installs Pi into its own folder, that Pi runs a chat, and it installs pi-optchat with Pi\'s own installer', { timeout: 240_000 }, async t => {
+  const home = temporaryHome(), app = mkdtempSync(join(home, 'app-')), nowhere = { command: join(home, 'no-such-pi'), args: [] };
+  createProfile(home, 'live');
+  /** A server on a machine without Pi, and a wait for the install it runs to end. */
+  async function machine() {
+    const { pushes, record, onPush } = watch(), waiting = new Set<() => void>();
+    const server = await startServer({ home, app, cwd: mkdtempSync(join(home, 'cwd-')), pi: nowhere, flags });
+    const client = await connect(server.url, push => { onPush(push); for (const check of waiting) check(); });
+    const installed = () => new Promise<Setup>(resolve => {
+      const check = () => { const last = pushes.findLast(push => push.push === 'setup'); if (last?.push === 'setup' && last.setup.job && last.setup.job.state !== 'running') { waiting.delete(check); resolve(last.setup); } };
+      waiting.add(check); check();
+    });
+    return { server, client, record, installed };
+  }
+
+  // No Pi: the app installs one with npm, into its own folder and nowhere else.
+  const first = await machine();
+  t.after(() => first.server.close());
+  assert.equal((await first.client.request('setup', {})).pi.state, 'missing');
+  await first.client.request('install', { what: 'pi' });
+  const { pi, job } = await first.installed();
+  assert.deepEqual([job?.state, job?.output], ['done', undefined]);
+  assert.partialDeepStrictEqual(pi, { state: 'ok', path: join(app, 'pi', 'node_modules', '.bin', 'pi'), shell: `export PATH=${join(app, 'pi', 'node_modules', '.bin')}:"$PATH"` });
+  // It was installed without running its packages' install scripts. It still runs a turn, with a tool, through pi-optchat
+  // (the one in your Pi's settings, which this Pi reads too).
+  const { window } = await first.client.request('open', { profile: 'live' });
+  await first.client.request('prompt', { window: window.id, text: 'Use the bash tool to run: echo hello-from-the-app. Then reply with exactly what it printed.' });
+  await first.record(window.id, r => r.type === 'agent_settled');
+  const { messages } = await first.client.request('history', { profile: 'live' });
+  assert.match(messages.find(m => m.kind === 'echo')?.text ?? '', /^bash: hello-from-the-app/);
+  assert.partialDeepStrictEqual(messages.at(-1), { kind: 'talk' });
+  await first.server.close();
+
+  // A Pi with nothing in it (its own folder is a throwaway one): no pi-optchat, no login. The app installs pi-optchat.
+  process.env.PI_CODING_AGENT_DIR = mkdtempSync(join(home, 'agent-'));
+  t.after(() => { delete process.env.PI_CODING_AGENT_DIR; });
+  const second = await machine();
+  t.after(() => second.server.close());
+  assert.partialDeepStrictEqual(await second.client.request('setup', {}), { pi: { state: 'ok' }, optchat: { state: 'missing', installable: true }, login: { state: 'missing', providers: [] } });
+  await second.client.request('install', { what: 'optchat' });
+  const done = await second.installed();
+  assert.partialDeepStrictEqual(done, { optchat: { state: 'ok' }, job: { what: 'optchat', state: 'done' } });
+  assert.ok(done.optchat.path?.startsWith(process.env.PI_CODING_AGENT_DIR));
 });

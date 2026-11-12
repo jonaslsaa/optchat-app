@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from 'react';
 import { connect, type Client } from '../client.ts';
-import type { Message, Method, Params, Push, Result, WindowState } from '../protocol.ts';
+import type { Message, Method, Params, Push, Result, Settings, Setup, WindowState } from '../protocol.ts';
 import { current } from '../window.ts';
 import { apply, idle, isMessage, isObject, merged, replay, stopped, without, words, type Live, type PiMessage } from './transcript.ts';
 
@@ -24,6 +24,9 @@ export interface State {
   sessions: Record<string, PiMessage[]>;
   /** Why the last thing you asked for failed. */
   error?: string;
+  /** The app's settings, and what a chat needs with whether it is there, once the server has said. */
+  settings?: Settings;
+  setup?: Setup;
 }
 const PAGE = 200, SAVED = 'optchat-app';
 export const mainOf = (profile: string) => `${profile}/main`;
@@ -104,6 +107,9 @@ export class App {
     // A server that started again numbers its windows' records from one: what was kept of a window it does not have is let go.
     const kept = <T>(by: Record<string, T>) => Object.fromEntries(Object.entries(by).filter(([id]) => windows.windows.some(window => window.id === id)));
     this.set({ connection: 'open', profiles: names, tabs, profile, selected, windows: ordered(windows.windows), live: kept(this.state.live), sessions: kept(this.state.sessions), error: undefined });
+    // Neither is waited for: looking for Pi takes a moment, and the chat does not need it to show.
+    void this.ask('settings', {}).then(settings => settings && this.set({ settings }));
+    void this.checkSetup();
     await Promise.all([...tabs.map(tab => this.opened(tab)), ...windows.windows.map(async window => { await this.replayed(window.id); await this.session(window.id); })]);
   }
   /** A profile's tab needs its main window to exist, and the end of its log. */
@@ -126,6 +132,22 @@ export class App {
     const page = await this.ask('history', { profile, limit: PAGE, ...before !== undefined && { before } });
     if (page) this.set({ logs: { ...this.state.logs, [profile]: { ...this.state.logs[profile], total: page.total, entries: merged(this.state.logs[profile]?.entries ?? [], page.messages) } } });
   }
+  /** Changes the settings it names; every page gets them all as the server kept them. */
+  saveSettings(change: Params<'setSettings'>) { return this.ask('setSettings', change); }
+  /** What a chat needs and whether it is there: as the server last found it, or looked for again now. */
+  async checkSetup(fresh = false) {
+    const setup = await this.ask('setup', { fresh });
+    if (setup) this.set({ setup });
+  }
+  /** The profiles as they are now. The first one is made in a terminal: once it is there, it is opened. */
+  async findProfiles() {
+    const names = (await this.ask('profiles', {}))?.profiles.map(profile => profile.name);
+    if (!names) return;
+    this.set({ profiles: names });
+    if (names.length && !this.state.profile) await this.openProfile(names[0]);
+  }
+  /** Installs Pi or pi-optchat; how it goes is pushed as the setup. */
+  install(what: Params<'install'>['what']) { return this.ask('install', { what }); }
   /** Reads the page before the oldest one read. */
   async older(profile: string) {
     const log = this.state.logs[profile], first = log?.entries[0]?.i;
@@ -168,12 +190,16 @@ export class App {
     const messages = isObject(answer?.data) && Array.isArray(answer.data.messages) ? answer.data.messages.filter(isMessage) : undefined;
     if (messages && this.window(id)) this.set({ sessions: { ...this.state.sessions, [id]: messages } });
   }
-  /** What the server pushes: a window that changed, or one of Pi's records. Records are numbered; when one is missing, the
+  /** What the server pushes: the settings or the setup when they change, a window that changed, or one of Pi's records. Records are numbered; when one is missing, the
    * window's run is asked for again. */
   receive(push: Push) {
+    if (push.push === 'settings') { this.set({ settings: push.settings }); return; }
+    if (push.push === 'setup') { this.set({ setup: push.setup }); return; }
     if (push.push === 'window') {
-      const { window } = push;
+      const { window } = push, outside = this.window(window.id)?.outside;
       this.put(window);
+      // A Pi outside the app had the chat and let it go: what it wrote meanwhile is in the log.
+      if (outside && !window.outside) void this.read(window.profile);
       // A Pi that died in a run never says the run is over; what it had logged by then is in the log.
       if (window.status === 'stopped' && this.state.live[window.id]?.running) { this.live(window.id, stopped); void this.read(window.profile); }
       return;

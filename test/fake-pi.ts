@@ -1,4 +1,4 @@
-import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 /** Stands in for `pi --mode rpc` with pi-optchat: the same records on stdin and stdout, scripted by the profile's name and the
@@ -14,6 +14,33 @@ import { join } from 'node:path';
  * - Profile `busy` fails as a profile another Pi owns, `stuck` ignores the request to shut down, `mute` never answers a command,
  *   `bare` is a Pi without pi-optchat, `old` one whose pi-optchat is from before 0.11.9 and names no role, and in `noisy`
  *   another extension fails. */
+/** Pi outside a chat, as the app's setup asks it: its version, its packages (`list`, `install`, `update`), and the models it has
+ * credentials for. FAKE_PI_HOME stands for Pi's own folder: `state.json` there says which Pi this is, and `install` puts a
+ * package under it as Pi does. Without it this is Pi 1.5.2 with no packages and no login. */
+interface Installed { version: string; providers: string[]; packages: Record<string, string> }
+const folder = process.env.FAKE_PI_HOME, kept = folder && join(folder, 'state.json');
+const installed: Installed = { version: '1.5.2', providers: [], packages: {}, ...kept && existsSync(kept) && JSON.parse(readFileSync(kept, 'utf8')) };
+const [verb, source = ''] = process.argv.slice(2);
+if (verb === '--version') { console.log(installed.version); process.exit(0); }
+if (verb === 'list') {
+  const packages = Object.entries(installed.packages);
+  console.log(packages.length ? ['User packages:', ...packages.map(([source, path]) => `  ${source}\n    ${path}`)].join('\n') : 'No packages installed.');
+  process.exit(0);
+}
+if ((verb === 'install' || verb === 'update') && folder && kept) {
+  if (source === 'self') installed.version = '1.5.2';
+  else {
+    const name = source.replace('npm:', ''), path = join(folder, 'npm', 'node_modules', name);
+    console.log(`Installing ${source}...\n`);
+    mkdirSync(path, { recursive: true });
+    writeFileSync(join(path, 'package.json'), JSON.stringify({ name, version: '0.11.9' }));
+    installed.packages[source] = path;
+    console.log(`added 1 package in 409ms\nInstalled ${source}`);
+  }
+  writeFileSync(kept, JSON.stringify(installed));
+  process.exit(0);
+}
+
 const profile = process.argv[process.argv.indexOf('--optchat-profile') + 1], joins = process.argv[process.argv.indexOf('--optchat-connect') + 1] === 'join';
 const write = (record: object) => process.stdout.write(`${JSON.stringify(record)}\n`);
 const status = (statusKey: string, statusText: string) => write({ type: 'extension_ui_request', id: statusKey, method: 'setStatus', statusKey, statusText });
@@ -127,6 +154,7 @@ function handoff() {
 const commands: Record<string, (command: Record<string, unknown>) => unknown> = {
   get_state: () => ({ pid: process.pid, args: process.argv.slice(2), home: process.env.OPTCHAT_HOME, cwd: process.cwd() }),
   get_messages: () => ({ messages }),
+  get_available_models: () => ({ models: installed.providers.map(provider => ({ provider, id: 'a-model' })) }),
   prompt: ({ message, streamingBehavior }) => {
     const text = String(message);
     if (text === '/complete') {

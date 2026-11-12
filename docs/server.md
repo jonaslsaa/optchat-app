@@ -10,16 +10,16 @@ npm start                 # builds the UI, then http://127.0.0.1:4780/ (the prot
 npm run server            # the same without building the UI first
 ```
 
-It needs Node 22.19 or newer and a `pi` on the PATH with pi-optchat 0.11.9 or newer installed (`pi install npm:pi-optchat`). Options: `--port` and `--cwd <dir>` (where windows run unless a window names its own; your home directory by default). `OPTCHAT_HOME` picks the profiles' root, as in pi-optchat. Ctrl+C stops every Pi in order, connected windows before the main one they hand off to, so each saves its memory and frees its profile.
+It needs Node 22.19 or newer, and Pi with pi-optchat 0.11.9 or newer in it (`pi install npm:pi-optchat`): the `pi` on your PATH, or else the one the app installs for you ([setup.md](setup.md)). Options: `--port` and `--cwd <dir>` (where windows run unless a window names its own; your home directory by default). `OPTCHAT_HOME` picks the profiles' root, as in pi-optchat. Ctrl+C stops every Pi in order, connected windows before the main one they hand off to, so each saves its memory and frees its profile.
 
 ```bash
 npm run check             # types
 npm test                  # against a fake Pi: no model, no network
-npm run test:live         # real turns through your Pi on throwaway profiles (about a cent)
+npm run test:live         # real turns through your Pi and its model login, on throwaway profiles (about a cent)
 PI_OPTCHAT=<checkout> npm run test:live   # the same through a pi-optchat checkout, not the one installed in Pi
 ```
 
-Tests only ever use a throwaway `OPTCHAT_HOME` under `/tmp`.
+Tests only ever use a throwaway `OPTCHAT_HOME` under `/tmp`, and a throwaway folder for the app's own files (`OPTCHAT_APP_HOME`).
 
 ## The protocol
 
@@ -42,11 +42,15 @@ The client sends `{ id, method, params }` and gets `{ id, result }` or `{ id, er
 | `records { window, after? }` | For a client that connects late: the records the window still keeps after number `after`, the number of its last record (`seq`), and what Pi shows now (`ui`). |
 | `command { window, command }` | Any other Pi RPC command (`get_state`, `set_model`, `get_messages`, ...). A message to the agent is not one of them: that is `prompt`. |
 | `answer { window, id, ... }` | Answers a dialog Pi asked for (an `extension_ui_request` with method `select`, `confirm`, `input` or `editor`). |
+| `settings`, `setSettings { theme?, cwd? }` | The app's own settings, and a change to the ones it names ([setup.md](setup.md)). |
+| `setup { fresh? }` | What a chat needs and whether it is there: Pi, pi-optchat in it, a model that is logged in. `fresh` looks again. |
+| `install { what }` | Installs or updates `pi` or `optchat` where the setup says `installable`: only the app's own Pi, and a pi-optchat from npm. Answers once it has started; the rest is pushed. |
 
-The server pushes two things to every client:
+The server pushes four things to every client:
 
 - `{ push: 'window', window }` when a window changes: its `status` (`stopped`, `starting`, `idle`, `running`, or `closed`), `error` if its Pi failed, and `completed` once a connected window's conversation is handed off.
 - `{ push: 'record', window, seq, record }` for every record Pi writes: its session events and extension UI requests, passed through as they are (Pi's `docs/json.md` and `docs/rpc-extension-ui.md`).
+- `{ push: 'settings', settings }` when the settings are changed, and `{ push: 'setup', setup }` as an install runs and when it ends.
 
 A profile's images are plain HTTP: `GET /images/<profile>/<name>` for a message's `[image <name>]`. Every other path is a file of the built UI (`dist/ui`, [ui.md](ui.md)), with the page at `/`.
 
@@ -62,8 +66,8 @@ A run's finished messages are in `history` as soon as pi-optchat has logged them
 
 ## Windows
 
-- **Main window.** `open` gives it at once; its Pi starts on the first `prompt`, with `--optchat-profile <name> --optchat-connect off`. Until then nothing holds the profile, so a terminal Pi can still open it. The main window never joins a profile a Pi outside the app holds: its start fails with who holds it.
-- **Connected windows.** A second Pi on a profile joins the first as a connected window: its own conversation, the profile's memory read-only, and a handoff to the main chat on Complete. The server starts it with `--optchat-connect join`, after the main window's Pi if the profile has no owner yet.
+- **Main window.** `open` gives it at once; its Pi starts on the first `prompt`, with `--optchat-profile <name> --optchat-connect off`. Until then nothing holds the profile, so a terminal Pi can still open it. The main window never joins a profile a Pi outside the app holds: it says who that is (`outside`) and takes no prompt while that Pi has it ([setup.md](setup.md)).
+- **Connected windows.** A second Pi on a profile joins the first as a connected window: its own conversation, the profile's memory read-only, and a handoff to the main chat on Complete. The server starts it with `--optchat-connect join`, after the main window's Pi if the profile has no owner yet. On a profile a Pi outside the app holds, it joins that one.
 - **`role` is the window's place in the app and never changes.** The main window's Pi owns the profile and a connected window's Pi joins it; the server starts them that way, so nothing has to be read back. `completed` is pi-optchat's word (its `optchat.role` status) that a connected window's conversation is handed off.
 - **A Pi that did not open its profile** is stopped, and the prompt fails with the reason (for example pi-optchat's `Profile already running: …`, or that pi-optchat is not installed or older than 0.11.9), instead of a window that looks idle and answers nothing. The server knows the profile is open when pi-optchat's `optchat.role` status names it, which it sends as the session starts; another extension's failure does not count.
 - **Stopping.** The server closes Pi's stdin, which is Pi's request for an orderly shutdown, and kills it only if it has not exited after 15 seconds. A Pi that is still starting is stopped the same way.

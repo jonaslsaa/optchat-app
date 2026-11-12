@@ -209,6 +209,11 @@ test('a sign-in opens a terminal with Pi\'s own login, for a provider the app kn
   // Pi says when the sign-in is done; the app reads no credential to know.
   writeFileSync(join(folder, 'state.json'), JSON.stringify({ version: '1.5.2', providers: ['anthropic'], packages: {} }));
   assert.deepEqual(await request('signedIn', { provider: 'anthropic' }), { status: 'ready' });
+  // A Pi that cannot read its own logins is no answer: the command that shows it asks the same Pi, with its files where they are.
+  writeFileSync(join(folder, 'state.json'), JSON.stringify({ version: '1.5.2', providers: [], packages: {}, broken: true }));
+  const refused = await request('signedIn', { provider: 'anthropic' }).catch((error: Error) => error.message);
+  assert.equal(refused, `Pi could not say whether it is signed in. Try in a terminal: PI_CODING_AGENT_DIR='${home}/pi'\\''s folder' ${process.execPath} ${join(import.meta.dirname, 'fake-pi.ts')} auth check --provider anthropic`);
+  assert.match(spawnSync('/bin/sh', ['-c', String(refused).split('terminal: ')[1]], { encoding: 'utf8' }).stdout, /"status":"invalid"/);
 });
 
 test('without a way to open a terminal, a sign-in says which command to run', async t => {

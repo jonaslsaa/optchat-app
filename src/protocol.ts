@@ -140,8 +140,9 @@ export const methods = {
   /** Opens a terminal in which Pi signs you in to a provider with your account, in your browser (`pi auth login`). The sign-in
    * is between you, Pi and the provider: the app starts it, and sees nothing of it. */
   signIn: method(Type.Object({ provider: Account }), none),
-  /** Whether Pi can use a provider now, in Pi's own word (`pi auth check`): asked while a sign-in is under way. */
-  signedIn: method(Type.Object({ provider: Account }), Type.Object({ status: Type.Enum(['ready', 'not_ready', 'invalid']) })),
+  /** Whether Pi can use a provider now, in Pi's own word (`pi auth check`): asked while a sign-in is under way. Refused, with
+   * the command that shows it, when Pi cannot tell (its `invalid`: it cannot read its own logins). */
+  signedIn: method(Type.Object({ provider: Account }), Type.Object({ status: Type.Enum(['ready', 'not_ready']) })),
 };
 export type Method = keyof typeof methods;
 export type Params<M extends Method> = Static<(typeof methods)[M]['params']>;

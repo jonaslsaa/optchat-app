@@ -60,6 +60,14 @@ export function AgentsPanel({ state, profile, agent: id, pulse, outside, onAgent
   useEffect(() => { if (sheet && !dialog.current?.open) dialog.current?.showModal(); }, [sheet]);
   // A sheet is closed as a dialog is, which is what returns the focus; it says when it has closed.
   const close = () => sheet ? dialog.current?.close() : onClose();
+  // Esc is the sheet's wherever the focus is: a row that is opened is gone, and the focus with it, to the page itself. So the
+  // key is heard on its way down, before the page's shortcuts hear it.
+  useEffect(() => {
+    if (!sheet) return;
+    const pressed = (event: KeyboardEvent) => escapes(event, () => dialog.current?.close());
+    addEventListener('keydown', pressed, true);
+    return () => removeEventListener('keydown', pressed, true);
+  }, [sheet]);
   const panel = (
     <aside aria-label="Agents" className="flex h-full w-(--panel-width) max-w-[calc(100vw-2.5rem)] shrink-0 flex-col border-border border-l bg-background">
       <div className="flex h-(--topbar-height) shrink-0 items-center gap-1.5 ps-2.5 pe-2.5">
@@ -93,7 +101,7 @@ export function AgentsPanel({ state, profile, agent: id, pulse, outside, onAgent
   );
   if (!sheet) return panel;
   return (
-    <dialog ref={dialog} aria-label="Agents" onClose={onClose} onKeyDown={event => escapes(event, close)} onClick={event => { if (event.target === event.currentTarget) close(); }}
+    <dialog ref={dialog} aria-label="Agents" onClose={onClose} onClick={event => { if (event.target === event.currentTarget) close(); }}
       className="fixed inset-y-0 right-0 left-auto m-0 h-dvh max-h-none max-w-none bg-transparent p-0 text-foreground shadow-xl backdrop:bg-black/20">
       {panel}
     </dialog>

@@ -20,8 +20,8 @@ export function label(shortcut: string) {
 /** What a key runs of `bindings`: the first whose shortcut it is, and nothing when something nearer already took the key. */
 export const bound = (event: Pressed & Pick<KeyboardEvent, 'defaultPrevented'>, bindings: Record<string, () => void>) =>
   event.defaultPrevented ? undefined : Object.entries(bindings).find(([shortcut]) => matches(event, shortcut))?.[1];
-/** Esc for what lies over the page, on its own `keydown`: it closes, and the key is taken, so no shortcut of the page under it
- * runs. A sheet over a chat whose agent is working closes, and the agent works on. */
+/** Esc for what lies over the page, which hears the key before the page's shortcuts do: it closes, and the key is taken, so
+ * none of them runs. A sheet over a chat whose agent is working closes, and the agent works on. */
 export function escapes(event: Pick<KeyboardEvent, 'key' | 'preventDefault'>, close: () => void) {
   if (event.key !== 'Escape') return;
   event.preventDefault();

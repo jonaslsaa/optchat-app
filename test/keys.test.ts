@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { bound, escapes } from '../src/ui/keys.ts';
 
-/** A key as the page gets it: first what lies over the page (the sheet's own `keydown`), then the page's shortcuts. */
+/** A key as the page gets it: first what lies over the page (the sheet hears it on its way down), then the page's shortcuts. */
 function pressed(key = 'Escape') {
   const event = { key, code: key, metaKey: false, ctrlKey: false, altKey: false, shiftKey: false, defaultPrevented: false, preventDefault: () => { event.defaultPrevented = true; } };
   return event;

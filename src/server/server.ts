@@ -15,8 +15,8 @@ export interface ServerOptions extends Partial<Omit<WindowsOptions, 'push'>> {
   port?: number;
   /** The built UI's directory (`npm run build`), served as the page at `/`. */
   ui?: string;
-  /** Origins that may connect besides pages this machine serves: the scheme a desktop shell loads the UI from, as T3 Code's
-   * `t3code://app`. */
+  /** Origins that may connect besides the server's own page: the scheme a desktop shell loads the UI from, as T3 Code's
+   * `t3code://app`, or Vite's address in development. */
   origins?: readonly string[];
 }
 const TYPES: Record<string, string> = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png', '.woff2': 'font/woff2', '.json': 'application/json' };
@@ -43,10 +43,14 @@ export async function startServer({ port = 0, origins = [], ui = join(import.met
     if (!Value.Check<(typeof methods)[M]['params']>(methods[method].params, params)) throw new Error(`Invalid ${method} request: ${Value.Errors(methods[method].params, params)[0]?.message ?? 'wrong parameters'}.`);
     return handlers[method](params);
   };
-  /** The windows run an agent with a shell, so only this machine's own pages may reach the server. A page anywhere can open a
-   * WebSocket to any address, hence the Origin; and a name it points at 127.0.0.1 makes its requests same-origin, hence the
-   * Host. A client that is not a browser sends no Origin. */
-  const allowed = ({ headers: { host, origin } }: IncomingMessage) => loopback(`http://${host}`) && (origin === undefined || loopback(origin) || origins.includes(origin));
+  /** The windows run an agent with a shell, so only the server's own page may reach it. A page anywhere can open a WebSocket to
+   * any address, hence the Origin, which has to be this server's page (or one of `origins`): another program's page on this
+   * machine is as foreign as one on the internet. A name pointed at 127.0.0.1 makes a foreign page's requests same-origin,
+   * hence the Host. A client that is not a browser sends no Origin. */
+  const allowed = ({ headers: { host, origin } }: IncomingMessage) => {
+    const { port } = server.address() as AddressInfo;
+    return loopback(`http://${host}`) && (origin === undefined || origin === `http://127.0.0.1:${port}` || origin === `http://localhost:${port}` || origins.includes(origin));
+  };
   sockets.on('connection', socket => {
     socket.on('error', () => socket.terminate()); // A broken frame or a dropped connection ends that client, not the server.
     socket.on('message', async data => {
@@ -68,6 +72,10 @@ export async function startServer({ port = 0, origins = [], ui = join(import.met
     return { type: TYPES[extname(file)] ?? 'application/octet-stream', cache: path.startsWith('/assets/') ? 'public, max-age=31536000, immutable' : 'no-cache', data: readFileSync(file) };
   };
   const server = createServer((request, response) => {
+    // No page may show this one in a frame, and this one loads nothing from elsewhere: what the agent writes is shown as
+    // Markdown, and must not be able to fetch an address of its choosing.
+    response.setHeader('x-frame-options', 'DENY');
+    response.setHeader('content-security-policy', "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; frame-ancestors 'none'");
     try {
       if (request.method !== 'GET' || !allowed(request)) { response.writeHead(404).end(); return; }
       const { pathname } = new URL(request.url ?? '/', 'http://localhost'), image = /^\/images\/([^/]+)\/([0-9a-f]{16})$/.exec(pathname);

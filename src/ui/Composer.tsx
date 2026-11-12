@@ -1,7 +1,7 @@
 import { CornerUpRightIcon, ListPlusIcon } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import type { PiRecord, WindowState } from '../protocol.ts';
-import { label } from './keys.ts';
+import { label, useShortcuts } from './keys.ts';
 import { app } from './store.ts';
 import type { Live } from './transcript.ts';
 import { Button, cn, Kbd, Spinner } from './ui.tsx';
@@ -30,7 +30,7 @@ function Dialog({ window, dialog }: { window: string; dialog: PiRecord }) {
           onKeyDown={event => { if (event.key === 'Enter') answer({ value }); }} className="mt-2 h-8 w-full rounded-md border border-input bg-background px-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring" />
       )}
       <div className="mt-2.5 flex flex-wrap justify-end gap-2">
-        <Button variant="ghost-muted" size="sm" onClick={() => answer(dialog.method === 'confirm' ? { confirmed: false } : { cancelled: true })}>{dialog.method === 'confirm' ? 'No' : 'Cancel'}</Button>
+        <Button variant="ghost-muted" onClick={() => answer(dialog.method === 'confirm' ? { confirmed: false } : { cancelled: true })}>{dialog.method === 'confirm' ? 'No' : 'Cancel'}</Button>
         {dialog.method === 'confirm' && <Button size="sm" autoFocus onClick={() => answer({ confirmed: true })}>Yes</Button>}
         {dialog.method === 'select' && options.map((option, index) => <Button key={option} variant="outline" size="sm" autoFocus={index === 0} onClick={() => answer({ value: option })}>{option}</Button>)}
         {(dialog.method === 'input' || dialog.method === 'editor') && <Button size="sm" onClick={() => answer({ value })}>Send</Button>}
@@ -61,14 +61,7 @@ export function Composer({ window, live }: { window: WindowState; live: Live }) 
     if (waiting.length) change([...waiting, drafts.get(window.id) ?? ''].filter(Boolean).join('\n\n'));
   };
   // Esc stops the agent wherever the focus is.
-  const stopping = useRef(stop);
-  stopping.current = stop;
-  useEffect(() => {
-    if (!running) return;
-    const pressed = (event: KeyboardEvent) => { if (event.key === 'Escape' && !event.defaultPrevented) void stopping.current(); };
-    addEventListener('keydown', pressed);
-    return () => removeEventListener('keydown', pressed);
-  }, [running]);
+  useShortcuts((): Record<string, () => void> => running ? { escape: () => void stop() } : {}, [running, window.id]);
   return (
     <div className="shrink-0 px-3 pb-3 sm:px-12 sm:pb-4">
       <div className="mx-auto flex w-full max-w-(--chat-content-max-width) flex-col gap-2">

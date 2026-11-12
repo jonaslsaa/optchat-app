@@ -89,8 +89,7 @@ test('a connected window reads the profile\'s memory, and Complete hands its con
   assert.match(JSON.stringify((await record(window.id, r => said(r, 'assistant'))).record), /marzipan/);
   await record(window.id, r => r.type === 'agent_settled');
   const [connected] = (await client.request('windows', {})).windows.filter(w => w.id === window.id);
-  assert.partialDeepStrictEqual(connected, { role: 'connected', status: 'idle', owner: false });
-  assert.partialDeepStrictEqual((await client.request('windows', {})).windows.find(w => w.id === main), { role: 'main', owner: true });
+  assert.partialDeepStrictEqual(connected, { role: 'connected', status: 'idle' });
 
   // Complete: the window writes its handoff, and the main chat gets it as that agent's report, in its memory.
   await client.request('complete', { window: window.id });
@@ -105,6 +104,6 @@ test('a connected window reads the profile\'s memory, and Complete hands its con
   const again = (await client.request('windows', {})).windows.find(w => w.id === window.id)!.seq;
   await client.request('prompt', { window: window.id, text: 'Reply with exactly: here' });
   await record(window.id, r => r.type === 'agent_settled', again);
-  const { owner, completed, status } = (await client.request('windows', {})).windows.find(w => w.id === window.id)!;
-  assert.deepEqual({ owner, completed, status }, { owner: false, completed: undefined, status: 'idle' });
+  const { completed, status } = (await client.request('windows', {})).windows.find(w => w.id === window.id)!;
+  assert.deepEqual({ completed, status }, { completed: undefined, status: 'idle' });
 });

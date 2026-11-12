@@ -10,14 +10,16 @@ export interface PiMessage { role: string; timestamp: number; content?: unknown;
 /** A block of the reply being written. A tool call's arguments arrive as JSON text (`json`) until its end has them whole. */
 type Block = { type: 'text'; text: string } | { type: 'thinking'; thinking: string } | { type: 'toolCall'; id: string; name: string; arguments?: unknown; json: string };
 
-export interface Item extends Pick<Message, 'kind' | 'text' | 'date' | 'origin'> {
-  /** The same for an item while it streams and once it is logged, so the chat keeps what you opened. */
-  key: string;
+/** One thing that was said, as pi-optchat logs it: your words, a piece of the reply, a tool call or its result, a report. */
+export interface Line extends Pick<Message, 'kind' | 'text' | 'date'> {
   /** Still being written. */
   streaming?: boolean;
-  /** The tool call's id, while Pi still runs it. */
+  /** The tool call's id, while Pi may still be running it. */
   call?: string;
 }
+/** A line in its place in the chat. `key` is its number in the profile's log (in a connected window, in its conversation), so it
+ * is the same while the line streams, once it is logged, and whichever pages of the log are loaded. */
+export interface Item extends Line { key: number }
 export interface Live {
   /** The last record applied. */
   seq: number;
@@ -37,8 +39,8 @@ export interface Live {
 }
 export const idle = (): Live => ({ seq: 0, running: false, messages: [], tools: {}, queued: { steering: [], followUp: [] }, status: {}, dialogs: [] });
 
-const isObject = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null;
-const isMessage = (value: unknown): value is PiMessage => isObject(value) && typeof value.role === 'string' && typeof value.timestamp === 'number';
+export const isObject = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null;
+export const isMessage = (value: unknown): value is PiMessage => isObject(value) && typeof value.role === 'string' && typeof value.timestamp === 'number';
 const strings = (value: unknown) => Array.isArray(value) ? value.filter(v => typeof v === 'string') : [];
 /** A message's or a tool result's words; an image is named as pi-optchat's log would, without its name. */
 export function words(content: unknown): string {
@@ -106,24 +108,15 @@ export const stopped = (live: Live): Live => ({ ...live, running: false, streami
 /** Without the dialog `id`: it was answered, or its time ran out. */
 export const without = (live: Live, id: unknown): Live => ({ ...live, dialogs: live.dialogs.filter(dialog => dialog.id !== id) });
 
-/** A long tool result as pi-optchat logs it (its `cap`): the head and the tail, and how much is left out between them. */
-function cap(text: string, limit = 30_000) {
-  if (text.length <= limit) return text;
-  const notice = (omitted: number) => `\n[${omitted} characters omitted; head and tail retained]\n`;
-  const half = Math.floor((limit - notice(text.length).length) / 2);
-  const head = text.slice(0, /[\ud800-\udbff]/.test(text[half - 1]) ? half - 1 : half);
-  const tail = text.slice(/[\udc00-\udfff]/.test(text[text.length - half]) ? text.length - half + 1 : text.length - half);
-  return head + notice(text.length - head.length - tail.length) + tail;
-}
 const date = (message: PiMessage) => new Date(message.timestamp).toISOString();
 /** What pi-optchat logs a message as (its `said`): your words as `user`, a reply's text as `talk` and its tool calls as `tool`,
  * a tool's result and a failed reply as `echo`, and what OptChat itself puts in the chat (a subagent's report) as `work`. */
-export function said(message: PiMessage, streaming = false): Item[] {
-  const at = date(message), items: Item[] = [];
-  const add = (kind: Item['kind'], text: string, call?: string) => items.push({ key: '', kind, text, date: at, ...streaming && { streaming }, ...call && { call } });
+export function said(message: PiMessage, streaming = false): Line[] {
+  const at = date(message), lines: Line[] = [];
+  const add = (kind: Line['kind'], text: string, call?: string) => lines.push({ kind, text, date: at, ...streaming && { streaming }, ...call && { call } });
   if (message.role === 'user') add('user', words(message.content));
   else if (message.role === 'custom' && message.display !== false && words(message.content)) add('work', words(message.content));
-  else if (message.role === 'toolResult') add('echo', cap(`${message.toolName}: ${words(message.content)}`));
+  else if (message.role === 'toolResult') add('echo', `${message.toolName}: ${words(message.content)}`);
   else if (message.role === 'assistant' && Array.isArray(message.content)) {
     for (const block of message.content) {
       if (!isObject(block)) continue;
@@ -132,11 +125,10 @@ export function said(message: PiMessage, streaming = false): Item[] {
     }
     if (message.stopReason === 'error' || message.stopReason === 'aborted') add('echo', `Agent ${message.stopReason}: ${message.errorMessage ?? 'No further details'}`);
   }
-  return items;
+  return lines;
 }
-/** What the reply being written is thinking now: its last block, if that is thought. */
-/** The reply being written, as the items it will become. A tool call is shown with its arguments as far as they parse. */
-function writing({ timestamp, blocks }: NonNullable<Live['streaming']>): Item[] {
+/** The reply being written, as the lines it will become. A tool call is shown with its arguments as far as they parse. */
+function writing({ timestamp, blocks }: NonNullable<Live['streaming']>): Line[] {
   // A block can be missing: the array has a hole where a later block started first.
   const content = Array.from(blocks, block => block?.type === 'toolCall' && block.arguments === undefined ? { ...block, arguments: partial(block.json) } : block);
   return said({ role: 'assistant', timestamp, content }, true);
@@ -144,65 +136,96 @@ function writing({ timestamp, blocks }: NonNullable<Live['streaming']>): Item[] 
 function partial(json: string): unknown {
   try { return JSON.parse(json); } catch { return json ? { '…': json } : {}; }
 }
+/** What the reply being written is thinking now: its last block, if that is thought. */
 export function thinking({ streaming }: Live) {
   const last = streaming?.blocks.at(-1);
   return last?.type === 'thinking' ? last.thinking : undefined;
 }
 
-/** The chat: what is logged, then what the latest run said that is not logged yet. pi-optchat dates an entry with its message's
- * time and logs a run in order, so a message is logged once the log has an entry of its time, and so is everything before it. */
-export function chat(logged: readonly Item[], live: Live): Item[] {
-  const dates = new Set(logged.map(item => item.date));
-  const fresh = live.messages.slice(live.messages.findLastIndex(message => dates.has(date(message))) + 1);
-  const seen = new Map<string, number>();
-  return [...logged, ...fresh.flatMap(message => said(message)), ...live.streaming ? writing(live.streaming) : []].map(item => {
-    const n = seen.get(item.date) ?? 0;
-    seen.set(item.date, n + 1);
-    return { ...item, key: `${item.date} ${n}` };
+/** The loaded part of a profile's log, as the chat's items. */
+export const logged = (entries: readonly Message[]): Item[] => entries.map(({ i, kind, text, date }) => ({ key: i, kind, text, date }));
+/** A connected window's conversation, which only its Pi has, as the chat's items. */
+export const spoken = (messages: readonly PiMessage[]): Item[] => messages.flatMap(message => said(message)).map((line, key) => ({ ...line, key }));
+/** The chat: `before` (what is logged, or a connected window's conversation), then what the latest run said that is not among it
+ * yet. pi-optchat dates an entry with its message's time and logs a run in order, so a message is logged once the log has an
+ * entry of its time, and so is everything before it. The new items are numbered on from the last of `before`, which is the
+ * number the log will give them. */
+export function chat(before: readonly Item[], live: Live): Item[] {
+  const dates = new Set(before.map(item => item.date)), next = (before.at(-1)?.key ?? -1) + 1;
+  const fresh = live.messages.slice(live.messages.findLastIndex(message => dates.has(date(message))) + 1).flatMap(message => said(message));
+  return [...before, ...[...fresh, ...live.streaming ? writing(live.streaming) : []].map((line, n) => ({ ...line, key: next + n }))];
+}
+/** A profile's log with one more page read: the entries of both by their number, and of those the unbroken run up to the
+ * newest, since a page that does not reach what was loaded leaves a gap nobody has read. */
+export function merged(entries: readonly Message[], page: readonly Message[]): Message[] {
+  const all = [...new Map([...entries, ...page].map(entry => [entry.i, entry])).values()].sort((a, b) => a.i - b.i);
+  return all.slice(Math.max(0, all.findLastIndex((entry, at) => at > 0 && all[at - 1].i !== entry.i - 1)));
+}
+
+/** One step of the agent's work: something it said on the way, a tool call with what it printed, or what stopped it. `failed` is
+ * read off the output, since the log does not say. */
+export type Step = { key: number } & (
+  | { type: 'talk'; text: string; streaming?: boolean }
+  | { type: 'tool'; name: string; args: Record<string, unknown>; output?: string; failed: boolean; call?: string }
+  | { type: 'fault'; text: string });
+/** The chat in the blocks it is drawn as: your message with its images, a note, a report from an agent, or the agent's reply,
+ * which is its work and then its answer. `items` is what the part was made from. */
+export type Part = { key: number; items: readonly Item[] } & (
+  | { type: 'user'; date: string; text: string; images: string[] }
+  | { type: 'note'; text: string }
+  | { type: 'work'; date: string; agent?: string; body: string }
+  | { type: 'reply'; steps: Step[]; answer?: { text: string; streaming?: boolean }; from: string; to: string; stopped: boolean });
+
+const inReply = ({ kind }: Item) => kind === 'talk' || kind === 'tool' || kind === 'echo';
+const same = (a: Item, b: Item) => a === b || a.key === b.key && a.kind === b.kind && a.date === b.date && a.text === b.text && a.streaming === b.streaming && a.call === b.call;
+/** Groups the chat into its parts. A part of `previous` whose items all still say the same is returned as it was, so that only
+ * what changed is drawn again: while a reply streams that is the reply, not the whole chat. */
+export function parts(items: readonly Item[], previous: readonly Part[] = []): Part[] {
+  const groups: Item[][] = [], before = new Map(previous.map(part => [part.key, part]));
+  for (const item of items) {
+    const last = groups.at(-1);
+    if (last && inReply(item) && inReply(last[0])) last.push(item); else groups.push([item]);
+  }
+  return groups.map(group => {
+    const old = before.get(group[0].key);
+    return old && old.items.length === group.length && old.items.every((item, at) => same(item, group[at])) ? old : part(group);
   });
 }
-export const logged = (entries: readonly Message[]): Item[] => entries.map(({ kind, text, date, origin }) => ({ key: '', kind, text, date, ...origin && { origin } }));
-
-/** One step of the agent's work: something it said on the way, or a tool call with its result. */
-export type Step = { type: 'talk'; item: Item } | { type: 'tool'; call: Item; result?: Item } | { type: 'fault'; item: Item };
-/** The chat in the blocks it is drawn as: your message, a report, or the agent's reply, which is its work and then its answer. */
-export type Part = { type: 'user' | 'work' | 'note'; item: Item } | { type: 'reply'; key: string; steps: Step[]; answer?: Item; from: string; to: string };
-
-export function parts(items: readonly Item[]): Part[] {
-  const result: Part[] = [];
-  let reply: Item[] = [];
-  const close = () => {
-    if (!reply.length) return;
-    const answer = reply.at(-1)?.kind === 'talk' ? reply.at(-1) : undefined, work = answer ? reply.slice(0, -1) : reply;
-    result.push({ type: 'reply', key: reply[0].key, steps: steps(work), ...answer && { answer }, from: reply[0].date, to: reply.at(-1)!.date });
-    reply = [];
+const IMAGE = /\[image ([0-9a-f]{16})\]/g;
+function part(items: readonly Item[]): Part {
+  const [first] = items, last = items.at(-1)!, common = { key: first.key, items };
+  if (first.kind === 'user') return { ...common, type: 'user', date: first.date, text: first.text.replace(IMAGE, '').trim(), images: [...first.text.matchAll(IMAGE)].map(match => match[1]) };
+  if (first.kind === 'note') return { ...common, type: 'note', text: first.text };
+  if (first.kind === 'work') {
+    // pi-optchat names the agent in front of its report: `[1a2b3c4d] …`.
+    const [, agent, body = first.text] = /^\[([\w-]+)\] ([\s\S]*)$/.exec(first.text) ?? [];
+    return { ...common, type: 'work', date: first.date, ...agent && { agent }, body };
+  }
+  const answer = last.kind === 'talk' ? last : undefined, work = steps(answer ? items.slice(0, -1) : items);
+  return {
+    ...common, type: 'reply', steps: work, from: first.date, to: last.date, stopped: work.some(step => step.type === 'fault' && step.text.startsWith('Agent aborted')),
+    ...answer && { answer: { text: answer.text, ...answer.streaming && { streaming: true } } },
   };
-  for (const item of items) {
-    if (item.kind === 'talk' || item.kind === 'tool' || item.kind === 'echo') { reply.push(item); continue; }
-    close();
-    result.push({ type: item.kind, item });
-  }
-  close();
-  return result;
 }
-/** A reply's tool calls come first and their results after, in the same order: each result goes to the oldest call still without one. */
-function steps(items: Item[]): Step[] {
+/** A reply's tool calls come first and their results after, in the same order: each result goes to the oldest call still without
+ * one. A tool call's entry is the tool's name, then its arguments as JSON; a result's is the tool's name, a colon, and what it
+ * printed. */
+function steps(items: readonly Item[]): Step[] {
   const result: Step[] = [], waiting: Extract<Step, { type: 'tool' }>[] = [];
-  for (const item of items) {
-    if (item.kind === 'talk') result.push({ type: 'talk', item });
-    else if (item.kind === 'tool') { const step = { type: 'tool' as const, call: item }; result.push(step); waiting.push(step); }
-    else if (/^Agent (error|aborted): /.test(item.text) || !waiting.length) result.push({ type: 'fault', item });
-    else Object.assign(waiting.shift()!, { result: item });
+  for (const { key, kind, text, streaming, call } of items) {
+    if (kind === 'talk') result.push({ key, type: 'talk', text, ...streaming && { streaming } });
+    else if (kind === 'tool') {
+      const space = text.indexOf(' '), step: Extract<Step, { type: 'tool' }> = { key, type: 'tool', name: space < 0 ? text : text.slice(0, space), args: {}, failed: false, ...call && { call } };
+      try { const args: unknown = JSON.parse(text.slice(space + 1)); if (isObject(args)) step.args = args; } catch {}
+      result.push(step); waiting.push(step);
+    } else if (/^Agent (error|aborted): /.test(text) || !waiting.length) result.push({ key, type: 'fault', text });
+    else {
+      const output = text.slice(text.indexOf(': ') + 2);
+      Object.assign(waiting.shift()!, { output, failed: /^error\b/i.test(output) });
+    }
   }
   return result;
 }
-/** A tool call as its log entry has it: the tool's name, then its arguments as JSON. */
-export function call(text: string): { name: string; args: Record<string, unknown> } {
-  const space = text.indexOf(' '), name = space < 0 ? text : text.slice(0, space);
-  try { const args: unknown = JSON.parse(text.slice(space + 1)); return { name, args: isObject(args) ? args : {} }; } catch { return { name, args: {} }; }
-}
-/** A tool's result without the tool's name in front. */
-export const output = (text: string) => text.slice(text.indexOf(': ') + 2);
 /** How long a reply took, as 42s or 3m 05s. */
 export function took(from: string, to: string) {
   const seconds = Math.max(0, Math.round((Date.parse(to) - Date.parse(from)) / 1000));

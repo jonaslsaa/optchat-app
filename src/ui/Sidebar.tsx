@@ -1,16 +1,10 @@
 import { CheckIcon, MessageSquareIcon, MessagesSquareIcon, SquarePenIcon, XIcon } from 'lucide-react';
 import type { WindowState } from '../protocol.ts';
 import { label } from './keys.ts';
-import { app, mainOf, type State } from './store.ts';
-import { words } from './transcript.ts';
+import { canComplete } from '../window.ts';
+import { app, title, type State } from './store.ts';
 import { Button, cn, Kbd, StatusDot } from './ui.tsx';
 
-/** What a window is called: the main chat, or a connected window by its first message. */
-export function title(window: WindowState, state: State) {
-  if (window.role === 'main') return 'Main chat';
-  const first = [...state.sessions[window.id] ?? [], ...state.live[window.id]?.messages ?? []].find(message => message.role === 'user');
-  return first ? words(first.content).split('\n')[0] : 'New window';
-}
 /** A dot for a window that is working, or whose Pi failed. */
 function Dot({ window }: { window: WindowState }) {
   if (window.status === 'running' || window.status === 'starting') return <StatusDot tone="working" pulse />;
@@ -20,11 +14,10 @@ function Dot({ window }: { window: WindowState }) {
  * are T3 Code's sidebar thread row (MIT, see THIRD_PARTY_NOTICES.md). */
 export function Sidebar({ state, profile, selected }: { state: State; profile: string; selected: string }) {
   const windows = state.windows.filter(window => window.profile === profile);
-  const ordered = [...windows.filter(window => window.id === mainOf(profile)), ...windows.filter(window => window.id !== mainOf(profile))];
   return (
     <nav aria-label="Windows" className="flex h-full w-(--sidebar-width) shrink-0 flex-col border-sidebar-border border-r bg-sidebar text-sidebar-foreground">
       <ul className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto p-2 pt-3">
-        {ordered.map((window, index) => {
+        {windows.map((window, index) => {
           const active = window.id === selected;
           return (
             <li key={window.id} className="group/row relative">
@@ -41,8 +34,8 @@ export function Sidebar({ state, profile, selected }: { state: State; profile: s
               </button>
               {window.role === 'connected' && (
                 <span className="absolute inset-y-0 right-1.5 hidden items-center gap-0.5 group-focus-within/row:flex group-hover/row:flex">
-                  {window.owner === false && !window.completed && <Button variant="ghost-muted" size="icon-xs" aria-label="Complete" title="Complete: hand this conversation to the main chat" onClick={() => void app.complete(window.id)}><CheckIcon /></Button>}
-                  <Button variant="ghost-muted" size="icon-xs" aria-label="Close window" title="Close window" onClick={() => void app.close(window.id)}><XIcon /></Button>
+                  {canComplete(window) && <Button variant="ghost-muted" size="icon-xs" aria-label="Complete" title="Complete: hand this conversation to the main chat" onClick={() => void app.complete(window.id)}><CheckIcon /></Button>}
+                  <Button variant="ghost-muted" size="icon-xs" aria-label="Close window" title="Close window" onClick={() => void app.closeWindow(window.id)}><XIcon /></Button>
                 </span>
               )}
             </li>

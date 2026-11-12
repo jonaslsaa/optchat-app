@@ -30,17 +30,24 @@ npm run screenshots       # a PNG of every main state, in /tmp/optchat-app-shots
 
 | File | What it is |
 | --- | --- |
-| `src/ui/transcript.ts` | The chat as data, with no DOM: folds Pi's records into a window's state, joins that with the log, and groups it into what is drawn. Tested in `test/transcript.test.ts`. |
-| `src/ui/store.ts` | Everything the page knows, outside React: the connection (and reconnecting), the logs, each window's run. Components read it with `useApp`. |
-| `src/ui/App.tsx`, `Sidebar.tsx`, `Timeline.tsx`, `Rows.tsx`, `Composer.tsx`, `Markdown.tsx` | The components. |
+| `src/ui/transcript.ts` | The chat as data, with no DOM: folds Pi's records into a window's state, joins that with the log, joins the log's pages, and works out what each row says (`parts`). Tested in `test/transcript.test.ts`. |
+| `src/ui/store.ts` | Everything the page knows, outside React: the connection (and reconnecting), the logs, each window's run. Components read it with `useApp`. Tested against the server in `test/store.test.ts`. |
+| `src/ui/App.tsx`, `Profiles.tsx`, `Sidebar.tsx`, `Timeline.tsx`, `Rows.tsx`, `Composer.tsx`, `Markdown.tsx` | The components. They only draw: a row gets its part, and is drawn again only when that part changed. |
+| `src/ui/safe.ts` | What Markdown may do: see below. Tested in `test/markdown.test.ts`. |
+| `src/ui/keys.ts` | Shortcuts, and `useShortcuts`. |
 | `src/ui/ui.tsx`, `WorkLog.tsx`, `markdownStreamBlocks.ts`, `index.css` | Buttons, tool-call rows, the Markdown splitter and the design tokens, from T3 Code. |
+| `src/window.ts` | What a window can do (`canComplete`), for the server and the page alike. |
 
 **One chat, three sources.** Every item in the chat is a log entry, or what a message Pi has not logged yet will be logged as (`said` mirrors pi-optchat's own). So a reply looks the same while it streams, when it has ended and after a restart, and keeps what you opened in it. The live test checks that the two readings agree on a real turn.
 
 **Joining the log with the run.** pi-optchat dates an entry with its message's time and logs a run in order, so a message of the run counts as logged once the log has an entry of its time, and so does everything before it. That is an interim rule: a run number published by pi-optchat would be sound where timestamps are not.
 
-**Reconnecting.** Windows live in the server. The page asks `windows`, then `records` for each, and replays them; a gap in the pushed record numbers makes it ask again. A lost connection is retried every second.
+**Keys.** A row's key is its first entry's number in the log, and what a run has said and the log does not have yet is numbered on from the log's last entry, which is the number the log will give it. A connected window's conversation is numbered by its place in it.
+
+**Reconnecting.** Windows live in the server. The page asks `windows`, then `records` for each, and replays them; a gap in the pushed record numbers makes it ask again, and read again what the run said. A lost connection is retried every second, from one place: the socket's closing.
+
+**Nothing in a reply is fetched on its own.** The agent reads web pages and files that may tell it what to write, and a Markdown image is fetched the moment it is drawn, with whatever its address carries. So only the profile's own images (`/images/<profile>/<name>`) are drawn; any other image is shown as a link, and links open in a new tab that knows nothing of this one. The server backs this with `Content-Security-Policy: default-src 'self'`.
 
 ## Screenshots
 
-`npm run screenshots [directory]` builds the page, serves it against throwaway profiles under `/tmp` with the fake Pi (`test/fake-pi.ts`: no model, no network, nothing of yours is read), drives it in your installed Chrome through `playwright-core`, and saves one PNG per state: an empty profile, a long history, a folded reply opened, a reply streaming, a queued message, the finished reply, a new connected window, a connected window with its conversation, a completed window, two profile tabs, a narrow page with and without its sidebar, and dark mode. Clocks are fixed, so the same code gives the same bytes: compare two runs to see what a change did.
+`npm run screenshots [directory]` builds the page, serves it against throwaway profiles under `/tmp` with the fake Pi (`test/fake-pi.ts`: no model, no network, nothing of yours is read), drives it in your installed Chrome through `playwright-core`, and saves one PNG per state: an empty profile, a long history, a folded reply opened, a reply streaming, a steering and a queued message, the finished reply, a new connected window, a connected window with its conversation, a completed window, two profile tabs, a narrow page with and without its sidebar, and dark mode. Clocks are fixed, so the same code gives the same bytes: compare two runs to see what a change did.

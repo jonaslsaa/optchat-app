@@ -3,6 +3,7 @@ import { isValidElement, memo, useState, type ComponentProps, type ReactNode } f
 import ReactMarkdown, { type Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { splitMarkdownBlocks } from './markdownStreamBlocks.ts';
+import { safe } from './safe.ts';
 import { Button, cn } from './ui.tsx';
 
 /** A code block in T3 Code's frame: the language, and buttons to wrap its lines and copy it. */
@@ -24,8 +25,8 @@ function CodeBlock({ children }: ComponentProps<'pre'>) {
   );
 }
 const components: Components = {
+  ...safe,
   pre: ({ node: _, ...props }) => <CodeBlock {...props} />,
-  a: ({ node: _, ...props }) => <a {...props} target="_blank" rel="noreferrer" />,
   table: ({ node: _, ...props }) => <div className="table-container"><table {...props} /></div>,
 };
 const Block = memo(function Block({ source }: { source: string }) {

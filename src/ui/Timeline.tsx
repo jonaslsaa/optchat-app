@@ -1,38 +1,51 @@
 import { ChevronDownIcon } from 'lucide-react';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { NoteRow, ReplyRow, ReportRow, UserRow, Waiting } from './Rows.tsx';
-import { parts, thinking, type Item, type Live } from './transcript.ts';
+import { NoteRow, ReplyRow, ReportRow, UserRow, Waiting, type Working } from './Rows.tsx';
+import { parts, thinking, type Item, type Live, type Part } from './transcript.ts';
 import { Button } from './ui.tsx';
 
 /** How near the end counts as at the end, in pixels. */
 const EDGE = 48;
 
 /** The chat, oldest at the top. It stays at the end while you are there, and stays where you are while you read back; older
- * pages of the log are read as you reach the top. */
-export function Timeline({ items, live, profile, older, loading, empty }: { items: Item[]; live: Live; profile: string; older?: () => void; loading?: boolean; empty: string }) {
+ * pages of the log are read as you reach the top. `running` says the agent is in a run, and `live` what it is doing in it. */
+export function Timeline({ items, live, running, profile, older, loading, empty }: { items: Item[]; live: Live; running: boolean; profile: string; older?: () => void; loading?: boolean; empty: string }) {
   const scroller = useRef<HTMLDivElement>(null), content = useRef<HTMLDivElement>(null);
-  const atEnd = useRef(true), before = useRef({ first: items[0]?.key, height: 0 });
+  const atEnd = useRef(true), before = useRef({ first: items[0]?.key, height: 0, top: 0, sent: -1 });
   const [away, setAway] = useState(false);
-  const blocks = useMemo(() => parts(items), [items]);
+  // The parts drawn last time are kept where their items did not change, so their rows are not drawn again.
+  const drawn = useRef<Part[]>([]);
+  const blocks = useMemo(() => drawn.current = parts(items, drawn.current), [items]);
   const last = blocks.at(-1);
+  const working = useMemo((): Working => ({ thinking: thinking(live), activity: live.activity, tools: live.tools }), [live]);
 
   useLayoutEffect(() => {
     const element = scroller.current;
     if (!element) return;
+    // A message of yours went in at the end: you are shown it, wherever you were reading.
+    const sent = last?.type === 'user' ? last.key : before.current.sent;
+    if (sent !== before.current.sent) { atEnd.current = true; setAway(false); }
     // An older page went in above: stay on the message you were reading.
     if (before.current.first !== items[0]?.key && !atEnd.current) element.scrollTop += element.scrollHeight - before.current.height;
     else if (atEnd.current) element.scrollTop = element.scrollHeight;
-    before.current = { first: items[0]?.key, height: element.scrollHeight };
+    before.current = { first: items[0]?.key, height: element.scrollHeight, top: element.scrollTop, sent };
   });
   // What is already there can grow too: an image loads, a tool call is opened.
   useEffect(() => {
-    const observer = new ResizeObserver(() => { if (atEnd.current && scroller.current) scroller.current.scrollTop = scroller.current.scrollHeight; });
+    const observer = new ResizeObserver(() => {
+      const element = scroller.current;
+      if (!atEnd.current || !element) return;
+      element.scrollTop = element.scrollHeight;
+      before.current.top = element.scrollTop;
+    });
     if (content.current) observer.observe(content.current);
     return () => observer.disconnect();
   }, []);
   const scrolled = () => {
-    const element = scroller.current!;
-    atEnd.current = element.scrollHeight - element.scrollTop - element.clientHeight <= EDGE;
+    const element = scroller.current!, near = element.scrollHeight - element.scrollTop - element.clientHeight <= EDGE;
+    // Only you moving up takes the chat off its end: the chat growing under it leaves it short of the end for a moment too.
+    if (near || element.scrollTop < before.current.top) atEnd.current = near;
+    before.current.top = element.scrollTop;
     setAway(!atEnd.current);
     if (element.scrollTop < 200 && !loading) older?.();
   };
@@ -48,15 +61,11 @@ export function Timeline({ items, live, profile, older, loading, empty }: { item
             </button>
           )}
           {blocks.length === 0 && <p className="pt-[20vh] text-center text-muted-foreground text-sm">{empty}</p>}
-          {blocks.map((part, index) => {
-            if (part.type !== 'reply') {
-              const { item } = part;
-              return part.type === 'user' ? <UserRow key={item.key} item={item} profile={profile} /> : part.type === 'work' ? <ReportRow key={item.key} item={item} /> : <NoteRow key={item.key} item={item} />;
-            }
-            const working = live.running && index === blocks.length - 1;
-            return <ReplyRow key={part.key} part={part} working={working} thinking={working ? thinking(live) : undefined} activity={working ? live.activity : undefined} tools={live.tools} />;
-          })}
-          {live.running && last && last.type !== 'reply' && <Waiting from={last.item.date} activity={live.activity} />}
+          {blocks.map(part => part.type === 'user' ? <UserRow key={part.key} part={part} profile={profile} />
+            : part.type === 'work' ? <ReportRow key={part.key} part={part} />
+            : part.type === 'note' ? <NoteRow key={part.key} part={part} />
+            : <ReplyRow key={part.key} part={part} working={running && part === last ? working : undefined} />)}
+          {running && last && last.type !== 'reply' && <Waiting from={last.items[0].date} activity={live.activity} />}
         </div>
       </div>
       {away && (

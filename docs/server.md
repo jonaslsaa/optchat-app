@@ -45,7 +45,7 @@ The client sends `{ id, method, params }` and gets `{ id, result }` or `{ id, er
 
 The server pushes two things to every client:
 
-- `{ push: 'window', window }` when a window changes: its `status` (`stopped`, `starting`, `idle`, `running`, or `closed`), `error` if its Pi failed, and what pi-optchat says of its Pi: `owner` (it owns the profile) and `completed` (its conversation is handed off).
+- `{ push: 'window', window }` when a window changes: its `status` (`stopped`, `starting`, `idle`, `running`, or `closed`), `error` if its Pi failed, and `completed` once a connected window's conversation is handed off.
 - `{ push: 'record', window, seq, record }` for every record Pi writes: its session events and extension UI requests, passed through as they are (Pi's `docs/json.md` and `docs/rpc-extension-ui.md`).
 
 A profile's images are plain HTTP: `GET /images/<profile>/<name>` for a message's `[image <name>]`. Every other path is a file of the built UI (`dist/ui`, [ui.md](ui.md)), with the page at `/`.
@@ -64,7 +64,7 @@ A run's finished messages are in `history` as soon as pi-optchat has logged them
 
 - **Main window.** `open` gives it at once; its Pi starts on the first `prompt`, with `--optchat-profile <name> --optchat-connect off`. Until then nothing holds the profile, so a terminal Pi can still open it. The main window never joins a profile a Pi outside the app holds: its start fails with who holds it.
 - **Connected windows.** A second Pi on a profile joins the first as a connected window: its own conversation, the profile's memory read-only, and a handoff to the main chat on Complete. The server starts it with `--optchat-connect join`, after the main window's Pi if the profile has no owner yet. This needs the pi-optchat after 0.11.8 (its "RPC hosts" change).
-- **`role` is the window's place in the app and never changes.** What its Pi is to the profile is `owner`, read from pi-optchat's `optchat.role` status.
+- **`role` is the window's place in the app and never changes.** The main window's Pi owns the profile and a connected window's Pi joins it; the server starts them that way, so nothing has to be read back. `completed` is pi-optchat's word (its `optchat.role` status) that a connected window's conversation is handed off.
 - **A Pi that did not open its profile** is stopped, and the prompt fails with the reason (for example pi-optchat's `Profile already running: …`, or that pi-optchat is not installed), instead of a window that looks idle and answers nothing. The server knows the profile is open when pi-optchat's `optchat` status line names it, so another extension's failure does not count.
 - **Stopping.** The server closes Pi's stdin, which is Pi's request for an orderly shutdown, and kills it only if it has not exited after 15 seconds. A Pi that is still starting is stopped the same way.
 
@@ -73,7 +73,9 @@ A run's finished messages are in `history` as soon as pi-optchat has logged them
 The windows run an agent with a shell, so the server listens on 127.0.0.1 only and checks two headers, `Host` on everything it serves and `Origin` on the WebSocket:
 
 - `Host` must name this machine (`127.0.0.1`, `localhost`, `[::1]`): a page whose own name was pointed at 127.0.0.1 is refused.
-- `Origin`, which a browser always sends on a WebSocket, must be a page this machine serves, or one of `startServer`'s `origins`: that option is for a desktop shell, which loads the UI from its own scheme (T3 Code's is `t3code://app`). A client that is not a browser sends no `Origin`.
+- `Origin`, which a browser always sends on a WebSocket, must be the server's own page (`http://127.0.0.1:<port>` or `http://localhost:<port>`), or one of `startServer`'s `origins`: that option is for a desktop shell, which loads the UI from its own scheme (T3 Code's is `t3code://app`), and for Vite's address in `npm run dev`. Another program's page on this machine is refused like any other. A client that is not a browser sends no `Origin`.
+
+The page is sent with `X-Frame-Options: DENY` and a `Content-Security-Policy` that lets it load only from the server itself, so no other page can frame it and nothing the agent writes can make it fetch an address elsewhere.
 
 ## From T3 Code
 

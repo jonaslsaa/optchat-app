@@ -1,38 +1,33 @@
 import { CheckIcon, PanelLeftIcon, XIcon } from 'lucide-react';
-import { Fragment, useEffect, useMemo, useState } from 'react';
+import { Fragment, useMemo, useState } from 'react';
+import { canComplete } from '../window.ts';
 import { Composer } from './Composer.tsx';
-import { matches } from './keys.ts';
+import { useShortcuts } from './keys.ts';
 import { ProfileName, Tabs } from './Profiles.tsx';
-import { Sidebar, title } from './Sidebar.tsx';
-import { app, mainOf, useApp, type State } from './store.ts';
+import { Sidebar } from './Sidebar.tsx';
+import { app, mainOf, title, useApp, type State } from './store.ts';
 import { Timeline } from './Timeline.tsx';
-import { chat, idle, logged, said } from './transcript.ts';
+import { chat, idle, logged, spoken } from './transcript.ts';
 import { Button } from './ui.tsx';
+
+/** A window that has not run yet. */
+const NOTHING = idle();
 
 /** One profile: its windows on the left, and the selected window's chat. */
 function Profile({ state, profile }: { state: State; profile: string }) {
   const [sidebar, setSidebar] = useState(() => innerWidth >= 768);
-  const windows = state.windows.filter(window => window.profile === profile);
+  const windows = state.windows.filter(window => window.profile === profile), ids = windows.map(window => window.id).join(' ');
   const window = windows.find(w => w.id === state.selected[profile]) ?? windows.find(w => w.id === mainOf(profile));
-  const live = (window && state.live[window.id]) ?? idle(), log = state.logs[profile], session = window && state.sessions[window.id];
+  const live = (window && state.live[window.id]) ?? NOTHING, log = state.logs[profile], session = window && state.sessions[window.id];
   // The main chat is the profile's log. A connected window's conversation is only in its Pi until it is handed off.
   const own = window?.role === 'connected';
-  const base = useMemo(() => own ? (session ?? []).flatMap(message => said(message)) : logged(log?.entries ?? []), [own, session, log]);
-  const items = useMemo(() => chat(base, live), [base, live]);
-
-  useEffect(() => {
-    const pressed = (event: KeyboardEvent) => {
-      const ordered = [...windows.filter(w => w.id === mainOf(profile)), ...windows.filter(w => w.id !== mainOf(profile))];
-      const digit = ordered.findIndex((_, index) => matches(event, `alt+${index + 1}`));
-      if (matches(event, 'mod+shift+o')) void app.newWindow(profile);
-      else if (matches(event, 'mod+b')) setSidebar(shown => !shown);
-      else if (digit >= 0) app.select(ordered[digit].id);
-      else return;
-      event.preventDefault();
-    };
-    addEventListener('keydown', pressed);
-    return () => removeEventListener('keydown', pressed);
-  });
+  const before = useMemo(() => own ? spoken(session ?? []) : logged(log?.entries ?? []), [own, session, log?.entries]);
+  const items = useMemo(() => chat(before, live), [before, live.messages, live.streaming]);
+  useShortcuts(() => ({
+    'mod+shift+o': () => void app.newWindow(profile),
+    'mod+b': () => setSidebar(shown => !shown),
+    ...Object.fromEntries(ids.split(' ').slice(0, 9).map((id, index) => [`alt+${index + 1}`, () => app.select(id)])),
+  }), [profile, ids]);
   if (!window) return <p className="m-auto text-muted-foreground text-sm">Opening {profile}…</p>;
   const more = !own && log && log.entries.length > 0 && log.entries[0].i > 0;
   return (
@@ -46,10 +41,10 @@ function Profile({ state, profile }: { state: State; profile: string }) {
           <h1 className="min-w-0 truncate font-medium text-sm">{title(window, state)}</h1>
           {window.role === 'connected' && <span className="shrink-0 rounded-full border px-2 py-0.5 text-2xs text-muted-foreground">{window.completed ? 'Completed' : 'Connected window'}</span>}
           <span className="flex-1" />
-          {window.role === 'connected' && window.owner === false && !window.completed && <Button variant="outline" size="sm" onClick={() => void app.complete(window.id)}><CheckIcon />Complete</Button>}
+          {canComplete(window) && <Button variant="outline" onClick={() => void app.complete(window.id)}><CheckIcon />Complete</Button>}
         </header>
         <Fragment key={window.id}>
-          <Timeline items={items} live={live} profile={profile} loading={log?.loading} older={more ? () => void app.older(profile) : undefined}
+          <Timeline items={items} live={live} running={window.status === 'running'} profile={profile} loading={log?.loading} older={more ? () => void app.older(profile) : undefined}
             empty={window.role === 'main' ? 'Send a message to start the conversation.' : window.completed ? 'Completed. The main chat has this conversation; your next message starts a new one.' : 'A connected window: its own conversation, with this profile\'s memory. Complete hands it to the main chat.'} />
           <Composer window={window} live={live} />
         </Fragment>
@@ -59,12 +54,6 @@ function Profile({ state, profile }: { state: State; profile: string }) {
 }
 export function App() {
   const state = useApp();
-  useEffect(() => {
-    // Read the log again when you come back to the page: a Pi in a terminal may have written to it.
-    const back = () => { if (document.visibilityState === 'visible' && app.state.profile) void app.openProfile(app.state.profile); };
-    document.addEventListener('visibilitychange', back);
-    return () => document.removeEventListener('visibilitychange', back);
-  }, []);
   return (
     <div className="flex h-dvh flex-col">
       {state.tabs.length > 1 && <Tabs state={state} />}

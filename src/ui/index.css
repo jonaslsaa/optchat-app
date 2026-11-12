@@ -15,17 +15,14 @@
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
-  --color-card-foreground: var(--card-foreground);
   --color-popover: var(--popover);
   --color-popover-foreground: var(--popover-foreground);
   --color-primary: var(--primary);
   --color-primary-foreground: var(--primary-foreground);
   --color-secondary: var(--secondary);
   --color-secondary-foreground: var(--secondary-foreground);
-  --color-muted: var(--muted);
   --color-muted-foreground: var(--muted-foreground);
   --color-accent: var(--accent);
-  --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
   --color-destructive-foreground: var(--destructive-foreground);
   --color-border: var(--border);
@@ -44,7 +41,6 @@
   --color-sidebar-muted-foreground: var(--sidebar-muted-foreground);
   --color-sidebar-row-hover: var(--sidebar-row-hover);
   --color-sidebar-row-active: var(--sidebar-row-active);
-  --color-sidebar-row-selected: var(--sidebar-row-selected);
   --color-sidebar-border: var(--sidebar-border);
   --color-warning: var(--warning);
   --color-warning-foreground: var(--warning-foreground);
@@ -52,11 +48,6 @@
   --color-error: var(--error);
   --color-error-foreground: var(--error-foreground);
   --color-error-surface: var(--error-surface);
-  --color-success: var(--success);
-  --color-success-foreground: var(--success-foreground);
-  --color-info: var(--info);
-  --color-info-foreground: var(--info-foreground);
-  --color-code: var(--code-background);
   --color-tool-error-icon: var(--tool-error-icon);
   --color-zinc-25: oklch(99.2% 0 0);
 
@@ -98,14 +89,12 @@
   --surface-raised: color-mix(in srgb, var(--card) 20%, transparent);
   --foreground: var(--color-zinc-900);
   --card: var(--color-white);
-  --card-foreground: var(--color-zinc-900);
   --popover: var(--color-white);
   --popover-foreground: var(--color-zinc-900);
   --primary: oklch(0.488 0.217 264);
   --primary-foreground: var(--color-white);
   --secondary: var(--color-zinc-50);
   --secondary-foreground: var(--color-zinc-800);
-  --muted: var(--color-zinc-50);
   --muted-foreground: var(--color-zinc-500);
   --placeholder: var(--muted-foreground);
   --secondary-label: var(--muted-foreground);
@@ -116,7 +105,6 @@
   --message-action-foreground: var(--primary-foreground);
   --message-action-hover: color-mix(in srgb, var(--primary) 90%, var(--background));
   --accent: var(--color-zinc-100);
-  --accent-foreground: var(--color-zinc-900);
   --error: var(--color-red-500);
   --error-foreground: var(--color-red-700);
   --tool-error-icon: var(--error);
@@ -126,10 +114,7 @@
   --border: var(--color-zinc-200);
   --input: var(--color-zinc-300);
   --ring: var(--primary);
-  --info: var(--color-blue-500);
   --info-foreground: var(--color-blue-700);
-  --success: var(--color-emerald-500);
-  --success-foreground: var(--color-emerald-700);
   --warning: var(--color-amber-500);
   --warning-foreground: var(--color-amber-700);
   --warning-surface: color-mix(in srgb, var(--warning) 8%, transparent);
@@ -138,9 +123,7 @@
   --sidebar-muted-foreground: var(--muted-foreground);
   --sidebar-row-hover: var(--color-zinc-100);
   --sidebar-row-active: var(--color-white);
-  --sidebar-row-selected: var(--color-white);
   --sidebar-border: var(--border);
-  --code-background: color-mix(in srgb, var(--card) 90%, var(--background));
 
   @variant dark {
     color-scheme: dark;
@@ -151,16 +134,13 @@
     --surface-raised: color-mix(in srgb, var(--color-neutral-950) 97%, var(--color-white));
     --foreground: var(--color-neutral-100);
     --card: color-mix(in srgb, var(--color-neutral-950) 97%, var(--color-white));
-    --card-foreground: var(--color-neutral-100);
     --popover: color-mix(in srgb, var(--color-neutral-950) 97%, var(--color-white));
     --popover-foreground: var(--color-neutral-100);
     --primary: oklch(0.571 0.21 264);
     --secondary: --alpha(var(--color-white) / 3%);
     --secondary-foreground: var(--color-neutral-100);
-    --muted: --alpha(var(--color-white) / 3%);
     --muted-foreground: var(--color-neutral-400);
     --accent: --alpha(var(--color-white) / 4%);
-    --accent-foreground: var(--color-neutral-100);
     --message-surface: color-mix(in srgb, var(--color-neutral-950) 92%, var(--color-white));
     --error: color-mix(in srgb, var(--color-red-500) 90%, var(--color-white));
     --error-foreground: var(--color-red-400);
@@ -169,13 +149,11 @@
     --border: --alpha(var(--color-white) / 8%);
     --input: --alpha(var(--color-white) / 11%);
     --info-foreground: var(--color-blue-400);
-    --success-foreground: var(--color-emerald-400);
     --warning-foreground: var(--color-amber-400);
     --warning-surface: color-mix(in srgb, var(--warning) 16%, transparent);
     --sidebar: #000;
     --sidebar-row-hover: --alpha(var(--color-white) / 8%);
     --sidebar-row-active: --alpha(var(--color-white) / 11%);
-    --sidebar-row-selected: --alpha(var(--color-white) / 7%);
   }
 }
 

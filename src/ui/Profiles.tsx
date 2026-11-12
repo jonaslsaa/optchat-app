@@ -8,9 +8,11 @@ export function ProfilePicker({ state, label, className, children }: { state: St
   const [open, setOpen] = useState(false), menu = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!open) return;
-    const away = (event: Event) => { if (event instanceof KeyboardEvent ? event.key === 'Escape' : !menu.current?.contains(event.target as Node)) setOpen(false); };
-    addEventListener('pointerdown', away); addEventListener('keydown', away);
-    return () => { removeEventListener('pointerdown', away); removeEventListener('keydown', away); };
+    const outside = (event: PointerEvent) => { if (event.target instanceof Node && !menu.current?.contains(event.target)) setOpen(false); };
+    // Esc closes the menu and nothing else: it is taken before the shortcut that stops the agent hears it.
+    const escape = (event: KeyboardEvent) => { if (event.key === 'Escape') { event.stopPropagation(); event.preventDefault(); setOpen(false); } };
+    addEventListener('pointerdown', outside); addEventListener('keydown', escape, true);
+    return () => { removeEventListener('pointerdown', outside); removeEventListener('keydown', escape, true); };
   }, [open]);
   return (
     <div ref={menu} className="relative shrink-0">

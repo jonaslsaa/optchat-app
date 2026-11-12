@@ -1,64 +1,17 @@
-// From T3 Code (MIT, see THIRD_PARTY_NOTICES.md): apps/web/src/components/chat/WorkLog.tsx, unchanged but for the import of `cn`.
-import {
-  createContext,
-  use,
-  useLayoutEffect,
-  useRef,
-  type ComponentProps,
-  type ReactNode,
-} from "react";
+// From T3 Code (MIT, see THIRD_PARTY_NOTICES.md): the row and its details from apps/web/src/components/chat/WorkLog.tsx, without
+// the grouping, button and panel variants this app does not use.
+import { useLayoutEffect, useRef, type ComponentProps, type ReactNode } from "react";
 import { cn } from "./ui.tsx";
-
-const GroupedRows = createContext(false);
-
-/** Groups may span virtualized timeline items. Each part owns its trailing space. */
-export function WorkLogBlock({
-  layout = "standalone",
-  continues = false,
-  children,
-}: {
-  layout?: "standalone" | "group-header" | "group-content";
-  continues?: boolean | undefined;
-  children: ReactNode;
-}) {
-  return (
-    <div
-      className={
-        continues || layout === "group-header"
-          ? "pb-0"
-          : layout === "group-content"
-            ? "pb-1"
-            : "pb-2"
-      }
-    >
-      {children}
-    </div>
-  );
-}
-
-export function WorkLogList({ children }: { children: ReactNode }) {
-  return (
-    <GroupedRows value>
-      <div className="flex min-w-0 flex-col">{children}</div>
-    </GroupedRows>
-  );
-}
 
 type RowContent = {
   icon?: ReactNode;
   label: ReactNode;
   trailing?: ReactNode;
-  wrapLabel?: boolean;
 };
 
-function WorkLogLine({ icon, label, trailing, wrapLabel }: RowContent) {
+function WorkLogLine({ icon, label, trailing }: RowContent) {
   return (
-    <div
-      className={cn(
-        "flex min-h-6 min-w-0 gap-1.5 text-sm leading-relaxed select-none [&_*]:select-none",
-        wrapLabel ? "items-start" : "items-center",
-      )}
-    >
+    <div className="flex min-h-6 min-w-0 items-center gap-1.5 text-sm leading-relaxed select-none [&_*]:select-none">
       <div className="flex min-w-0 flex-1 items-baseline gap-1.5">
         {icon ? (
           <span className="relative w-6 shrink-0 leading-0">
@@ -67,14 +20,7 @@ function WorkLogLine({ icon, label, trailing, wrapLabel }: RowContent) {
             </span>
           </span>
         ) : null}
-        <div
-          className={cn(
-            "min-w-0 flex-1 text-secondary-label",
-            !wrapLabel && "truncate [&_*]:whitespace-nowrap",
-          )}
-        >
-          {label}
-        </div>
+        <div className="min-w-0 flex-1 truncate text-secondary-label [&_*]:whitespace-nowrap">{label}</div>
       </div>
       {trailing}
     </div>
@@ -84,43 +30,23 @@ function WorkLogLine({ icon, label, trailing, wrapLabel }: RowContent) {
 const interactionClassName =
   "cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/70";
 
-function useRowClassName(interactive: boolean) {
-  const grouped = use(GroupedRows);
-  return cn(
-    "group/timeline-row relative w-full min-w-0 rounded-md px-0.5 text-left transition-colors",
-    grouped ? "py-0" : "py-0.5",
-    interactive && interactionClassName,
-  );
-}
-
-export function WorkLogButton({
-  icon,
-  label,
-  trailing,
-  wrapLabel = false,
-  ...buttonProps
-}: RowContent & Omit<ComponentProps<"button">, "className" | "style" | "children">) {
-  const className = useRowClassName(true);
-  return (
-    <button {...buttonProps} type="button" className={className}>
-      <WorkLogLine icon={icon} label={label} trailing={trailing} wrapLabel={wrapLabel} />
-    </button>
-  );
-}
-
 /** Div disclosure permits selectable detail and nested actions. */
 export function WorkLogRow({
   icon,
   label,
   trailing,
-  wrapLabel = false,
   children,
   ...rowProps
 }: RowContent & Omit<ComponentProps<"div">, "className" | "style">) {
-  const className = useRowClassName(rowProps.onClick !== undefined);
   return (
-    <div {...rowProps} className={className}>
-      <WorkLogLine icon={icon} label={label} trailing={trailing} wrapLabel={wrapLabel} />
+    <div
+      {...rowProps}
+      className={cn(
+        "group/timeline-row relative w-full min-w-0 rounded-md px-0.5 py-0.5 text-left transition-colors",
+        rowProps.onClick !== undefined && interactionClassName,
+      )}
+    >
+      <WorkLogLine icon={icon} label={label} trailing={trailing} />
       {children}
     </div>
   );
@@ -128,16 +54,7 @@ export function WorkLogRow({
 
 const LIVE_EDGE_PX = 4;
 
-export function WorkLogDetails({
-  children,
-  kind = "text",
-  followLive = false,
-}: {
-  children: ReactNode;
-  kind?: "text" | "panel" | "media";
-
-  followLive?: boolean;
-}) {
+export function WorkLogDetails({ children, followLive = false }: { children: ReactNode; followLive?: boolean }) {
   const scrollerRef = useRef<HTMLDivElement>(null);
   const atLiveEdgeRef = useRef(true);
   useLayoutEffect(() => {
@@ -153,14 +70,7 @@ export function WorkLogDetails({
         const { scrollHeight, scrollTop, clientHeight } = event.currentTarget;
         atLiveEdgeRef.current = scrollHeight - scrollTop - clientHeight <= LIVE_EDGE_PX;
       }}
-      className={cn(
-        "cursor-auto",
-        kind === "text"
-          ? "ms-7 flex max-h-96 flex-col gap-3 overflow-auto px-0.5 py-1 select-text"
-          : kind === "panel"
-            ? "mt-0.5 mb-1.5 pb-2"
-            : "mt-1",
-      )}
+      className="ms-7 flex max-h-96 cursor-auto flex-col gap-3 overflow-auto px-0.5 py-1 select-text"
       onClick={(event) => event.stopPropagation()}
       onPointerDown={(event) => event.stopPropagation()}
     >

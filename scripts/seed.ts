@@ -1,5 +1,6 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import type { Script } from '../test/fake-pi.ts';
 
 /** A profile's log for the screenshots: a believable chat with everything the UI draws, written as pi-optchat writes one. */
 type Said = [kind: 'user' | 'talk' | 'tool' | 'echo' | 'work' | 'note', text: string];
@@ -48,3 +49,44 @@ export function seed(directory: string, turns: number, end = Date.UTC(2026, 10, 
   mkdirSync(join(directory, 'main'), { recursive: true });
   writeFileSync(join(directory, 'main', '2026-11-12.jsonl'), `${entries.join('\n')}\n`);
 }
+
+const ANSWER = `## What I found
+
+The working tree is clean apart from **two files**, and the README describes the layout the UI follows:
+
+- \`src/server\` runs each window as one \`pi --mode rpc\` process
+- \`src/ui\` is the page you are looking at
+- the profile's memory is read from disk, so history shows without Pi running
+
+\`\`\`ts
+const { window } = await client.request('open', { profile: 'work' });
+await client.request('prompt', { window: window.id, text: 'hello' });
+\`\`\`
+
+| Piece | State |
+| --- | --- |
+| Server | merged |
+| UI | this slice |
+
+Next I would wire the agents panel.`;
+/** What the fake Pi answers in the screenshots: asked for a "demo" it thinks, runs two tools and answers in Markdown. Its
+ * messages are dated from `clock` on, so the pictures do not change with the time of day. */
+export const demo = (clock: number): Script => ({
+  clock,
+  replies: {
+    demo: {
+      turns: [{
+        content: [
+          { type: 'thinking', thinking: 'The user wants an overview. I should look at the repository before answering.' },
+          { type: 'text', text: 'I\'ll look at the repository first.' },
+          { type: 'toolCall', id: 'call-1', name: 'bash', arguments: { command: 'git status --short' } },
+          { type: 'toolCall', id: 'call-2', name: 'read', arguments: { path: 'README.md' } },
+        ],
+        results: [' M src/server/windows.ts\n?? src/ui/\n', '# OptChat app\n\nA desktop app for pi-optchat: one chat per profile that never ends.\n'],
+      }],
+      answer: ANSWER,
+    },
+    'check the tests': { turns: [{ content: [{ type: 'toolCall', id: 'call-3', name: 'bash', arguments: { command: 'npm test' } }], results: ['ℹ tests 27\nℹ pass 27\nℹ fail 0\n'] }], answer: 'All 27 tests pass.' },
+    'pull request': { turns: [], answer: 'Opened the pull request: the UI, its tests and the screenshot script.' },
+  },
+});

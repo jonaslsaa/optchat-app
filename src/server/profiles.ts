@@ -28,7 +28,8 @@ export class Profiles {
     if (read?.print === print) return read.memory;
     const memory = readMemory(directory);
     this.read.set(profile, { print, memory });
-    memory.catch(() => this.read.delete(profile)); // A log caught mid-write, as Pi's own loading would refuse: the next request reads again.
+    // A log caught mid-write, as Pi's own loading would refuse: the next request reads again, unless a newer read is kept by then.
+    memory.catch(() => { if (this.read.get(profile)?.memory === memory) this.read.delete(profile); });
     return memory;
   }
   async history({ profile, before, limit = PAGE }: Params<'history'>): Promise<Result<'history'>> {

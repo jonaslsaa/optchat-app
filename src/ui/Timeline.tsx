@@ -54,8 +54,10 @@ export function Timeline({ items, live, running, profile, older, loading }: { it
 
   return (
     <div className="relative min-h-0 flex-1">
-      <div ref={scroller} onScroll={scrolled} tabIndex={-1} className="h-full overflow-y-auto overflow-x-hidden overscroll-y-contain px-3 [overflow-anchor:none] focus:outline-none sm:px-12">
-        <div ref={content} className="mx-auto w-full min-w-0 max-w-(--chat-content-max-width) pt-6 pb-4">
+      <div ref={scroller} onScroll={scrolled} tabIndex={-1} className="h-full overflow-y-auto overflow-x-hidden overscroll-y-contain px-3 [mask-image:linear-gradient(to_bottom,transparent,black_1.5rem,black_calc(100%-2.5rem),transparent)] [overflow-anchor:none] focus:outline-none sm:px-12">
+        {/* The chat fades out under the header and above the composer (as T3 Code's does under its top bar), so no line is cut
+            through; the room under the last line lets it be read clear of the fade. */}
+        <div ref={content} className="mx-auto w-full min-w-0 max-w-(--chat-content-max-width) pt-6 pb-10">
           {older && (
             <button type="button" disabled={loading} onClick={older} className="mb-4 flex w-full items-center gap-3 py-1.5 text-muted-foreground text-xs hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring disabled:cursor-default">
               <span className="h-px flex-1 bg-border/70" />{loading ? 'Loading earlier messages…' : 'Load earlier messages'}<span className="h-px flex-1 bg-border/70" />

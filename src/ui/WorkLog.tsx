@@ -20,7 +20,8 @@ function WorkLogLine({ icon, label, trailing }: RowContent) {
             </span>
           </span>
         ) : null}
-        <div className="min-w-0 flex-1 truncate text-secondary-label [&_*]:whitespace-nowrap">{label}</div>
+        {/* One line, cut short, until the row is opened: then it is there whole, as it was written, and can be selected. */}
+        <div className="min-w-0 flex-1 truncate text-secondary-label group-aria-expanded/timeline-row:cursor-text group-aria-expanded/timeline-row:select-text group-aria-expanded/timeline-row:whitespace-pre-wrap group-aria-expanded/timeline-row:[overflow-wrap:anywhere] group-aria-expanded/timeline-row:[&_*]:select-text">{label}</div>
       </div>
       {trailing}
     </div>

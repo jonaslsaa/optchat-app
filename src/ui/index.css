@@ -48,6 +48,7 @@
   --color-error: var(--error);
   --color-error-foreground: var(--error-foreground);
   --color-error-surface: var(--error-surface);
+  --color-success-foreground: var(--success-foreground);
   --color-tool-error-icon: var(--tool-error-icon);
   --color-zinc-25: oklch(99.2% 0 0);
 
@@ -107,6 +108,7 @@
   --accent: var(--color-zinc-100);
   --error: var(--color-red-500);
   --error-foreground: var(--color-red-700);
+  --success-foreground: var(--color-emerald-700);
   --tool-error-icon: var(--error);
   --error-surface: color-mix(in srgb, var(--error) 8%, transparent);
   --destructive: var(--error);
@@ -144,6 +146,7 @@
     --message-surface: color-mix(in srgb, var(--color-neutral-950) 92%, var(--color-white));
     --error: color-mix(in srgb, var(--color-red-500) 90%, var(--color-white));
     --error-foreground: var(--color-red-400);
+    --success-foreground: var(--color-emerald-400);
     --tool-error-icon: #fca5a5;
     --error-surface: color-mix(in srgb, var(--error) 16%, transparent);
     --border: --alpha(var(--color-white) / 8%);

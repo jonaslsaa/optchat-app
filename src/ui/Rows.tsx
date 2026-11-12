@@ -68,22 +68,21 @@ export const NoteRow = memo(function NoteRow({ part }: { part: Of<'note'> }) {
 });
 
 const ICONS: [RegExp, LucideIcon][] = [[/bash|shell|exec/, TerminalIcon], [/read|view|cat/, EyeIcon], [/write|edit|patch/, SquarePenIcon], [/grep|find|search|ls|glob/, SearchIcon], [/web|fetch|http/, GlobeIcon], [/spawn|tell|agent/, BotIcon], [/zoom|date/, HistoryIcon]];
-const Output = ({ children }: { children: string }) => <pre className="max-h-64 cursor-text select-text overflow-auto whitespace-pre-wrap break-words rounded-md border border-border/60 bg-secondary px-2.5 py-2 font-mono text-2xs text-secondary-label leading-relaxed dark:border-transparent dark:bg-input/32">{children}</pre>;
-/** A tool call as one line saying what it did, which opens to the call in full (its arguments, where the line does not say
- * them all) and what it printed. `live`: the agent is still at work; `running` is the call's output so far, while Pi runs it. */
+const Output = ({ children }: { children: ReactNode }) => <pre className="max-h-64 cursor-text select-text overflow-auto whitespace-pre-wrap break-words rounded-md border border-border/60 bg-secondary px-2.5 py-2 font-mono text-2xs text-secondary-label leading-relaxed dark:border-transparent dark:bg-input/32">{children}</pre>;
+/** A tool call as one line saying what it did. Opened, the line is there whole and can be selected, with under it what it does
+ * not say of the call (the lines an edit changed, the text of a file) and what the call printed. `live`: the agent is still at work; `running` is the call's output so far, while Pi runs it. */
 function ToolRow({ step, live, running }: { step: Tool; live: boolean; running?: string }) {
   const [open, setOpen] = useState(false);
-  const Icon = ICONS.find(([pattern]) => pattern.test(step.name))?.[1] ?? WrenchIcon, printed = step.output ?? running, { verb, subject, whole } = act(step, live);
-  // The line cuts a long command short: opened, the call is there whole.
-  const called = whole ? subject : JSON.stringify(step.args, null, 2);
+  const Icon = ICONS.find(([pattern]) => pattern.test(step.name))?.[1] ?? WrenchIcon, printed = step.output ?? running, { verb, subject, detail } = act(step, live);
   return (
     <WorkLogRow
       role="button" tabIndex={0} aria-expanded={open}
-      onClick={() => setOpen(!open)}
+      // Selecting the opened line, to copy a command, is no click on the row.
+      onClick={event => { const selected = document.getSelection(); if (!selected || selected.isCollapsed || !event.currentTarget.contains(selected.anchorNode)) setOpen(!open); }}
       onKeyDown={event => { if (event.target === event.currentTarget && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); setOpen(!open); } }}
       icon={<span className="flex size-4 items-center justify-center text-icon-muted"><Icon className="block size-4 shrink-0 stroke-2" /></span>}
-      label={<><span className={cn('font-medium', step.failed && 'text-destructive')}>{verb}</span> <span className={cn('opacity-80', step.name !== 'spawn' && 'font-mono text-[0.8125rem]')}>{subject}</span></>}
-      trailing={<span className="flex h-6 items-center gap-1">
+      label={<><span className={cn('font-medium', step.failed && 'text-destructive')}>{verb}</span> <span className={cn('opacity-80', step.name === 'bash' && 'font-mono')}>{subject}</span></>}
+      trailing={<span className="flex h-6 items-center gap-1 self-start">
         {running !== undefined && step.output === undefined && <Spinner className="text-icon-muted" />}
         {step.failed && <XIcon aria-label="Failed" className="size-3 shrink-0 text-tool-error-icon/60" />}
         <ChevronRightIcon className={cn('size-3 shrink-0 text-icon-muted opacity-70 transition-transform duration-200', open && 'rotate-90')} />
@@ -91,8 +90,8 @@ function ToolRow({ step, live, running }: { step: Tool; live: boolean; running?:
     >
       {open && (
         <WorkLogDetails followLive={step.output === undefined}>
-          {called && <Output>{called}</Output>}
-          {printed ? <Output>{printed}</Output> : whole && <p className="text-2xs text-secondary-label">{live && step.output === undefined ? 'No output yet.' : 'No output.'}</p>}
+          {detail.length > 0 && <Output>{detail.map((shown, index) => <span key={index} className={cn('block', shown.change === 'removed' ? 'text-destructive-foreground' : shown.change === 'added' && 'text-success-foreground')}>{shown.text}</span>)}</Output>}
+          {printed ? <Output>{printed}</Output> : <p className="text-2xs text-secondary-label">{live && step.output === undefined ? 'No output yet.' : 'No output.'}</p>}
         </WorkLogDetails>
       )}
     </WorkLogRow>

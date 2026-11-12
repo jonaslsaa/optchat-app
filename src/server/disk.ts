@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { type Entry, type Mime, type Part, type Saved, type Store, type Summary } from 'pi-optchat/core';
+import type { Mime, Part, Saved, Store } from 'pi-optchat/core';
 
 /** The one module that knows how pi-optchat lays a profile out on disk (its README's storage table). `pi-optchat/core` has the
  * memory but not Pi's file store, so the few read-only lines of it live here. Nothing in this file writes. */
@@ -47,8 +47,7 @@ function records(directory: string) {
 const LEGACY_HEADER = /^\[Historical [a-z]+ · \d{4}-\d{2}-\d{2}(?:T[\d:.]+Z · conversation \S+| \d{2}:\d{2}Z · \S+) · [\s\S]*?\]\n/;
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null;
 
-/** A profile's memory files as a core `Store` that never writes: core's `Memory` reads the log, tree and view through it, and
- * whatever Memory would save stays in RAM. */
+/** A profile's memory files as a core `Store` that never writes: core's `Memory` reads the log, tree and view through it. */
 export class ReadOnlyStore implements Store {
   private readonly texts: string[] = [];
   private readonly summaries = new Map<string, string>();
@@ -66,10 +65,10 @@ export class ReadOnlyStore implements Store {
   }
   text(i: number) { return this.texts[i]; }
   summary({ l, i }: Part) { return this.summaries.get(`${l}:${i}`)!; }
-  append(_entry: Entry): undefined { throw new Error('The app reads memory; only Pi writes it.'); }
-  appendNode(node: Summary): undefined { this.summaries.set(`${node.l}:${node.i}`, node.text); }
+  append(): undefined {}
+  appendNode(): undefined {}
   saveView(): undefined {}
-  putImage(): undefined { throw new Error('The app reads memory; only Pi writes it.'); }
+  putImage(): undefined {}
   image(name: string) {
     if (!/^[0-9a-f]{16}$/.test(name)) return undefined;
     for (const [extension, mimeType] of Object.entries(EXTENSIONS)) {

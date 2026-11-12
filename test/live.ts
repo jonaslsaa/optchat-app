@@ -3,15 +3,32 @@ import { existsSync, mkdtempSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { connect } from '../src/client.ts';
-import type { Push } from '../src/protocol.ts';
+import type { PiRecord, Push } from '../src/protocol.ts';
 import { startServer } from '../src/server/server.ts';
 import { createProfile, temporaryHome } from './support.ts';
 
-/** `npm run test:live`: a real turn through the installed Pi with pi-optchat, on a throwaway profile. It needs Pi logged in to
- * Anthropic and costs a fraction of a cent. Pi keeps no session file, and the real ~/.optchat is never opened. */
+/** `npm run test:live`: real turns through the installed Pi with pi-optchat, on throwaway profiles. It needs Pi logged in to
+ * Anthropic and costs about a cent. Pi keeps no session file, and the real ~/.optchat is never opened.
+ * `PI_OPTCHAT=<a pi-optchat checkout>` runs that pi-optchat in place of the one installed in Pi. */
+const checkout = process.env.PI_OPTCHAT;
+const pi = { command: 'pi', args: [...checkout ? ['--no-extensions', '-e', join(checkout, 'src/index.ts')] : [], '--no-session', '--model', 'anthropic/claude-haiku-5-5', '--thinking', 'off'] };
+/** Pi's records as they are pushed, and a wait for one. */
+function watch() {
+  const pushes: Push[] = [], waiting = new Set<() => void>();
+  const record = (window: string, match: (record: PiRecord) => boolean, after = 0) => new Promise<Extract<Push, { push: 'record' }>>(resolve => {
+    const check = () => {
+      const found = pushes.find(push => push.push === 'record' && push.window === window && push.seq > after && match(push.record));
+      if (found?.push === 'record') { waiting.delete(check); resolve(found); }
+    };
+    waiting.add(check); check();
+  });
+  return { pushes, record, onPush: (push: Push) => { pushes.push(push); for (const check of waiting) check(); } };
+}
+const said = (record: PiRecord, role: string) => record.type === 'message_end' && JSON.stringify(record.message).startsWith(`{"role":"${role}"`);
+
 test('a real Pi turn on a throwaway profile, end to end through the WebSocket', { timeout: 120_000 }, async t => {
   const home = temporaryHome(), profile = createProfile(home, 'live');
-  const server = await startServer({ home, cwd: mkdtempSync(join(home, 'cwd-')), pi: { command: 'pi', args: ['--no-session', '--model', 'anthropic/claude-haiku-5-5', '--thinking', 'off'] } });
+  const server = await startServer({ home, cwd: mkdtempSync(join(home, 'cwd-')), pi });
   t.after(() => server.close());
   assert.deepEqual(await (await connect(server.url)).request('history', { profile: 'live' }), { total: 0, messages: [] });
 
@@ -43,4 +60,36 @@ test('a real Pi turn on a throwaway profile, end to end through the WebSocket', 
   assert.equal(existsSync(join(profile, 'lock.sock')), true);
   await server.close();
   assert.equal(existsSync(join(profile, 'lock.sock')), false);
+});
+
+// pi-optchat 0.11.8 cannot join a running profile in RPC mode; the change that lets it is not released yet.
+test('a connected window reads the profile\'s memory, and Complete hands its conversation to the main chat', { timeout: 180_000, skip: !checkout && 'needs a pi-optchat after 0.11.8: set PI_OPTCHAT to a checkout that has RPC windows' }, async t => {
+  const home = temporaryHome();
+  createProfile(home, 'live');
+  const server = await startServer({ home, cwd: mkdtempSync(join(home, 'cwd-')), pi });
+  t.after(() => server.close());
+  const { pushes, record, onPush } = watch(), client = await connect(server.url, onPush);
+  const main = (await client.request('open', { profile: 'live' })).window.id;
+  await client.request('prompt', { window: main, text: 'Remember: the secret word is "marzipan". Reply with exactly: noted' });
+  await record(main, r => r.type === 'agent_settled');
+
+  // A second Pi on the profile: it joins the first, and answers from the memory the main chat just wrote.
+  const { window } = await client.request('open', { profile: 'live', role: 'connected' });
+  await client.request('prompt', { window: window.id, text: 'What is the secret word from the main chat? Reply with just the word.' });
+  assert.match(JSON.stringify((await record(window.id, r => said(r, 'assistant'))).record), /marzipan/);
+  await record(window.id, r => r.type === 'agent_settled');
+  const [connected] = (await client.request('windows', {})).windows.filter(w => w.id === window.id);
+  assert.partialDeepStrictEqual(connected, { role: 'connected', status: 'idle' });
+  assert.match(connected.agent ?? '', /^[0-9a-f]{8}$/);
+  assert.partialDeepStrictEqual((await client.request('windows', {})).windows.find(w => w.id === main), { role: 'main' });
+
+  // Complete: the window writes its handoff, and the main chat gets it as that agent's report, in its memory.
+  await client.request('complete', { window: window.id });
+  assert.ok(pushes.some(push => push.push === 'window' && push.window.id === window.id && push.window.completed));
+  const handoff = `[${connected.agent}] Connected conversation completed by user.`;
+  const report = await record(main, r => said(r, 'custom') && JSON.stringify(r.message).includes(handoff));
+  await record(main, r => r.type === 'agent_settled', report.seq);
+  const { messages } = await client.request('history', { profile: 'live' });
+  assert.ok(messages.some(m => m.kind === 'work' && m.text.startsWith(handoff)), 'the handoff is in the profile\'s log');
+  await assert.rejects(client.request('prompt', { window: window.id, text: 'still there?' }), /completed and handed off/);
 });

@@ -2,7 +2,7 @@
 
 A desktop app for [pi-optchat](https://github.com/jonaslsaa/pi-optchat): one chat per profile that never ends, with the memory tree, connected windows and subagents visible instead of hidden behind a terminal.
 
-Status: design only. Nothing is built yet.
+Status: the local server is built ([docs/server.md](docs/server.md)); the UI is next.
 
 ## Layout
 

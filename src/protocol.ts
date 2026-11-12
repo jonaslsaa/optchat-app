@@ -20,21 +20,26 @@ export const Line = Type.Object({ id, n: Type.Integer({ minimum: 1 }), text: Typ
 export type Line = Static<typeof Line>;
 
 /** A record Pi wrote in RPC mode, passed through as it is: a session event (`agent_start`, `message_update`, `tool_execution_end`,
- * ...) or an `extension_ui_request`. Pi's docs (rpc.md, json.md, rpc-extension-ui.md) define them; the server only reads `type`. */
+ * ...) or an `extension_ui_request`. Pi's docs (rpc.md, json.md, rpc-extension-ui.md) define them; the server reads only what tells it a window's state. */
 export const PiRecord = Type.Intersect([Type.Object({ type: Type.String() }), Type.Record(Type.String(), Type.Unknown())]);
 export type PiRecord = Static<typeof PiRecord>;
 
-/** A window is one Pi process on a profile. `stopped`: no process (not started yet, closed, or it exited: `error` says why if it
- * failed). `idle` and `running`: whether the agent is in a run. `closed`: a connected window that is gone, pushed once as it leaves
- * the list. `seq` is the number of the last record the window pushed. */
-export const Window = Type.Object({
+/** A window is one Pi process on a profile. `role` is what pi-optchat says that Pi is: the profile's owner, which is the `main`
+ * chat, or a `connected` window beside it, with its own conversation that ends in a handoff (`completed`, after which it takes no
+ * more prompts). `agent` is the ID the main chat knows a connected window by, as in its reports. A main window is connected too
+ * while another Pi, such as one in a terminal, owns the profile.
+ * `stopped`: no process (not started yet, closed, or it exited: `error` says why if it failed). `idle` and `running`: whether the
+ * agent is in a run. `closed`: a connected window that is gone, pushed once as it leaves the list. `seq` is the number of the last
+ * record the window pushed. */
+export const WindowState = Type.Object({
   id: Type.String(), profile: Type.String(), role: Type.Enum(['main', 'connected']), cwd: Type.String(),
-  status: Type.Enum(['stopped', 'starting', 'idle', 'running', 'closed']), seq: id, error: Type.Optional(Type.String()),
+  status: Type.Enum(['stopped', 'starting', 'idle', 'running', 'closed']), seq: id,
+  agent: Type.Optional(Type.String()), completed: Type.Optional(Type.Boolean()), error: Type.Optional(Type.String()),
 });
-export type Window = Static<typeof Window>;
+export type WindowState = Static<typeof WindowState>;
 
 const Image = Type.Object({ type: Type.Literal('image'), data: Type.String(), mimeType: Type.String() });
-const window = Type.Object({ window: Type.String() });
+const target = Type.Object({ window: Type.String() });
 const none = Type.Object({});
 const method = <P extends TSchema, R extends TSchema>(params: P, result: R) => ({ params, result });
 
@@ -52,9 +57,10 @@ export const methods = {
   zoom: method(Type.Object({ profile: Type.String(), id, n: Type.Integer({ minimum: 2 }) }), Type.Object({ lines: Type.Array(Line) })),
 
   /** Every window the server knows. */
-  windows: method(none, Type.Object({ windows: Type.Array(Window) })),
-  /** A profile's main window (the same one each time), or a new connected window. No Pi starts until its first prompt. */
-  open: method(Type.Object({ profile: Type.String(), role: Type.Optional(Type.Enum(['main', 'connected'])), cwd: Type.Optional(Type.String()) }), Type.Object({ window: Window })),
+  windows: method(none, Type.Object({ windows: Type.Array(WindowState) })),
+  /** A profile's main window (the same one each time), or a new connected window. No Pi starts until its first prompt; a
+   * connected window's first prompt starts the main window's Pi too if the profile has no owner yet. */
+  open: method(Type.Object({ profile: Type.String(), role: Type.Optional(Type.Enum(['main', 'connected'])), cwd: Type.Optional(Type.String()) }), Type.Object({ window: WindowState })),
   /** Sends your message, starting the window's Pi first if it has none. In a run it is queued: `steer` (the default) reaches the
    * agent after its current tool calls, `followUp` once it has stopped. `disposition` is Pi's: `started`, `queued`, or `handled`
    * (a command took it and no run started). */
@@ -62,12 +68,13 @@ export const methods = {
     Type.Object({ disposition: Type.Enum(['started', 'queued', 'handled']) })),
   /** Stops the run, as Esc does in the terminal: answers once the agent is idle, with the messages that were still queued
    * (Pi's `clear_queue`), which would otherwise start the next run. */
-  abort: method(window, Type.Object({ steering: Type.Array(Type.String()), followUp: Type.Array(Type.String()) })),
-  /** Ends a connected window and hands its work to the main chat (pi-optchat's `/complete`). */
-  complete: method(window, none),
+  abort: method(target, Type.Object({ steering: Type.Array(Type.String()), followUp: Type.Array(Type.String()) })),
+  /** Ends a connected window's conversation and hands it to the main chat (pi-optchat's `/complete`). Answers once the handoff
+   * is written, which takes a turn of the window's agent. */
+  complete: method(target, none),
   /** Stops the window's Pi, letting it shut down cleanly. A main window stays in the list and starts again on its next prompt;
    * a connected window leaves it. */
-  close: method(window, none),
+  close: method(target, none),
   /** The records a window pushed after number `after` and still keeps: everything since its latest run began. `complete` is false
    * when older ones than these were dropped, so `history` has to fill in before them. */
   records: method(Type.Object({ window: Type.String(), after: Type.Optional(id) }), Type.Object({ records: Type.Array(Type.Object({ seq: id, record: PiRecord })), complete: Type.Boolean() })),
@@ -88,7 +95,7 @@ export type Response<M extends Method = Method> = { id: number; result: Result<M
 
 /** What the server sends unasked, to every client: a window that changed, and each record a window's Pi writes. */
 export const Push = Type.Union([
-  Type.Object({ push: Type.Literal('window'), window: Window }),
+  Type.Object({ push: Type.Literal('window'), window: WindowState }),
   Type.Object({ push: Type.Literal('record'), window: Type.String(), seq: id, record: PiRecord }),
 ]);
 export type Push = Static<typeof Push>;

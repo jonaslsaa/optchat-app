@@ -4,12 +4,12 @@ import { join } from 'node:path';
 import { test, type TestContext } from 'node:test';
 import { WebSocket } from 'ws';
 import { connect } from '../src/client.ts';
-import type { Push, Window } from '../src/protocol.ts';
+import type { Push, WindowState } from '../src/protocol.ts';
 import { startServer, type ServerOptions } from '../src/server/server.ts';
 import { createProfile, temporaryHome } from './support.ts';
 
 const home = temporaryHome();
-for (const name of ['work', 'busy', 'stuck']) createProfile(home, name);
+for (const name of ['work', 'busy', 'stuck', 'old']) createProfile(home, name);
 const fake = { command: process.execPath, args: [join(import.meta.dirname, 'fake-pi.ts')] };
 
 /** A server over the fake Pi, and a client that remembers what it was pushed. */
@@ -31,7 +31,7 @@ async function client(t: TestContext, url: string) {
   const types = () => pushes.flatMap(push => push.push === 'record' ? [push.record.type] : []);
   const statuses = (id: string) => pushes.flatMap(push => push.push === 'window' && push.window.id === id ? [push.window.status] : []);
   const record = (type: string, from = 0) => pushed((push): push is Extract<Push, { push: 'record' }> => push.push === 'record' && push.record.type === type && push.seq > from);
-  const status = (status: Window['status']) => pushed((push): push is Extract<Push, { push: 'window' }> => push.push === 'window' && push.window.status === status);
+  const status = (status: WindowState['status']) => pushed((push): push is Extract<Push, { push: 'window' }> => push.push === 'window' && push.window.status === status);
   return { request: connection.request, pushes, types, statuses, record, status };
 }
 
@@ -113,19 +113,36 @@ test('a message sent during a run is queued, and abort hands back what was still
   assert.equal((await request('windows', {})).windows[0].status, 'idle');
 });
 
-test('Complete hands off a connected window only, and closing one removes it', async t => {
-  const { request, record, status } = await setup(t);
-  const main = (await request('open', { profile: 'work' })).window, connected = (await request('open', { profile: 'work', role: 'connected' })).window;
-  assert.notEqual(connected.id, main.id);
-  await request('prompt', { window: main.id, text: 'hello' });
-  await assert.rejects(request('complete', { window: main.id }), /connected window/);
+test('a connected window starts the profile\'s owner first, joins it, and Complete hands it off', async t => {
+  const { request, status, pushes } = await setup(t);
+  const { window } = await request('open', { profile: 'work', role: 'connected' });
+  assert.deepEqual((await request('windows', {})).windows.map(w => [w.id, w.role, w.status]), [['work/1', 'connected', 'stopped']]);
+  await request('prompt', { window: window.id, text: 'hello' });
+  const state = async (id: string) => (await request('command', { window: id, command: { type: 'get_state' } })).data;
+  assert.partialDeepStrictEqual(await state('work/main'), { args: ['--optchat-profile', 'work', '--mode', 'rpc'] });
+  assert.partialDeepStrictEqual(await state(window.id), { args: ['--optchat-profile', 'work', '--optchat-connect', 'join', '--mode', 'rpc'] });
+  assert.deepEqual((await request('windows', {})).windows.map(w => [w.id, w.role, w.status]), [['work/1', 'connected', 'idle'], ['work/main', 'main', 'idle']]);
 
-  await request('prompt', { window: connected.id, text: 'hello' });
-  await request('complete', { window: connected.id });
-  assert.partialDeepStrictEqual((await record('extension_ui_request', (await request('windows', {})).windows[1].seq - 1)).record, { message: 'Handed off.' });
-  await request('close', { window: connected.id });
-  assert.equal((await status('closed')).window.id, connected.id);
-  assert.deepEqual((await request('windows', {})).windows.map(w => w.id), [main.id]);
+  await assert.rejects(request('complete', { window: 'work/main' }), /nothing to hand off/);
+  await request('complete', { window: window.id });
+  assert.partialDeepStrictEqual((await request('windows', {})).windows[0], { id: window.id, agent: 'w1', completed: true });
+  await assert.rejects(request('prompt', { window: window.id, text: 'one more thing' }), /completed and handed off/);
+  await request('close', { window: window.id });
+  assert.equal((await status('closed')).window.id, window.id);
+  assert.deepEqual((await request('windows', {})).windows.map(w => w.id), ['work/main']);
+  assert.ok(pushes.some(push => push.push === 'window' && push.window.id === window.id && push.window.completed));
+});
+
+test('a main window is a connected one while another Pi owns the profile, and an old pi-optchat that cannot join says so', async t => {
+  // The fake Pi with --optchat-connect is what pi-optchat's default does on a taken profile: it joins.
+  const { request } = await setup(t, { pi: { command: fake.command, args: [...fake.args, '--optchat-connect', 'auto'] } });
+  await request('prompt', { window: (await request('open', { profile: 'work' })).window.id, text: 'hello' });
+  assert.partialDeepStrictEqual((await request('windows', {})).windows, [{ id: 'work/main', role: 'connected' }]);
+
+  const old = await setup(t);
+  const { window } = await old.request('open', { profile: 'old', role: 'connected' });
+  await assert.rejects(old.request('prompt', { window: window.id, text: 'hello' }), /cannot run a connected window yet.*after 0\.11\.8.*Profile already running: old/);
+  assert.partialDeepStrictEqual((await old.request('windows', {})).windows.map(w => [w.id, w.status]), [['old/1', 'stopped'], ['old/main', 'idle']]);
 });
 
 test('closing the server lets each Pi shut down in order, and kills one that does not', async t => {

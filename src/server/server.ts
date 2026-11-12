@@ -35,6 +35,7 @@ export async function startServer({ port = 0, host = '127.0.0.1', home = default
     return handlers[method](params);
   };
   sockets.on('connection', socket => {
+    socket.on('error', () => socket.terminate()); // A broken frame or a dropped connection ends that client, not the server.
     socket.on('message', async data => {
       let request: unknown;
       try { request = JSON.parse(String(data)); } catch { return; }
@@ -61,7 +62,7 @@ export async function startServer({ port = 0, host = '127.0.0.1', home = default
   return {
     port: address.port, url: `ws://${host}:${address.port}/ws`,
     async close() {
-      await windows.shutdown(); await profiles.close();
+      await windows.shutdown();
       for (const socket of sockets.clients) socket.close();
       await new Promise(resolve => server.close(resolve));
     },

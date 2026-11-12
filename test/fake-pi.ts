@@ -2,8 +2,11 @@ import { writeFileSync } from 'node:fs';
 
 /** Stands in for `pi --mode rpc` with pi-optchat: the same records on stdin and stdout, scripted by the profile's name and the
  * prompt's words, so the server's tests need no model. A prompt holding "wait" stays mid-message until a `release` command or an
- * abort. Profile `busy` fails as a profile another Pi owns does; profile `stuck` ignores the request to shut down. */
-const profile = process.argv[process.argv.indexOf('--optchat-profile') + 1];
+ * abort. It says it owns its profile, or with `--optchat-connect join` that it is a window on it. Profile `busy` fails as a
+ * profile another Pi owns does on pi-optchat 0.11.8, as does joining profile `old`; profile `stuck` ignores the request to shut down. */
+const profile = process.argv[process.argv.indexOf('--optchat-profile') + 1], joins = process.argv.includes('--optchat-connect');
+const role = (completed = false) => write({ type: 'extension_ui_request', id: 'r', method: 'setStatus', statusKey: 'optchat.role',
+  statusText: JSON.stringify(joins ? { role: 'window', profile, id: 'w1', owner: true, completed } : { role: 'owner', profile }) });
 const write = (record: object) => process.stdout.write(`${JSON.stringify(record)}\n`);
 const user = (text: string) => ({ role: 'user', content: [{ type: 'text', text }], timestamp: Date.now() });
 let running = false, queued: string[] = [], finish: ((aborted: boolean) => void) | undefined;
@@ -29,7 +32,7 @@ const commands: Record<string, (command: Record<string, unknown>) => unknown> = 
   get_state: () => ({ pid: process.pid, args: process.argv.slice(2), home: process.env.OPTCHAT_HOME, cwd: process.cwd() }),
   prompt: ({ message }) => {
     const text = String(message);
-    if (text === '/complete') { write({ type: 'extension_ui_request', id: 'n', method: 'notify', message: 'Handed off.' }); return { disposition: 'handled' }; }
+    if (text === '/complete') { role(true); return { disposition: 'handled' }; }
     if (running) { queued.push(text); write({ type: 'queue_update', steering: queued, followUp: [] }); return { disposition: 'queued' }; }
     run(text); return { disposition: 'started' };
   },
@@ -38,8 +41,8 @@ const commands: Record<string, (command: Record<string, unknown>) => unknown> = 
   abort: () => { finish?.(true); },
 };
 
-if (profile === 'busy') write({ type: 'extension_error', extensionPath: 'pi-optchat', event: 'session_start', error: 'Profile already running: busy · PID 1' });
-else write({ type: 'extension_ui_request', id: 's', method: 'setStatus', statusKey: 'optchat', statusText: `OptChat: ${profile}` });
+if (profile === 'busy' || profile === 'old' && joins) write({ type: 'extension_error', extensionPath: 'pi-optchat', event: 'session_start', error: `Profile already running: ${profile} · PID 1` });
+else role();
 let buffer = '';
 process.stdin.on('data', chunk => {
   buffer += String(chunk);

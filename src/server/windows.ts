@@ -1,6 +1,7 @@
 import { existsSync } from 'node:fs';
+import { Type } from 'typebox';
 import { Value } from 'typebox/value';
-import { methods, type Params, type PiRecord, type Push, type Result, type Window } from '../protocol.ts';
+import { methods, type Params, type PiRecord, type Push, type Result, type WindowState } from '../protocol.ts';
 import { profileDirectory } from './disk.ts';
 import { Pi } from './pi.ts';
 
@@ -18,7 +19,7 @@ export interface WindowsOptions {
 }
 interface Kept { seq: number; record: PiRecord; bytes: number }
 interface Opened {
-  state: Window; pi?: Pi; starting?: Promise<Pi>;
+  state: WindowState; pi?: Pi; starting?: Promise<Pi>;
   /** Everything Pi wrote since the latest run began, less the streaming updates a later record made redundant. */
   records: Kept[]; bytes: number;
   /** The last record dropped to stay under `keep`. */
@@ -27,8 +28,14 @@ interface Opened {
   settled: boolean;
   /** Why pi-optchat could not open the profile in this Pi. */
   fault?: string;
+  /** pi-optchat said this Pi joined the profile as a connected window. */
+  joined: boolean;
 }
-const text = (error: unknown) => error instanceof Error ? error.message : String(error);
+const reason = (error: unknown) => error instanceof Error ? error.message : String(error);
+/** What pi-optchat says a Pi in RPC mode is to its profile: JSON in a `setStatus` with this key (its docs/connected-windows.md). */
+const ROLE_STATUS = 'optchat.role';
+const Role = Type.Union([Type.Object({ role: Type.Literal('owner') }), Type.Object({ role: Type.Literal('window'), id: Type.String(), completed: Type.Boolean() })]);
+const mainId = (profile: string) => `${profile}/main`;
 
 /** The windows: one Pi in RPC mode each, started on a window's first prompt and kept when clients come and go. Pi and pi-optchat do
  * all the work; this only starts and stops them, passes commands in, and pushes out what Pi writes. */
@@ -42,10 +49,10 @@ export class Windows {
   open({ profile, role = 'main', cwd }: Params<'open'>): Result<'open'> {
     profileDirectory(this.options.home, profile);
     if (cwd !== undefined && !existsSync(cwd)) throw new Error(`No such directory: ${cwd}`);
-    const id = role === 'main' ? `${profile}/main` : `${profile}/${++this.connected}`;
+    const id = role === 'main' ? mainId(profile) : `${profile}/${++this.connected}`;
     let opened = this.windows.get(id);
     if (!opened) {
-      opened = { state: { id, profile, role, cwd: cwd ?? this.options.cwd, status: 'stopped', seq: 0 }, records: [], bytes: 0, dropped: 0, settled: true };
+      opened = { state: { id, profile, role, cwd: cwd ?? this.options.cwd, status: 'stopped', seq: 0 }, records: [], bytes: 0, dropped: 0, settled: true, joined: false };
       this.windows.set(id, opened);
       this.changed(opened);
     } else if (cwd !== undefined && cwd !== opened.state.cwd) {
@@ -55,7 +62,9 @@ export class Windows {
     return { window: opened.state };
   }
   async prompt({ window, text, images, whenBusy = 'steer' }: Params<'prompt'>): Promise<Result<'prompt'>> {
-    const pi = await this.started(this.get(window));
+    const opened = this.get(window);
+    if (opened.state.completed) throw new Error('This connected conversation is completed and handed off. Open a new window to go on.');
+    const pi = await this.started(opened);
     // Always with a queueing behaviour, as T3 Code sends it: Pi then starts a run or queues the message, whichever is true by
     // the time it arrives, and a run that began meanwhile (a subagent's report) cannot make it fail.
     const data = await pi.request({ type: 'prompt', message: text, ...images?.length && { images }, streamingBehavior: whenBusy });
@@ -69,14 +78,14 @@ export class Windows {
     return Value.Check(methods.abort.result, queued) ? queued : { steering: [], followUp: [] };
   }
   async complete({ window }: Params<'complete'>): Promise<Result<'complete'>> {
-    if (this.get(window).state.role !== 'connected') throw new Error('Complete hands a connected window back to the main chat. The main window has nothing to hand off.');
+    if (this.get(window).state.role !== 'connected') throw new Error('Complete hands a connected window to the main chat. The main chat has nothing to hand off.');
     await this.running(window).request({ type: 'prompt', message: '/complete' });
     return {};
   }
   async close({ window }: Params<'close'>): Promise<Result<'close'>> {
     const opened = this.get(window);
     await this.stop(opened);
-    if (opened.state.role === 'connected') { this.windows.delete(window); opened.state.status = 'closed'; this.changed(opened); }
+    if (window !== mainId(opened.state.profile)) { this.windows.delete(window); opened.state.status = 'closed'; this.changed(opened); }
     return {};
   }
   records({ window, after = 0 }: Params<'records'>): Result<'records'> {
@@ -99,21 +108,31 @@ export class Windows {
     return pi;
   }
   private changed({ state }: Opened) { this.options.push({ push: 'window', window: { ...state } }); }
-  private started(opened: Opened) { return opened.pi && !opened.starting ? Promise.resolve(opened.pi) : opened.starting ??= this.start(opened).finally(() => { opened.starting = undefined; }); }
+  /** The window's Pi, started first if it has none; a start under way is shared. */
+  private started(opened: Opened) {
+    if (opened.pi && !opened.starting) return Promise.resolve(opened.pi);
+    return opened.starting ??= this.start(opened).finally(() => { opened.starting = undefined; });
+  }
   private async start(opened: Opened) {
-    const { state } = opened, { home, pi: { command, args }, grace } = this.options;
-    Object.assign(opened, { records: [], bytes: 0, dropped: state.seq, settled: true, fault: undefined });
-    state.status = 'starting'; delete state.error; this.changed(opened);
-    const pi: Pi = new Pi({ command, args: [...args, '--optchat-profile', state.profile], cwd: state.cwd, env: { ...process.env, OPTCHAT_HOME: home } },
+    const { state } = opened, { home, pi: { command, args }, grace } = this.options, joins = state.id !== mainId(state.profile);
+    // The first Pi on a profile owns it, and a connected window is a later one: the main window's Pi goes first. If a Pi outside
+    // the app owns the profile, the main window's joins it as well.
+    if (joins) await this.started(this.get(this.open({ profile: state.profile }).window.id));
+    Object.assign(opened, { records: [], bytes: 0, dropped: state.seq, settled: true, fault: undefined, joined: false });
+    state.status = 'starting'; delete state.error; delete state.completed; delete state.agent; this.changed(opened);
+    // pi-optchat's --optchat-connect: `join` never takes the profile itself, the default joins only a profile that is taken.
+    const pi: Pi = new Pi({ command, args: [...args, '--optchat-profile', state.profile, ...joins ? ['--optchat-connect', 'join'] : []], cwd: state.cwd, env: { ...process.env, OPTCHAT_HOME: home } },
       (record, bytes) => this.record(opened, record, bytes), error => this.exited(opened, pi, error));
     opened.pi = pi;
     try {
       // Pi answers once its extensions have started the session, so by now pi-optchat has the profile or has said why not.
       await pi.request({ type: 'get_state' });
+      // A pi-optchat up to 0.11.8 cannot join in RPC mode: it ignores the flag and fails on the taken profile, or takes a free one.
+      if (joins && !opened.joined) opened.fault = `This Pi's pi-optchat cannot run a connected window yet: it needs the version after 0.11.8.${opened.fault ? ` (${opened.fault})` : ''}`;
       // Without its profile pi-optchat takes every prompt and answers nothing, so such a Pi is stopped, not left looking idle.
       if (opened.fault) throw new Error(opened.fault);
     } catch (error) {
-      opened.fault ??= text(error);
+      opened.fault ??= reason(error);
       await pi.stop(grace);
       throw error;
     }
@@ -135,6 +154,7 @@ export class Windows {
   private record(opened: Opened, record: PiRecord, bytes: number) {
     const { state } = opened;
     if (record.type === 'extension_error' && record.event === 'session_start') opened.fault = typeof record.error === 'string' ? record.error : 'pi-optchat could not start.';
+    if (record.type === 'extension_ui_request' && record.statusKey === ROLE_STATUS && typeof record.statusText === 'string') this.role(opened, record.statusText);
     // A run begins at the first agent_start after Pi settled. Until agent_settled Pi may still retry, or go on with queued messages.
     if (record.type === 'agent_start' && opened.settled) { opened.records = []; opened.bytes = 0; opened.dropped = state.seq; opened.settled = false; }
     // A finished message or tool call carries all its streaming updates said, so those are no longer kept.
@@ -149,6 +169,18 @@ export class Windows {
     this.options.push({ push: 'record', window: state.id, seq, record });
     if (record.type === 'agent_start' && state.status !== 'running') { state.status = 'running'; this.changed(opened); }
     if (record.type === 'agent_settled') { opened.settled = true; if (state.status === 'running') { state.status = 'idle'; this.changed(opened); } }
+  }
+  private role(opened: Opened, status: string) {
+    let role: unknown;
+    try { role = JSON.parse(status); } catch { return; }
+    if (!Value.Check(Role, role)) return;
+    const { state } = opened, window = role.role === 'window' ? role : undefined, completed = window?.completed || undefined;
+    opened.joined = !!window;
+    if (state.role === (window ? 'connected' : 'main') && state.agent === window?.id && state.completed === completed) return;
+    state.role = window ? 'connected' : 'main';
+    if (window) state.agent = window.id; else delete state.agent;
+    if (completed) state.completed = true; else delete state.completed;
+    this.changed(opened);
   }
   private forget(opened: Opened, redundant: (record: PiRecord) => boolean) {
     opened.records = opened.records.filter(kept => {

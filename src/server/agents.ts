@@ -66,6 +66,6 @@ export class Agents {
   one({ profile, id, after = 0 }: Params<'agent'>): Result<'agent'> {
     // A report in the chat outlives its agent's record, and a click on it asks for that agent: it has no chat, which is no error.
     const run = this.runs(profile).find(run => run.id === id), messages = run ? this.chat(run) : [];
-    return { total: messages.length, messages: messages.slice(after), ...run?.report !== undefined && { report: run.report } };
+    return { total: messages.length, messages: messages.slice(after), ...run?.report !== undefined && { report: run.report }, ...run?.ended !== undefined && { ended: run.ended } };
   }
 }

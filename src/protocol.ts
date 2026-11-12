@@ -110,9 +110,9 @@ export const methods = {
   agents: method(Type.Object({ profile: Type.String(), limit: Type.Optional(Type.Integer({ minimum: 0 })) }), Type.Object({ agents: Type.Array(Agent), more: id })),
   /** One agent's chat, from its Pi session file: its messages as Pi wrote them (Pi's docs: session.md), from number `after` on,
    * of `total`. The first is its task, without the view of the profile's memory it was sent with, and images are left out.
-   * `report` is what it reported, whole. An agent there is no record of has no messages. */
+   * `report` is what it reported, whole, and `ended` when it ended. An agent there is no record of has no messages. */
   agent: method(Type.Object({ profile: Type.String(), id: Type.String(), after: Type.Optional(id) }),
-    Type.Object({ total: id, messages: Type.Array(Type.Unknown()), report: Type.Optional(Type.String()) })),
+    Type.Object({ total: id, messages: Type.Array(Type.Unknown()), report: Type.Optional(Type.String()), ended: Type.Optional(Type.Number()) })),
 
   /** Every window the server knows. */
   windows: method(none, Type.Object({ windows: Type.Array(WindowState) })),

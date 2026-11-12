@@ -195,6 +195,7 @@ test('an agent\'s chat is read on from where the page has it, and a report that 
     [message('user', 'a view\n\nYour task:\nCount the files.', 1000), message('assistant', 'Counting.', 2000), message('assistant', 'Twelve so far.', 3000)]);
   await Promise.all([early, app.readAgent('team', 'aaaaaaaa'), app.readAgent('team', 'aaaaaaaa')]);
   assert.deepEqual(texts(), [['user', 'Count the files.'], ['talk', 'Counting.'], ['talk', 'Twelve so far.'], ['work', 'Task error: overloaded']]);
+  assert.equal(transcript(app.state.chats['team/aaaaaaaa'], true).at(-1)?.date, new Date(4000).toISOString());
   // An agent that answered has said its report already.
   assert.deepEqual(transcript({ ...app.state.chats['team/aaaaaaaa'], report: ' Twelve so far.\n' }, true).length, 3);
 });

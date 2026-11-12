@@ -53,7 +53,7 @@ test('a profile\'s agents are read from its files: who works on what now, and wh
   assert.deepEqual(await client.request('agent', { profile: 'work', id: 'aaaaaaaa', after: chat.total }), { total: 4, messages: [result('npm run check', 3003, [{ type: 'image' }])] });
   assert.deepEqual((await client.request('agents', { profile: 'work' })).agents[0].doing, []);
 
-  assert.deepEqual(await client.request('agent', { profile: 'work', id: 'cccccccc' }), { total: 0, messages: [], report: 'Launch failed: no such model' });
+  assert.deepEqual(await client.request('agent', { profile: 'work', id: 'cccccccc' }), { total: 0, messages: [], report: 'Launch failed: no such model', ended: 1500 });
   // A connected window is no agent, and one whose record is gone has no chat: a report in the chat can still name it.
   for (const id of ['dddddddd', 'eeeeeeee']) assert.deepEqual(await client.request('agent', { profile: 'work', id }), { total: 0, messages: [] });
   await assert.rejects(client.request('agents', { profile: 'nobody' }), /No profile named nobody\./);

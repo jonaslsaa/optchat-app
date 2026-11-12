@@ -46,7 +46,8 @@ export function AgentsPanel({ state, profile, agent: id, pulse, outside, onAgent
   const agent = agents.find(agent => agent.id === id), chat = id === undefined ? undefined : state.chats[`${profile}/${id}`];
   const items = useMemo(() => chat ? transcript(chat, !agent || !working(agent)) : [], [chat, agent?.state]);
   const read = () => { void app.readAgents(profile, limit); if (id !== undefined) void app.readAgent(profile, id); };
-  useEffect(read, [profile, id, limit, pulse]);
+  // Again once the server is back, too: what was asked while it was away got no answer.
+  useEffect(() => { if (state.connection === 'open') read(); }, [profile, id, limit, pulse, state.connection]);
   useEffect(() => { if (!active) return; const timer = setInterval(read, EVERY); return () => clearInterval(timer); }, [active, profile, id, limit]);
   return (
     <aside aria-label="Agents" className="flex h-full w-(--panel-width) max-w-[calc(100vw-2.5rem)] shrink-0 flex-col border-border border-l bg-background">

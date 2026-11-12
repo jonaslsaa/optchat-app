@@ -46,9 +46,10 @@ export function doing({ state, doing: [call, ...more], headline: said }: Agent):
   }
 }
 /** An agent's chat as the chat's items: its task, what it did, and its answer. What it reported is its last answer, unless it
- * ended without one (it failed, or was stopped): then the report says how, and is the last item. */
-export function transcript({ messages, report }: { messages: readonly PiMessage[]; report?: string }, ended: boolean): Item[] {
+ * ended without one (it failed, or was stopped): then the report says how, and is the last item, dated when the agent ended.
+ * `over` says the agent is not at work: one that was told to go on still has the report of its last time. */
+export function transcript({ messages, report, ended }: { messages: readonly PiMessage[]; report?: string; ended?: number }, over: boolean): Item[] {
   const items = spoken(messages), last = messages.at(-1);
-  if (!ended || !report || (last?.role === 'assistant' && words(last.content).trim() === report.trim())) return items;
-  return [...items, { key: items.length, kind: 'work', text: report, date: new Date(last?.timestamp ?? 0).toISOString() }];
+  if (!over || !report || (last?.role === 'assistant' && words(last.content).trim() === report.trim())) return items;
+  return [...items, { key: items.length, kind: 'work', text: report, date: new Date(ended ?? last?.timestamp ?? 0).toISOString() }];
 }

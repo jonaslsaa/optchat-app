@@ -25,7 +25,7 @@ export interface State {
   /** Each profile's agents as last read from its files, and the chats of those that were opened, by profile and agent
    * (`work/1a2b3c4d`): the messages read so far, of the `total` the server counted them from. */
   agents: Record<string, Result<'agents'>>;
-  chats: Record<string, { total: number; messages: PiMessage[]; report?: string }>;
+  chats: Record<string, { total: number; messages: PiMessage[]; report?: string; ended?: number }>;
   /** Why the last thing you asked for failed. */
   error?: string;
   /** The app's settings, and what a chat needs with whether it is there, once the server has said. */
@@ -281,7 +281,7 @@ export class App {
     // Asked twice at once, two answers start at the same message: of each, only what goes on from what is here is added, and
     // one with nothing new changes nothing.
     if (!read || read.total < total || (had && read.total === total && read.report === had.report)) return;
-    this.set({ chats: { ...this.state.chats, [key]: { total: read.total, messages: [...had?.messages ?? [], ...read.messages.slice(total - after).filter(isMessage)], report: read.report } } });
+    this.set({ chats: { ...this.state.chats, [key]: { total: read.total, messages: [...had?.messages ?? [], ...read.messages.slice(total - after).filter(isMessage)], report: read.report, ended: read.ended } } });
   }
   /** Sends your message. In a run it steers the agent, or with `later` waits until the agent has stopped. */
   async send(window: string, text: string, later = false) {

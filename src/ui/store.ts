@@ -147,7 +147,14 @@ export class App {
     const setup = await this.ask('setup', { fresh });
     if (setup) this.set({ setup });
   }
-  /** The profiles as they are now. The first one is made in a terminal: once it is there, it is opened. */
+  /** Makes a profile and opens it. Whether it was made: the server says why when it was not. */
+  async createProfile(name: string) {
+    if (!await this.ask('createProfile', { name })) return false;
+    this.set({ profiles: [...this.state.profiles, name].sort() });
+    await this.openProfile(name);
+    return true;
+  }
+  /** The profiles as they are now. Once there is one, it is opened. */
   async findProfiles() {
     const names = (await this.ask('profiles', {}))?.profiles.map(profile => profile.name);
     if (!names) return;

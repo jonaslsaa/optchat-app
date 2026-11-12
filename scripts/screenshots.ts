@@ -166,8 +166,8 @@ async function pictures(browser: Browser, control: Client) {
   await first.getByText('Not installed in this Pi.').waitFor();
   await shot(first, '20-pi-installed');
   // Later, with a profile: the settings still say where the app's Pi is, and how to put it on your PATH.
-  createProfile(join(home, 'new'), 'work');
-  await first.getByRole('button', { name: 'Check again' }).click();
+  await first.getByRole('textbox', { name: 'Profile name' }).fill('work');
+  await first.getByRole('button', { name: 'Create profile' }).click();
   await first.getByRole('button', { name: 'Settings' }).click();
   await first.getByText('The app installed this Pi into its own folder.').waitFor();
   await shot(first, '21-settings-app-pi');

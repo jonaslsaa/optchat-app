@@ -4,7 +4,7 @@ What stands between a new machine and a chat, and the three places the app deals
 
 ## The app's own folder
 
-The app keeps its files in `~/.optchat-app` (`OPTCHAT_APP_HOME` moves it, which is how tests stay away from yours; `~` in it is your home folder): `settings.json`, and the Pi it installs. It is never pi-optchat's `~/.optchat`, which only Pi writes.
+The app keeps its files in `~/.optchat-app` (`OPTCHAT_APP_HOME` moves it, which is how tests stay away from yours; `~` in it is your home folder): `settings.json`, and the Pi it installs. It is never pi-optchat's `~/.optchat`, which only Pi writes, but for one thing: a new, empty profile, which pi-optchat's own `createProfile` makes when you name your first one.
 
 Two servers on one machine share that folder. Each reads the settings when it starts and writes them whole, so the one that wrote last wins; give a second server its own `OPTCHAT_APP_HOME` if that matters.
 
@@ -29,7 +29,7 @@ Two servers on one machine share that folder. Each reads the settings when it st
 | **pi-optchat** | `pi list` names each package and the folder it is in; that folder's `package.json` says the version. It has to be 0.11.10 or newer. | **Install** runs `pi install npm:pi-optchat`, and **Update** `pi update npm:pi-optchat`. A pi-optchat that is a folder of yours (a checkout) is read the same way and never touched. |
 | **A model** | Pi lists the models it has credentials for (`get_available_models`, asked of a Pi that opens no session, loads no extension and goes nowhere on the network). | On macOS, a button for each account opens a terminal where Pi signs you in (below). Elsewhere the page shows the command: `pi auth login <provider>`. The app never reads a credential. |
 
-A fourth line in the page is the first profile, which is made in a terminal: pi-optchat creates profiles only there. Until there is one, the setup is the first thing the page shows; after that it is part of the settings, and a notice at the top says when something is missing.
+A fourth line in the page is the first profile. You name it there and `createProfile { name }` makes it, by pi-optchat's `createProfile` (from `pi-optchat/files`): pi-optchat says what a name may be, refuses one that is taken, and writes the profile's settings and instructions as it does in a terminal. The profile opens at once; it needs no Pi to be made. Until there is one, the setup is the first thing the page shows; after that it is part of the settings, and a notice at the top says when something is missing.
 
 The server looks once and keeps what it found: the page, an install and a window's Pi all read that one look. **Check again** looks afresh, and so does a prompt that finds no Pi, since you may have installed one in a terminal meanwhile.
 
@@ -72,7 +72,7 @@ Pi signs in to a provider with `pi auth login <provider>`, which needs a termina
 
 - **The PATH of a desktop app.** Started from a terminal, the server has your PATH. A desktop shell started from the Dock will not, and has to read it from your login shell first, as T3 Code does; that comes with the shell.
 - **Windows.** Installing is written for macOS and Linux: on Windows npm is `npm.cmd` and the installed Pi is `.bin/pi.cmd`, which the server does not run yet.
-- **Creating the first profile from the app.** It needs pi-optchat to offer it outside its terminal UI.
+- **A second profile from the app.** The field is on the first page only; more profiles are made in Pi's terminal UI for now.
 
 ## A profile a terminal has open
 

@@ -204,7 +204,7 @@ export class Setup {
     // In a terminal, a Pi on your PATH goes by its name; the app's own, while it is not on it, by where it is.
     const { path, managed, listed, version } = found, named = { command: listed ? this.options.pi.command : path, args: found.args };
     const pi: State['pi'] = {
-      version, path, run: shown(named),
+      version, path,
       // Its folder as it is, whatever is in its name, then the PATH there was.
       ...!listed && { shell: `export PATH=${word(dirname(path))}:"$PATH"` },
       ...!older(version, MINIMUM_PI) ? { state: 'ok' }

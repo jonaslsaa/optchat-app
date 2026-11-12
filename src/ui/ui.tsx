@@ -1,5 +1,5 @@
 import { CheckIcon, CopyIcon, LoaderCircleIcon } from 'lucide-react';
-import { useState, type ComponentProps } from 'react';
+import { useState, useSyncExternalStore, type ComponentProps } from 'react';
 import type { WindowState } from '../protocol.ts';
 import { extendTailwindMerge, type ClassNameValue } from 'tailwind-merge';
 
@@ -42,6 +42,14 @@ export function StatusDot({ tone, pulse = false }: { tone: 'working' | 'failed';
 export function WindowDot({ windows }: { windows: WindowState[] }) {
   if (windows.some(window => window.status === 'running' || window.status === 'starting')) return <StatusDot tone="working" pulse />;
   return windows.some(window => window.error) ? <StatusDot tone="failed" /> : null;
+}
+/** Whether the page matches a media query, now. */
+export function useMedia(query: string) {
+  return useSyncExternalStore(changed => {
+    const media = matchMedia(query);
+    media.addEventListener('change', changed);
+    return () => media.removeEventListener('change', changed);
+  }, () => matchMedia(query).matches);
 }
 /** Copies `text`, and shows for a moment that it has. */
 export function CopyButton({ text, label }: { text: string; label: string }) {

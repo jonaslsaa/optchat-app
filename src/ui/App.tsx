@@ -78,9 +78,7 @@ function Profile({ state, profile, onSettings }: { state: State; profile: string
           {fresh && <div className="flex-[1.6]" />}
         </Fragment>
       </main>
-      {/* Beside the chat where there is room for both, and over it where there is not, as the sidebar is. */}
-      {panel && !own && <button type="button" aria-label="Close the agents" onClick={() => setPanel(undefined)} className="fixed inset-0 z-30 bg-black/20 lg:hidden" />}
-      {panel && !own && <div className="max-lg:fixed max-lg:inset-y-0 max-lg:right-0 max-lg:z-40 max-lg:shadow-xl"><AgentsPanel state={state} profile={profile} agent={panel.agent} pulse={pulse} outside={window.outside !== undefined} onAgent={openAgent} onClose={() => setPanel(undefined)} /></div>}
+      {panel && !own && <AgentsPanel state={state} profile={profile} agent={panel.agent} pulse={pulse} outside={window.outside !== undefined} onAgent={openAgent} onClose={() => setPanel(undefined)} />}
     </div>
   );
 }

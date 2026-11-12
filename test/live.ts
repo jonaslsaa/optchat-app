@@ -90,4 +90,11 @@ test('a connected window reads the profile\'s memory, and Complete hands its con
   await record(main, r => r.type === 'agent_settled', report.seq);
   const { messages } = await client.request('history', { profile: 'live' });
   assert.ok(messages.some(m => m.kind === 'work' && handoff.test(m.text)), 'the handoff is in the profile\'s log');
+
+  // The window is not spent: its next prompt begins a new conversation in the same Pi, which says so in its role.
+  const again = (await client.request('windows', {})).windows.find(w => w.id === window.id)!.seq;
+  await client.request('prompt', { window: window.id, text: 'Reply with exactly: here' });
+  await record(window.id, r => r.type === 'agent_settled', again);
+  const { owner, completed, status } = (await client.request('windows', {})).windows.find(w => w.id === window.id)!;
+  assert.deepEqual({ owner, completed, status }, { owner: false, completed: undefined, status: 'idle' });
 });

@@ -5,6 +5,7 @@ import { test } from 'node:test';
 import { connect } from '../src/client.ts';
 import type { PiRecord, Push } from '../src/protocol.ts';
 import { startServer } from '../src/server/server.ts';
+import { apply, chat, idle, logged } from '../src/ui/transcript.ts';
 import { createProfile, temporaryHome } from './support.ts';
 
 /** `npm run test:live`: real turns through the installed Pi with pi-optchat, on throwaway profiles. It needs Pi logged in to
@@ -51,6 +52,10 @@ test('a real Pi turn on a throwaway profile, end to end through the WebSocket', 
   // The turn is in the profile's memory, written by Pi and read by the app from disk.
   const { messages } = await client.request('history', { profile: 'live' });
   assert.deepEqual(messages.map(m => [m.kind, m.text]), [['user', 'Reply with exactly this word and nothing else: pong'], ['talk', 'pong']]);
+  // The UI shows a run from Pi's records until it is logged: both must read the same, down to the dates the two are joined by.
+  const run = pushes.reduce((live, push) => push.push === 'record' ? apply(live, push.record, push.seq) : live, idle());
+  assert.deepEqual(chat([], run).map(({ kind, text, date }) => ({ kind, text, date })), messages.map(({ kind, text, date }) => ({ kind, text, date })));
+  assert.equal(chat(logged(messages), run).length, messages.length);
   assert.deepEqual((await client.request('view', { profile: 'live' })).lines.map(l => [l.id, l.n]), [[0, 1], [1, 1]]);
 
   // A second client finds the window and its run; closing the server lets Pi release the profile.

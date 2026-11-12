@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { request } from 'node:http';
 import { join } from 'node:path';
 import { test, type TestContext } from 'node:test';
 import { WebSocket } from 'ws';
@@ -45,13 +46,13 @@ test('a window starts its Pi on the first prompt, and what Pi writes reaches the
   assert.deepEqual(await request('prompt', { window: window.id, text: 'hello' }), { disposition: 'started' });
   await record('agent_settled');
   assert.deepEqual(statuses(window.id), ['stopped', 'starting', 'idle', 'running', 'idle']);
-  assert.deepEqual(types(), ['extension_ui_request', 'extension_ui_request', 'agent_start', 'message_start', 'message_end', 'message_start', 'message_update', 'message_update', 'message_end', 'agent_end', 'agent_settled']);
+  assert.deepEqual(types(), ['extension_ui_request', 'extension_ui_request', 'agent_start', 'message_start', 'message_end', 'message_start', 'message_update', 'message_update', 'message_update', 'message_update', 'message_end', 'agent_end', 'agent_settled']);
   const numbers = pushes.flatMap(push => push.push === 'record' ? [push.seq] : []);
   assert.deepEqual(numbers, numbers.map((_, k) => k + 1));
 
   // Pi got the profile, the app's OPTCHAT_HOME and the window's directory. A second open is the same window, and the same Pi.
   const { data } = await request('command', { window: window.id, command: { type: 'get_state' } });
-  assert.partialDeepStrictEqual(data, { args: ['--optchat-profile', 'work', '--mode', 'rpc'], home, cwd });
+  assert.partialDeepStrictEqual(data, { args: ['--optchat-profile', 'work', '--optchat-connect', 'off', '--mode', 'rpc'], home, cwd });
   assert.equal((await request('open', { profile: 'work' })).window.id, window.id);
   assert.equal((await request('windows', {})).windows.length, 1);
 });
@@ -135,7 +136,7 @@ test('a Pi that could not open the profile is stopped, and the prompt fails with
   const { window } = await request('open', { profile: 'busy' });
   await assert.rejects(request('prompt', { window: window.id, text: 'hello' }), /Profile already running: busy/);
   assert.partialDeepStrictEqual((await status('stopped')).window, { id: 'busy/main' });
-  assert.partialDeepStrictEqual((await request('windows', {})).windows[0], { status: 'stopped', error: 'Profile already running: busy · PID 1' });
+  assert.partialDeepStrictEqual((await request('windows', {})).windows[0], { status: 'stopped', error: 'Profile already running: busy · PID 1 · a-terminal · /somewhere' });
 
   // A Pi without pi-optchat opens no profile either. Another extension's failure is not pi-optchat's.
   await assert.rejects(request('prompt', { window: (await request('open', { profile: 'bare' })).window.id, text: 'hello' }), /pi-optchat did not open the profile/);
@@ -159,7 +160,7 @@ test('a connected window starts the profile\'s owner first, joins it, and Comple
   assert.deepEqual(await windows(), [{ id: 'work/1', role: 'connected', status: 'stopped', owner: undefined, completed: undefined }]);
   await request('prompt', { window: window.id, text: 'hello' });
   const state = async (id: string) => (await request('command', { window: id, command: { type: 'get_state' } })).data;
-  assert.partialDeepStrictEqual(await state('work/main'), { args: ['--optchat-profile', 'work', '--mode', 'rpc'] });
+  assert.partialDeepStrictEqual(await state('work/main'), { args: ['--optchat-profile', 'work', '--optchat-connect', 'off', '--mode', 'rpc'] });
   assert.partialDeepStrictEqual(await state(window.id), { args: ['--optchat-profile', 'work', '--optchat-connect', 'join', '--mode', 'rpc'] });
   assert.partialDeepStrictEqual(await windows(), [{ id: 'work/1', role: 'connected', status: 'idle', owner: false }, { id: 'work/main', role: 'main', status: 'idle', owner: true }]);
 
@@ -169,13 +170,6 @@ test('a connected window starts the profile\'s owner first, joins it, and Comple
   await request('close', { window: window.id });
   assert.equal((await status('closed')).window.id, window.id);
   assert.deepEqual((await windows()).map(w => w.id), ['work/main']);
-});
-
-test('a main window says so when its Pi does not own the profile, and stays the main window', async t => {
-  // The fake Pi with --optchat-connect is what pi-optchat's default does on a profile a Pi outside the app holds: it joins.
-  const { request } = await setup(t, { pi: { command: fake.command, args: [...fake.args, '--optchat-connect', 'auto'] } });
-  await request('prompt', { window: (await request('open', { profile: 'work' })).window.id, text: 'hello' });
-  assert.partialDeepStrictEqual((await request('windows', {})).windows, [{ id: 'work/main', role: 'main', owner: false }]);
 });
 
 test('closing the server takes no more requests, stops connected windows before their owner, and kills a Pi that will not stop', async t => {
@@ -215,4 +209,26 @@ test('only this machine\'s pages connect, and a request the server cannot serve 
   const answer = new Promise(resolve => socket.on('message', data => resolve(JSON.parse(String(data)))));
   socket.on('open', () => socket.send(JSON.stringify({ id: 7, method: 'teleport', params: {} })));
   assert.deepEqual(await answer, { id: 7, error: 'Unknown method: teleport.' });
+});
+
+test('the built UI is the page, served to this machine only and never from outside its directory', async t => {
+  const ui = mkdtempSync(join(home, 'ui-'));
+  mkdirSync(join(ui, 'assets'));
+  writeFileSync(join(ui, 'index.html'), '<title>OptChat</title>');
+  writeFileSync(join(ui, 'assets', 'app-1a2b.js'), 'app()');
+  writeFileSync(join(home, 'secret.txt'), 'secret');
+  const { server } = await setup(t, { ui });
+  const get = (path: string, host?: string) => new Promise<[number | undefined, string | undefined, string]>(resolve => request({ port: server.port, path, headers: host ? { host } : {} }, response => {
+    let body = '';
+    response.on('data', chunk => { body += chunk; }).on('end', () => resolve([response.statusCode, response.headers['content-type'], body]));
+  }).end());
+  assert.deepEqual(await get('/'), [200, 'text/html; charset=utf-8', '<title>OptChat</title>']);
+  assert.deepEqual(await get('/assets/app-1a2b.js'), [200, 'text/javascript', 'app()']);
+  assert.deepEqual((await get('/../secret.txt'))[0], 404);
+  assert.deepEqual((await get('/%2e%2e/secret.txt'))[0], 404);
+  assert.deepEqual((await get('/', 'rebound.example'))[0], 404);
+
+  const unbuilt = await setup(t, { ui: join(ui, 'missing') });
+  const response = await fetch(unbuilt.server.page);
+  assert.deepEqual([response.status, await response.text()], [503, 'The UI is not built yet. Run: npm run build\n']);
 });

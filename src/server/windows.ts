@@ -90,8 +90,8 @@ export class Windows {
     return {};
   }
   records({ window, after = 0 }: Params<'records'>): Result<'records'> {
-    const { records, dropped, ui } = this.get(window);
-    return { records: records.filter(r => r.seq > after), complete: after >= dropped, ui: [...ui.values()] };
+    const { state, records, dropped, ui } = this.get(window);
+    return { seq: state.seq, records: records.filter(r => r.seq > after), complete: after >= dropped, ui: [...ui.values()] };
   }
   async command({ window, command }: Params<'command'>): Promise<Result<'command'>> {
     if (command.type === 'extension_ui_response') throw new Error('Pi does not answer an extension_ui_response. Send it with `answer`.');
@@ -135,8 +135,9 @@ export class Windows {
     Object.assign(opened, { records: [], dropped: state.seq, fault: undefined });
     opened.ui.clear();
     state.status = 'starting'; delete state.error; this.changed(opened);
-    // pi-optchat's --optchat-connect: `join` never takes the profile itself, where its default takes a free one.
-    const pi: Pi = new Pi({ command, args: [...args, '--optchat-profile', state.profile, ...joins ? ['--optchat-connect', 'join'] : []], cwd: state.cwd, env: { ...process.env, OPTCHAT_HOME: home } },
+    // pi-optchat's --optchat-connect: a connected window only ever joins the profile's owner, and the main window only ever is
+    // the owner. On a profile a Pi outside the app holds, it fails with who that is, and never joins it unasked.
+    const pi: Pi = new Pi({ command, args: [...args, '--optchat-profile', state.profile, '--optchat-connect', joins ? 'join' : 'off'], cwd: state.cwd, env: { ...process.env, OPTCHAT_HOME: home } },
       record => this.record(opened, record), error => this.exited(opened, pi, error));
     opened.pi = pi;
     try {

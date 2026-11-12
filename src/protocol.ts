@@ -74,13 +74,13 @@ export const methods = {
   /** Stops the window's Pi, letting it shut down cleanly. A main window stays in the list and starts again on its next prompt;
    * a connected window leaves it. */
   close: method(target, none),
-  /** For a client that connects late. `records`: what the window pushed after number `after` and still keeps, which is
-   * everything since its latest run began. `complete` is false when there were more before these: a main window's are in
-   * `history` by now, a connected window's only in its Pi (`command` with Pi's `get_messages`). `ui`: what Pi's extensions
-   * show now, as the `extension_ui_request` records that said so: the latest status, widget and title, and the dialogs still
-   * waiting for an `answer`. */
+  /** For a client that connects late. `seq` is the number of the last record the window pushed. `records`: what it pushed
+   * after number `after` and still keeps, which is everything since its latest run began. `complete` is false when there were
+   * more before these: a main window's are in `history` by now, a connected window's only in its Pi (`command` with Pi's
+   * `get_messages`). `ui`: what Pi's extensions show now, as the `extension_ui_request` records that said so: the latest
+   * status, widget and title, and the dialogs still waiting for an `answer`. */
   records: method(Type.Object({ window: Type.String(), after: Type.Optional(id) }),
-    Type.Object({ records: Type.Array(Type.Object({ seq: id, record: PiRecord })), complete: Type.Boolean(), ui: Type.Array(PiRecord) })),
+    Type.Object({ seq: id, records: Type.Array(Type.Object({ seq: id, record: PiRecord })), complete: Type.Boolean(), ui: Type.Array(PiRecord) })),
   /** Any other Pi RPC command (`get_state`, `set_model`, `get_messages`, ...), answered with Pi's `data`. */
   command: method(Type.Object({ window: Type.String(), command: PiRecord }), Type.Object({ data: Type.Optional(Type.Unknown()) })),
   /** Answers a dialog Pi asked for in an `extension_ui_request` (select, confirm, input, editor): Pi's `extension_ui_response`

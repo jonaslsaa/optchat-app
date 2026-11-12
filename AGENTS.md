@@ -1,10 +1,11 @@
 # OptChat app
 
-The app for pi-optchat. `README.md` has the design, `docs/server.md` the server and its protocol.
+The app for pi-optchat. `README.md` has the design, `docs/server.md` the server and its protocol, `docs/ui.md` the UI.
 
-- **Layout:** `src/protocol.ts` is the one schema between server and UI (typebox; types are inferred from it, and it imports nothing from Node). `src/client.ts` is the typed client. `src/server/` is the Node server.
+- **Layout:** `src/protocol.ts` is the one schema between server and UI (typebox; types are inferred from it, and it imports nothing from Node). `src/client.ts` is the typed client. `src/server/` is the Node server. `src/ui/` is the page (React, Vite, Tailwind), which the server serves once built; it has its own `tsconfig.json`, and its logic lives in `transcript.ts` (no DOM, tested) and `store.ts`, not in components.
 - **A client, never a second brain.** Memory is read through `pi-optchat/core`; agents run in `pi --mode rpc`. `src/server/disk.ts` is the only file that knows pi-optchat's files, and nothing here writes a profile.
 - **Plain TypeScript on Node**, run without a build step (`node file.ts`), so only erasable syntax: no enums, no parameter properties. No `any`. npm, `node --test`, the fewest dependencies that do the job.
 - **When unsure how to solve something, look at T3 Code first** (`~/Downloads/t3code`, MIT, read-only) and take its solution where it fits: components and solutions, not its thread-per-task architecture, Effect or monorepo. Code copied from it gets an entry in `THIRD_PARTY_NOTICES.md`.
 - **Safety:** tests and every manual run use a throwaway `OPTCHAT_HOME` under `/tmp` (`test/support.ts`). Never open, lock or write the real `~/.optchat`, and kill only processes you started.
 - `npm run check`, `npm test`, and `npm run test:live` for real turns through Pi (`PI_OPTCHAT=<checkout>` to run a pi-optchat checkout).
+- **Look at what you changed in the UI:** `npm run screenshots [directory]` saves a PNG of every main state to `/tmp/optchat-app-shots` (empty profile, long history, streaming reply, queued message, connected and completed windows, two profile tabs, narrow, dark). It runs the real server and page against throwaway profiles with the fake Pi in your installed Chrome, with fixed clocks, so two runs of the same code give the same bytes. Read the PNGs before and after a UI change; add a state to `scripts/screenshots.ts` when you add one to the UI.

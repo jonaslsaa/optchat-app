@@ -172,7 +172,10 @@ test('a connected window starts the profile\'s owner first, joins it, and Comple
 
   // Complete is for a connected conversation that is not handed off yet: not the main chat, and not twice.
   await assert.rejects(request('complete', { window: 'work/main' }), /none to hand off/);
-  await request('complete', { window: window.id });
+  // Nor does a message get in while the conversation is being handed off: it would belong to neither conversation.
+  const [done, during] = await Promise.allSettled([request('complete', { window: window.id }), request('prompt', { window: window.id, text: 'one more thing' })]);
+  assert.equal(done.status, 'fulfilled');
+  assert.match(String(during.status === 'rejected' && during.reason), /being handed to the main chat/);
   assert.partialDeepStrictEqual((await windows())[0], { id: window.id, completed: true });
   await assert.rejects(request('complete', { window: window.id }), /none to hand off/);
 

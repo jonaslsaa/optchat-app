@@ -70,7 +70,7 @@ export const methods = {
    * (Pi's `clear_queue`), which would otherwise start the next run. */
   abort: method(target, Type.Object({ steering: Type.Array(Type.String()), followUp: Type.Array(Type.String()) })),
   /** Ends a connected window's conversation and hands it to the main chat (pi-optchat's `/complete`). Answers once the handoff
-   * is written, which takes a turn of the window's agent. */
+   * is written, which takes a turn of the window's agent; until then the window takes no prompt. */
   complete: method(target, none),
   /** Stops the window's Pi, letting it shut down cleanly. A main window stays in the list and starts again on its next prompt;
    * a connected window leaves it. */

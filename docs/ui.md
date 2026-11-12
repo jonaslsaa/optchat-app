@@ -14,7 +14,7 @@ npm run screenshots       # a PNG of every main state, in /tmp/optchat-app-shots
 
 - **Profile tabs** on top, only once two profiles are open, with a + that opens another. With one profile there is no tab bar: its name sits in the title bar and opens the list of profiles.
 - **Windows** on the left: the main chat, then connected windows, each with Complete and close. "New window" opens a connected window, which sends the main agent nothing until its first message.
-- **The chat** in the centre. The main chat is the profile's log, read from disk a page at a time as you scroll back, so it shows with no Pi running. A connected window shows its own conversation, which only its Pi has until Complete hands it over.
+- **The chat** in the centre. The main chat is the profile's log, read from disk a page at a time as you scroll back, so it shows with no Pi running. A connected window shows its own conversation, which only its Pi has until Complete hands it over. A completed one stays as it was until your next message, which begins a new conversation in the same window: the view starts empty, and the finished one is in the main chat.
 - **The composer.** You can always type. While the agent runs, Enter steers it, ⌘Enter queues the message for after the run, and Esc stops the run and puts what was still queued back in the composer.
 
 | Keys | |
@@ -32,6 +32,7 @@ npm run screenshots       # a PNG of every main state, in /tmp/optchat-app-shots
 | --- | --- |
 | `src/ui/transcript.ts` | The chat as data, with no DOM: folds Pi's records into a window's state, joins that with the log, joins the log's pages, and works out what each row says (`parts`). Tested in `test/transcript.test.ts`. |
 | `src/ui/store.ts` | Everything the page knows, outside React: the connection (and reconnecting), the logs, each window's run. Components read it with `useApp`. Tested against the server in `test/store.test.ts`. |
+| `src/ui/conversation.ts` | Which of the conversations a connected window's Pi has had is the one it shows: the one since its last Complete. Tested in `test/conversation.test.ts`. |
 | `src/ui/App.tsx`, `Profiles.tsx`, `Sidebar.tsx`, `Timeline.tsx`, `Rows.tsx`, `Composer.tsx`, `Markdown.tsx` | The components. They only draw: a row gets its part, and is drawn again only when that part changed. |
 | `src/ui/safe.ts` | What Markdown may do: see below. Tested in `test/markdown.test.ts`. |
 | `src/ui/keys.ts` | Shortcuts, and `useShortcuts`. |

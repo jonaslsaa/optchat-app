@@ -2,6 +2,7 @@ import { CheckIcon, PanelLeftIcon, XIcon } from 'lucide-react';
 import { Fragment, useMemo, useState } from 'react';
 import { canComplete } from '../window.ts';
 import { Composer } from './Composer.tsx';
+import { current } from './conversation.ts';
 import { useShortcuts } from './keys.ts';
 import { ProfileName, Tabs } from './Profiles.tsx';
 import { Sidebar } from './Sidebar.tsx';
@@ -21,7 +22,7 @@ function Profile({ state, profile }: { state: State; profile: string }) {
   const live = (window && state.live[window.id]) ?? NOTHING, log = state.logs[profile], session = window && state.sessions[window.id];
   // The main chat is the profile's log. A connected window's conversation is only in its Pi until it is handed off.
   const own = window?.role === 'connected';
-  const before = useMemo(() => own ? spoken(session ?? []) : logged(log?.entries ?? []), [own, session, log?.entries]);
+  const before = useMemo(() => own ? spoken(current(session ?? [], live.messages)) : logged(log?.entries ?? []), [own, session, live.messages, log?.entries]);
   const items = useMemo(() => chat(before, live), [before, live.messages, live.streaming]);
   useShortcuts(() => ({
     'mod+shift+o': () => void app.newWindow(profile),

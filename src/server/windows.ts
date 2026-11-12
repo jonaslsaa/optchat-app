@@ -3,6 +3,7 @@ import { Type, type Static, type TSchema } from 'typebox';
 import { Value } from 'typebox/value';
 import { methods, type Params, type PiRecord, type Push, type Result, type WindowState } from '../protocol.ts';
 import { profileDirectory } from './disk.ts';
+import { canComplete } from '../window.ts';
 import { Pi, reason } from './pi.ts';
 
 export interface WindowsOptions {
@@ -33,7 +34,7 @@ interface Opened {
 const ROLE_STATUS = 'optchat.role';
 /** pi-optchat's status line: `OptChat: <profile> · ...` once it has opened the profile, and something else before. */
 const opens = ({ ui, state }: Opened) => { const line = ui.get('status optchat')?.statusText; return typeof line === 'string' && line.startsWith(`OptChat: ${state.profile} ·`); };
-const Role = Type.Object({ role: Type.Enum(['owner', 'window']), completed: Type.Optional(Type.Boolean()) });
+const Role = Type.Object({ completed: Type.Optional(Type.Boolean()) });
 const DIALOGS = ['select', 'confirm', 'input', 'editor'];
 const mainId = (profile: string) => `${profile}/main`;
 const isMain = ({ state }: Opened) => state.id === mainId(state.profile);
@@ -78,7 +79,7 @@ export class Windows {
     return queued;
   }
   async complete({ window }: Params<'complete'>): Promise<Result<'complete'>> {
-    if (this.get(window).state.owner !== false) throw new Error('Complete hands a connected conversation to the main chat. This window has none to hand off.');
+    if (!canComplete(this.get(window).state)) throw new Error('Complete hands a connected conversation to the main chat. This window has none to hand off.');
     await this.running(window).request({ type: 'prompt', message: '/complete' });
     return {};
   }
@@ -90,8 +91,8 @@ export class Windows {
     return {};
   }
   records({ window, after = 0 }: Params<'records'>): Result<'records'> {
-    const { records, dropped, ui } = this.get(window);
-    return { records: records.filter(r => r.seq > after), complete: after >= dropped, ui: [...ui.values()] };
+    const { state, records, dropped, ui } = this.get(window);
+    return { seq: state.seq, records: records.filter(r => r.seq > after), complete: after >= dropped, ui: [...ui.values()] };
   }
   async command({ window, command }: Params<'command'>): Promise<Result<'command'>> {
     if (command.type === 'extension_ui_response') throw new Error('Pi does not answer an extension_ui_response. Send it with `answer`.');
@@ -135,8 +136,9 @@ export class Windows {
     Object.assign(opened, { records: [], dropped: state.seq, fault: undefined });
     opened.ui.clear();
     state.status = 'starting'; delete state.error; this.changed(opened);
-    // pi-optchat's --optchat-connect: `join` never takes the profile itself, where its default takes a free one.
-    const pi: Pi = new Pi({ command, args: [...args, '--optchat-profile', state.profile, ...joins ? ['--optchat-connect', 'join'] : []], cwd: state.cwd, env: { ...process.env, OPTCHAT_HOME: home } },
+    // pi-optchat's --optchat-connect: a connected window only ever joins the profile's owner, and the main window only ever is
+    // the owner. On a profile a Pi outside the app holds, it fails with who that is, and never joins it unasked.
+    const pi: Pi = new Pi({ command, args: [...args, '--optchat-profile', state.profile, '--optchat-connect', joins ? 'join' : 'off'], cwd: state.cwd, env: { ...process.env, OPTCHAT_HOME: home } },
       record => this.record(opened, record), error => this.exited(opened, pi, error));
     opened.pi = pi;
     try {
@@ -163,7 +165,7 @@ export class Windows {
     if (opened.pi !== pi) return;
     const { state } = opened, why = state.status === 'starting' ? opened.fault ?? error : error;
     opened.pi = undefined; opened.ui.clear();
-    state.status = 'stopped'; delete state.owner; delete state.completed;
+    state.status = 'stopped'; delete state.completed;
     if (why) state.error = why;
     this.changed(opened);
   }
@@ -199,14 +201,13 @@ export class Windows {
       if (typeof timeout === 'number' && timeout > 0) setTimeout(() => opened.ui.delete(`dialog ${id}`), timeout).unref();
     }
   }
-  /** `status` is pi-optchat's role as JSON, or nothing once its Pi has no profile open. */
+  /** `status` is pi-optchat's role as JSON, or nothing once its Pi has no profile open. All the app needs of it is whether a
+   * connected window's conversation is handed off: which Pi owns the profile and which is a window on it is the app's own doing. */
   private role(opened: Opened, status: unknown) {
     let role: unknown;
     try { role = JSON.parse(String(status)); } catch {}
-    const { state } = opened, said = Value.Check(Role, role) ? role : undefined;
-    const owner = said && said.role === 'owner', completed = said?.completed || undefined;
-    if (state.owner === owner && state.completed === completed) return;
-    if (owner === undefined) delete state.owner; else state.owner = owner;
+    const { state } = opened, completed = Value.Check(Role, role) && role.completed === true;
+    if ((state.completed ?? false) === completed) return;
     if (completed) state.completed = true; else delete state.completed;
     this.changed(opened);
   }

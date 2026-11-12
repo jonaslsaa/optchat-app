@@ -5,6 +5,7 @@ import { test } from 'node:test';
 import { connect } from '../src/client.ts';
 import type { PiRecord, Push } from '../src/protocol.ts';
 import { startServer } from '../src/server/server.ts';
+import { apply, chat, idle, logged } from '../src/ui/transcript.ts';
 import { createProfile, temporaryHome } from './support.ts';
 
 /** `npm run test:live`: real turns through the installed Pi with pi-optchat, on throwaway profiles. It needs Pi logged in to
@@ -51,6 +52,15 @@ test('a real Pi turn on a throwaway profile, end to end through the WebSocket', 
   // The turn is in the profile's memory, written by Pi and read by the app from disk.
   const { messages } = await client.request('history', { profile: 'live' });
   assert.deepEqual(messages.map(m => [m.kind, m.text]), [['user', 'Reply with exactly this word and nothing else: pong'], ['talk', 'pong']]);
+  // The UI shows a run from Pi's records until it is logged: both must read the same, down to the dates the two are joined by.
+  // And the reply is there while Pi still writes it: its text shows before the message has ended.
+  const pushed = pushes.flatMap(push => push.push === 'record' ? [push] : []);
+  const ending = pushed.findIndex(push => said(push.record, 'assistant'));
+  const writing = pushed.slice(0, ending).reduce((live, push) => apply(live, push.record, push.seq), idle());
+  assert.partialDeepStrictEqual(chat([], writing).at(-1), { kind: 'talk', text: 'pong', streaming: true });
+  const run = pushed.reduce((live, push) => apply(live, push.record, push.seq), idle());
+  assert.deepEqual(chat([], run).map(({ kind, text, date }) => ({ kind, text, date })), messages.map(({ kind, text, date }) => ({ kind, text, date })));
+  assert.equal(chat(logged(messages), run).length, messages.length);
   assert.deepEqual((await client.request('view', { profile: 'live' })).lines.map(l => [l.id, l.n]), [[0, 1], [1, 1]]);
 
   // A second client finds the window and its run; closing the server lets Pi release the profile.
@@ -79,8 +89,7 @@ test('a connected window reads the profile\'s memory, and Complete hands its con
   assert.match(JSON.stringify((await record(window.id, r => said(r, 'assistant'))).record), /marzipan/);
   await record(window.id, r => r.type === 'agent_settled');
   const [connected] = (await client.request('windows', {})).windows.filter(w => w.id === window.id);
-  assert.partialDeepStrictEqual(connected, { role: 'connected', status: 'idle', owner: false });
-  assert.partialDeepStrictEqual((await client.request('windows', {})).windows.find(w => w.id === main), { role: 'main', owner: true });
+  assert.partialDeepStrictEqual(connected, { role: 'connected', status: 'idle' });
 
   // Complete: the window writes its handoff, and the main chat gets it as that agent's report, in its memory.
   await client.request('complete', { window: window.id });
@@ -95,6 +104,6 @@ test('a connected window reads the profile\'s memory, and Complete hands its con
   const again = (await client.request('windows', {})).windows.find(w => w.id === window.id)!.seq;
   await client.request('prompt', { window: window.id, text: 'Reply with exactly: here' });
   await record(window.id, r => r.type === 'agent_settled', again);
-  const { owner, completed, status } = (await client.request('windows', {})).windows.find(w => w.id === window.id)!;
-  assert.deepEqual({ owner, completed, status }, { owner: false, completed: undefined, status: 'idle' });
+  const { completed, status } = (await client.request('windows', {})).windows.find(w => w.id === window.id)!;
+  assert.deepEqual({ completed, status }, { completed: undefined, status: 'idle' });
 });

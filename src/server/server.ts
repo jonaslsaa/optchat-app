@@ -1,6 +1,7 @@
+import { existsSync, readFileSync, statSync } from 'node:fs';
 import { createServer, type IncomingMessage } from 'node:http';
 import { homedir } from 'node:os';
-import { resolve } from 'node:path';
+import { extname, join, resolve, sep } from 'node:path';
 import type { AddressInfo } from 'node:net';
 import { Value } from 'typebox/value';
 import { WebSocket, WebSocketServer } from 'ws';
@@ -12,16 +13,20 @@ import { Windows, type WindowsOptions } from './windows.ts';
 
 export interface ServerOptions extends Partial<Omit<WindowsOptions, 'push'>> {
   port?: number;
-  /** Origins that may connect besides pages this machine serves: the scheme a desktop shell loads the UI from, as T3 Code's
-   * `t3code://app`. */
+  /** The built UI's directory (`npm run build`), served as the page at `/`. */
+  ui?: string;
+  /** Origins that may connect besides the server's own page: the scheme a desktop shell loads the UI from, as T3 Code's
+   * `t3code://app`, or Vite's address in development. */
   origins?: readonly string[];
 }
+const TYPES: Record<string, string> = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png', '.woff2': 'font/woff2', '.json': 'application/json' };
 const LOOPBACK = ['localhost', '127.0.0.1', '[::1]'];
 const loopback = (url: string) => { try { return LOOPBACK.includes(new URL(url).hostname); } catch { return false; } };
 
-/** Starts the app's server on this machine only: the protocol of `protocol.ts` on a WebSocket at `/ws`, and a profile's images at
- * `/images/<profile>/<name>`. `close` stops every Pi it started and waits for them. */
-export async function startServer({ port = 0, origins = [], home = defaultHome(), cwd = homedir(), pi = { command: 'pi', args: [] }, grace = 15_000 }: ServerOptions = {}) {
+/** Starts the app's server on this machine only: the protocol of `protocol.ts` on a WebSocket at `/ws`, a profile's images at
+ * `/images/<profile>/<name>`, and the UI's page everywhere else. `close` stops every Pi it started and waits for them. */
+export async function startServer({ port = 0, origins = [], ui = join(import.meta.dirname, '../../dist/ui'), home = defaultHome(), cwd = homedir(), pi = { command: 'pi', args: [] }, grace = 15_000 }: ServerOptions = {}) {
+  ui = resolve(ui);
   home = resolve(home); // Pi runs in each window's directory, and has to find the same profiles from there.
   const profiles = new Profiles(home), sockets = new WebSocketServer({ noServer: true });
   let closing = false;
@@ -38,10 +43,14 @@ export async function startServer({ port = 0, origins = [], home = defaultHome()
     if (!Value.Check<(typeof methods)[M]['params']>(methods[method].params, params)) throw new Error(`Invalid ${method} request: ${Value.Errors(methods[method].params, params)[0]?.message ?? 'wrong parameters'}.`);
     return handlers[method](params);
   };
-  /** The windows run an agent with a shell, so only this machine's own pages may reach the server. A page anywhere can open a
-   * WebSocket to any address, hence the Origin; and a name it points at 127.0.0.1 makes its requests same-origin, hence the
-   * Host. A client that is not a browser sends no Origin. */
-  const allowed = ({ headers: { host, origin } }: IncomingMessage) => loopback(`http://${host}`) && (origin === undefined || loopback(origin) || origins.includes(origin));
+  /** The windows run an agent with a shell, so only the server's own page may reach it. A page anywhere can open a WebSocket to
+   * any address, hence the Origin, which has to be this server's page (or one of `origins`): another program's page on this
+   * machine is as foreign as one on the internet. A name pointed at 127.0.0.1 makes a foreign page's requests same-origin,
+   * hence the Host. A client that is not a browser sends no Origin. */
+  const allowed = ({ headers: { host, origin } }: IncomingMessage) => {
+    const { port } = server.address() as AddressInfo;
+    return loopback(`http://${host}`) && (origin === undefined || origin === `http://127.0.0.1:${port}` || origin === `http://localhost:${port}` || origins.includes(origin));
+  };
   sockets.on('connection', socket => {
     socket.on('error', () => socket.terminate()); // A broken frame or a dropped connection ends that client, not the server.
     socket.on('message', async data => {
@@ -56,12 +65,25 @@ export async function startServer({ port = 0, origins = [], home = defaultHome()
       } catch (error) { send(socket, { id, error: reason(error) }); }
     });
   });
+  /** A file of the built UI. Its assets have their content's hash in their names, so they never change; the page is asked for anew. */
+  const page = (path: string) => {
+    const file = join(ui, path === '/' ? 'index.html' : path);
+    if (!file.startsWith(ui + sep) || !existsSync(file) || !statSync(file).isFile()) return undefined;
+    return { type: TYPES[extname(file)] ?? 'application/octet-stream', cache: path.startsWith('/assets/') ? 'public, max-age=31536000, immutable' : 'no-cache', data: readFileSync(file) };
+  };
   const server = createServer((request, response) => {
-    const image = /^\/images\/([^/]+)\/([0-9a-f]{16})$/.exec(request.url ?? '');
+    // No page may show this one in a frame, and this one loads nothing from elsewhere: what the agent writes is shown as
+    // Markdown, and must not be able to fetch an address of its choosing.
+    response.setHeader('x-frame-options', 'DENY');
+    response.setHeader('content-security-policy', "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; frame-ancestors 'none'");
     try {
-      const found = image && request.method === 'GET' && allowed(request) ? profiles.image(image[1], image[2]) : undefined;
-      if (!found) { response.writeHead(404).end(); return; }
-      response.writeHead(200, { 'content-type': found.mimeType, 'cache-control': 'private, max-age=31536000, immutable' }).end(found.data);
+      if (request.method !== 'GET' || !allowed(request)) { response.writeHead(404).end(); return; }
+      const { pathname } = new URL(request.url ?? '/', 'http://localhost'), image = /^\/images\/([^/]+)\/([0-9a-f]{16})$/.exec(pathname);
+      const found = image ? profiles.image(image[1], image[2]) : undefined, file = image ? undefined : page(pathname);
+      if (found) response.writeHead(200, { 'content-type': found.mimeType, 'cache-control': 'private, max-age=31536000, immutable' }).end(found.data);
+      else if (file) response.writeHead(200, { 'content-type': file.type, 'cache-control': file.cache }).end(file.data);
+      else if (pathname === '/') response.writeHead(503, { 'content-type': 'text/plain' }).end('The UI is not built yet. Run: npm run build\n');
+      else response.writeHead(404).end();
     } catch { response.writeHead(404).end(); }
   });
   server.on('upgrade', (request, socket, head) => {
@@ -71,7 +93,7 @@ export async function startServer({ port = 0, origins = [], home = defaultHome()
   await new Promise<void>((resolve, reject) => { server.once('error', reject); server.listen(port, '127.0.0.1', resolve); });
   const address = server.address() as AddressInfo;
   return {
-    port: address.port, url: `ws://127.0.0.1:${address.port}/ws`,
+    port: address.port, url: `ws://127.0.0.1:${address.port}/ws`, page: `http://127.0.0.1:${address.port}/`,
     /** No request is taken from here on; one already under way ends with its Pi. */
     async close() {
       closing = true;

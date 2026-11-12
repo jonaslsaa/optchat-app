@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { request } from 'node:http';
 import { join } from 'node:path';
 import { test, type TestContext } from 'node:test';
 import { WebSocket } from 'ws';
@@ -45,13 +46,13 @@ test('a window starts its Pi on the first prompt, and what Pi writes reaches the
   assert.deepEqual(await request('prompt', { window: window.id, text: 'hello' }), { disposition: 'started' });
   await record('agent_settled');
   assert.deepEqual(statuses(window.id), ['stopped', 'starting', 'idle', 'running', 'idle']);
-  assert.deepEqual(types(), ['extension_ui_request', 'extension_ui_request', 'agent_start', 'message_start', 'message_end', 'message_start', 'message_update', 'message_update', 'message_end', 'agent_end', 'agent_settled']);
+  assert.deepEqual(types(), ['extension_ui_request', 'extension_ui_request', 'agent_start', 'message_start', 'message_end', 'message_start', 'message_update', 'message_update', 'message_update', 'message_update', 'message_end', 'agent_end', 'agent_settled']);
   const numbers = pushes.flatMap(push => push.push === 'record' ? [push.seq] : []);
   assert.deepEqual(numbers, numbers.map((_, k) => k + 1));
 
   // Pi got the profile, the app's OPTCHAT_HOME and the window's directory. A second open is the same window, and the same Pi.
   const { data } = await request('command', { window: window.id, command: { type: 'get_state' } });
-  assert.partialDeepStrictEqual(data, { args: ['--optchat-profile', 'work', '--mode', 'rpc'], home, cwd });
+  assert.partialDeepStrictEqual(data, { args: ['--optchat-profile', 'work', '--optchat-connect', 'off', '--mode', 'rpc'], home, cwd });
   assert.equal((await request('open', { profile: 'work' })).window.id, window.id);
   assert.equal((await request('windows', {})).windows.length, 1);
 });
@@ -116,7 +117,6 @@ test('a Pi that dies in a run leaves its window stopped with the reason, and the
   const [stopped] = (await request('windows', {})).windows;
   assert.partialDeepStrictEqual(stopped, { status: 'stopped' });
   assert.match(stopped.error ?? '', /Pi exited \(code 3\)/);
-  assert.equal(stopped.owner, undefined);
   assert.deepEqual(await request('prompt', { window: window.id, text: 'hello' }), { disposition: 'started' });
 });
 
@@ -135,7 +135,7 @@ test('a Pi that could not open the profile is stopped, and the prompt fails with
   const { window } = await request('open', { profile: 'busy' });
   await assert.rejects(request('prompt', { window: window.id, text: 'hello' }), /Profile already running: busy/);
   assert.partialDeepStrictEqual((await status('stopped')).window, { id: 'busy/main' });
-  assert.partialDeepStrictEqual((await request('windows', {})).windows[0], { status: 'stopped', error: 'Profile already running: busy · PID 1' });
+  assert.partialDeepStrictEqual((await request('windows', {})).windows[0], { status: 'stopped', error: 'Profile already running: busy · PID 1 · a-terminal · /somewhere' });
 
   // A Pi without pi-optchat opens no profile either. Another extension's failure is not pi-optchat's.
   await assert.rejects(request('prompt', { window: (await request('open', { profile: 'bare' })).window.id, text: 'hello' }), /pi-optchat did not open the profile/);
@@ -146,8 +146,11 @@ test('a message sent during a run is queued, and abort hands back what was still
   const { request, record } = await setup(t);
   const { window } = await request('open', { profile: 'work' });
   await request('prompt', { window: window.id, text: 'wait for me' });
+  // One for after the run, then one that steers: each waits in the queue it was sent to.
+  assert.deepEqual(await request('prompt', { window: window.id, text: 'later', whenBusy: 'followUp' }), { disposition: 'queued' });
   assert.deepEqual(await request('prompt', { window: window.id, text: 'and then this' }), { disposition: 'queued' });
-  assert.deepEqual(await request('abort', { window: window.id }), { steering: ['and then this'], followUp: [] });
+  assert.deepEqual((await record('queue_update', (await record('queue_update')).seq)).record, { type: 'queue_update', steering: ['and then this'], followUp: ['later'] });
+  assert.deepEqual(await request('abort', { window: window.id }), { steering: ['and then this'], followUp: ['later'] });
   assert.equal((await record('agent_settled')).record.aborted, true);
   assert.equal((await request('windows', {})).windows[0].status, 'idle');
 });
@@ -155,27 +158,23 @@ test('a message sent during a run is queued, and abort hands back what was still
 test('a connected window starts the profile\'s owner first, joins it, and Complete hands it off', async t => {
   const { request, status } = await setup(t);
   const { window } = await request('open', { profile: 'work', role: 'connected' });
-  const windows = async () => (await request('windows', {})).windows.map(({ id, role, status, owner, completed }) => ({ id, role, status, owner, completed }));
-  assert.deepEqual(await windows(), [{ id: 'work/1', role: 'connected', status: 'stopped', owner: undefined, completed: undefined }]);
+  const windows = async () => (await request('windows', {})).windows.map(({ id, role, status, completed }) => ({ id, role, status, completed }));
+  assert.deepEqual(await windows(), [{ id: 'work/1', role: 'connected', status: 'stopped', completed: undefined }]);
+  await assert.rejects(request('complete', { window: window.id }), /none to hand off/); // It has said nothing yet.
   await request('prompt', { window: window.id, text: 'hello' });
   const state = async (id: string) => (await request('command', { window: id, command: { type: 'get_state' } })).data;
-  assert.partialDeepStrictEqual(await state('work/main'), { args: ['--optchat-profile', 'work', '--mode', 'rpc'] });
+  assert.partialDeepStrictEqual(await state('work/main'), { args: ['--optchat-profile', 'work', '--optchat-connect', 'off', '--mode', 'rpc'] });
   assert.partialDeepStrictEqual(await state(window.id), { args: ['--optchat-profile', 'work', '--optchat-connect', 'join', '--mode', 'rpc'] });
-  assert.partialDeepStrictEqual(await windows(), [{ id: 'work/1', role: 'connected', status: 'idle', owner: false }, { id: 'work/main', role: 'main', status: 'idle', owner: true }]);
+  assert.partialDeepStrictEqual(await windows(), [{ id: 'work/1', role: 'connected', status: 'idle' }, { id: 'work/main', role: 'main', status: 'idle' }]);
 
+  // Complete is for a connected conversation that is not handed off yet: not the main chat, and not twice.
   await assert.rejects(request('complete', { window: 'work/main' }), /none to hand off/);
   await request('complete', { window: window.id });
-  assert.partialDeepStrictEqual((await windows())[0], { id: window.id, owner: false, completed: true });
+  assert.partialDeepStrictEqual((await windows())[0], { id: window.id, completed: true });
+  await assert.rejects(request('complete', { window: window.id }), /none to hand off/);
   await request('close', { window: window.id });
   assert.equal((await status('closed')).window.id, window.id);
   assert.deepEqual((await windows()).map(w => w.id), ['work/main']);
-});
-
-test('a main window says so when its Pi does not own the profile, and stays the main window', async t => {
-  // The fake Pi with --optchat-connect is what pi-optchat's default does on a profile a Pi outside the app holds: it joins.
-  const { request } = await setup(t, { pi: { command: fake.command, args: [...fake.args, '--optchat-connect', 'auto'] } });
-  await request('prompt', { window: (await request('open', { profile: 'work' })).window.id, text: 'hello' });
-  assert.partialDeepStrictEqual((await request('windows', {})).windows, [{ id: 'work/main', role: 'main', owner: false }]);
 });
 
 test('closing the server takes no more requests, stops connected windows before their owner, and kills a Pi that will not stop', async t => {
@@ -202,7 +201,10 @@ test('only this machine\'s pages connect, and a request the server cannot serve 
     const socket = new WebSocket(server.url, { origin, headers: host ? { host } : {} });
     socket.on('open', () => { socket.close(); resolve(true); }).on('error', () => resolve(false));
   });
-  assert.deepEqual(await Promise.all([opened('https://example.com'), opened('http://localhost:5173'), opened('optchat://app'), opened('http://localhost:5173', 'rebound.example')]), [false, true, true, false]);
+  // Its own page and the shell's may connect. Another program's page on this machine may not, nor a name pointed at 127.0.0.1.
+  const own = `http://127.0.0.1:${server.port}`;
+  assert.deepEqual(await Promise.all([own, `http://localhost:${server.port}`, 'optchat://app', 'https://example.com', 'http://localhost:9999', 'http://127.0.0.1:9999'].map(origin => opened(origin))), [true, true, true, false, false, false]);
+  assert.equal(await opened(own, 'rebound.example'), false);
 
   // @ts-expect-error: the compiler refuses it too.
   await assert.rejects(request('history', { profile: 'work', limit: 'all' }), /Invalid history request/);
@@ -215,4 +217,30 @@ test('only this machine\'s pages connect, and a request the server cannot serve 
   const answer = new Promise(resolve => socket.on('message', data => resolve(JSON.parse(String(data)))));
   socket.on('open', () => socket.send(JSON.stringify({ id: 7, method: 'teleport', params: {} })));
   assert.deepEqual(await answer, { id: 7, error: 'Unknown method: teleport.' });
+});
+
+test('the built UI is the page, served to this machine only and never from outside its directory', async t => {
+  const ui = mkdtempSync(join(home, 'ui-'));
+  mkdirSync(join(ui, 'assets'));
+  writeFileSync(join(ui, 'index.html'), '<title>OptChat</title>');
+  writeFileSync(join(ui, 'assets', 'app-1a2b.js'), 'app()');
+  writeFileSync(join(home, 'secret.txt'), 'secret');
+  const { server } = await setup(t, { ui });
+  const get = (path: string, host?: string) => new Promise<[number | undefined, string | undefined, string]>(resolve => request({ port: server.port, path, headers: host ? { host } : {} }, response => {
+    let body = '';
+    response.on('data', chunk => { body += chunk; }).on('end', () => resolve([response.statusCode, response.headers['content-type'], body]));
+  }).end());
+  assert.deepEqual(await get('/'), [200, 'text/html; charset=utf-8', '<title>OptChat</title>']);
+  // No other page may frame it, and it may load nothing from elsewhere.
+  const { headers } = await fetch(server.page);
+  assert.equal(headers.get('x-frame-options'), 'DENY');
+  assert.match(headers.get('content-security-policy') ?? '', /default-src 'self'.*img-src 'self' data:.*frame-ancestors 'none'/);
+  assert.deepEqual(await get('/assets/app-1a2b.js'), [200, 'text/javascript', 'app()']);
+  assert.deepEqual((await get('/../secret.txt'))[0], 404);
+  assert.deepEqual((await get('/%2e%2e/secret.txt'))[0], 404);
+  assert.deepEqual((await get('/', 'rebound.example'))[0], 404);
+
+  const unbuilt = await setup(t, { ui: join(ui, 'missing') });
+  const response = await fetch(unbuilt.server.page);
+  assert.deepEqual([response.status, await response.text()], [503, 'The UI is not built yet. Run: npm run build\n']);
 });

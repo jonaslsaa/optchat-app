@@ -24,16 +24,16 @@ export type PiRecord = Static<typeof PiRecord>;
 
 /** A window is a conversation in the app, and one Pi process when it runs. `role` is its place in the app and never changes: the
  * profile's `main` chat, or a `connected` window beside it, whose conversation ends in a handoff to the main chat.
- * `owner` and `completed` are what pi-optchat says of the running Pi: whether it owns the profile (a connected window never
- * does; a main window does unless a Pi outside the app got there first), and whether the conversation is handed off. A
- * completed window's next prompt begins a new conversation in it.
+ * The main window's Pi owns the profile, or fails to start when a Pi outside the app holds it; a connected window's Pi only
+ * ever joins. `completed` is pi-optchat's word that a connected window's conversation is handed off; its next prompt begins a
+ * new conversation in it.
  * `stopped`: no process (not started yet, closed, or it exited: `error` says why if it failed). `idle` and `running`: whether the
  * agent is in a run. `closed`: a connected window that is gone, pushed once as it leaves the list. `seq` is the number of the last
  * record the window pushed. `cwd` is where its Pi runs, set when the window is first opened. */
 export const WindowState = Type.Object({
   id: Type.String(), profile: Type.String(), role: Type.Enum(['main', 'connected']), cwd: Type.String(),
   status: Type.Enum(['stopped', 'starting', 'idle', 'running', 'closed']), seq: id,
-  owner: Type.Optional(Type.Boolean()), completed: Type.Optional(Type.Boolean()), error: Type.Optional(Type.String()),
+  completed: Type.Optional(Type.Boolean()), error: Type.Optional(Type.String()),
 });
 export type WindowState = Static<typeof WindowState>;
 
@@ -74,13 +74,13 @@ export const methods = {
   /** Stops the window's Pi, letting it shut down cleanly. A main window stays in the list and starts again on its next prompt;
    * a connected window leaves it. */
   close: method(target, none),
-  /** For a client that connects late. `records`: what the window pushed after number `after` and still keeps, which is
-   * everything since its latest run began. `complete` is false when there were more before these: a main window's are in
-   * `history` by now, a connected window's only in its Pi (`command` with Pi's `get_messages`). `ui`: what Pi's extensions
-   * show now, as the `extension_ui_request` records that said so: the latest status, widget and title, and the dialogs still
-   * waiting for an `answer`. */
+  /** For a client that connects late. `seq` is the number of the last record the window pushed. `records`: what it pushed
+   * after number `after` and still keeps, which is everything since its latest run began. `complete` is false when there were
+   * more before these: a main window's are in `history` by now, a connected window's only in its Pi (`command` with Pi's
+   * `get_messages`). `ui`: what Pi's extensions show now, as the `extension_ui_request` records that said so: the latest
+   * status, widget and title, and the dialogs still waiting for an `answer`. */
   records: method(Type.Object({ window: Type.String(), after: Type.Optional(id) }),
-    Type.Object({ records: Type.Array(Type.Object({ seq: id, record: PiRecord })), complete: Type.Boolean(), ui: Type.Array(PiRecord) })),
+    Type.Object({ seq: id, records: Type.Array(Type.Object({ seq: id, record: PiRecord })), complete: Type.Boolean(), ui: Type.Array(PiRecord) })),
   /** Any other Pi RPC command (`get_state`, `set_model`, `get_messages`, ...), answered with Pi's `data`. */
   command: method(Type.Object({ window: Type.String(), command: PiRecord }), Type.Object({ data: Type.Optional(Type.Unknown()) })),
   /** Answers a dialog Pi asked for in an `extension_ui_request` (select, confirm, input, editor): Pi's `extension_ui_response`

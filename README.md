@@ -2,7 +2,7 @@
 
 A desktop app for [pi-optchat](https://github.com/jonaslsaa/pi-optchat): one chat per profile that never ends, with the memory tree, connected windows and subagents visible instead of hidden behind a terminal.
 
-Status: the local server is built ([docs/server.md](docs/server.md)); the UI is next.
+Status: the local server ([docs/server.md](docs/server.md)) and a first usable UI ([docs/ui.md](docs/ui.md)) are built: profile tabs, windows, the chat with its history, and the composer. Try it with `npm install && npm start`.
 
 ## Layout
 
@@ -29,11 +29,15 @@ Status: the local server is built ([docs/server.md](docs/server.md)); the UI is 
 
 ## Build order
 
-1. pi-optchat: let a Pi process in RPC mode join a busy profile as a connected window. The app depends on this.
-2. The app: profile tabs, windows sidebar, chat, composer, Complete, agents panel.
-3. The clickable memory tree.
-4. The GitHub list, then tracking.
+1. ~~pi-optchat: let a Pi process in RPC mode join a busy profile as a connected window.~~ Done.
+2. ~~The local server: profiles and history from disk, one `pi --mode rpc` per window, one typed protocol.~~ Done.
+3. ~~The first usable UI, as a web page: profile tabs, windows sidebar, chat, composer, Complete.~~ Done.
+4. Setup: the app's settings, installing Pi and pi-optchat from the app, and a profile a terminal already has open.
+5. The agents panel.
+6. The clickable memory tree.
+7. The GitHub list, then tracking.
+8. The Electron shell around the same page.
 
 ## Open
 
-- Shell: Electron (the T3 Code way: web UI plus a small local server) or a plain local web page.
+- Whether a connected window's first message should wake the main agent for a whole turn.

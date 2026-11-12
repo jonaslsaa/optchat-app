@@ -1,0 +1,95 @@
+import { Type, type Static, type TSchema } from 'typebox';
+
+/** The protocol between the app's server and its UI: one WebSocket carrying JSON. The client sends requests and gets one response
+ * each; the server also pushes what happens in windows. Every type the UI needs is inferred from the schemas in this file, which
+ * imports nothing from Node. */
+
+const id = Type.Integer({ minimum: 0 });
+
+/** A message of a profile's log, as pi-optchat keeps it: `user` (your words), `talk` (the agent's replies), `tool` and `echo`
+ * (tool calls and results), `note`, `work` (subagent reports). One with an `origin` is imported history. */
+export const Message = Type.Object({
+  i: id, kind: Type.Enum(['user', 'talk', 'tool', 'echo', 'note', 'work']), date: Type.String(), text: Type.String(),
+  origin: Type.Optional(Type.Object({ source: Type.String(), conversation: Type.String(), message: Type.String(), title: Type.String(), project: Type.Optional(Type.String()) })),
+});
+export type Message = Static<typeof Message>;
+
+/** A line of the summary tree, in pi-optchat's own notation: the `n` messages from `id` on. No `text` means its summary is not
+ * built yet. */
+export const Line = Type.Object({ id, n: Type.Integer({ minimum: 1 }), text: Type.Optional(Type.String()) });
+export type Line = Static<typeof Line>;
+
+/** A record Pi wrote in RPC mode, passed through as it is: a session event (`agent_start`, `message_update`, `tool_execution_end`,
+ * ...) or an `extension_ui_request`. Pi's docs (rpc.md, json.md, rpc-extension-ui.md) define them; the server only reads `type`. */
+export const PiRecord = Type.Intersect([Type.Object({ type: Type.String() }), Type.Record(Type.String(), Type.Unknown())]);
+export type PiRecord = Static<typeof PiRecord>;
+
+/** A window is one Pi process on a profile. `stopped`: no process (not started yet, closed, or it exited: `error` says why if it
+ * failed). `idle` and `running`: whether the agent is in a run. `closed`: a connected window that is gone, pushed once as it leaves
+ * the list. `seq` is the number of the last record the window pushed. */
+export const Window = Type.Object({
+  id: Type.String(), profile: Type.String(), role: Type.Enum(['main', 'connected']), cwd: Type.String(),
+  status: Type.Enum(['stopped', 'starting', 'idle', 'running', 'closed']), seq: id, error: Type.Optional(Type.String()),
+});
+export type Window = Static<typeof Window>;
+
+const Image = Type.Object({ type: Type.Literal('image'), data: Type.String(), mimeType: Type.String() });
+const window = Type.Object({ window: Type.String() });
+const none = Type.Object({});
+const method = <P extends TSchema, R extends TSchema>(params: P, result: R) => ({ params, result });
+
+/** Every request: what it takes and what it answers. */
+export const methods = {
+  /** The profiles on disk. */
+  profiles: method(none, Type.Object({ profiles: Type.Array(Type.Object({ name: Type.String() })) })),
+  /** A page of a profile's log, read from disk: the `limit` messages before message `before` (the newest ones by default),
+   * oldest first. `total` is how many messages the log has. */
+  history: method(Type.Object({ profile: Type.String(), before: Type.Optional(id), limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 500 })) }),
+    Type.Object({ total: id, messages: Type.Array(Message) })),
+  /** The view: the lines the agent sees this turn, oldest first, tiling the whole log. */
+  view: method(Type.Object({ profile: Type.String() }), Type.Object({ total: id, lines: Type.Array(Line) })),
+  /** Opens line `id`+`n` into the two lines of `n`/2 under it (`n` at least 2; a single message is a `history` page of one). */
+  zoom: method(Type.Object({ profile: Type.String(), id, n: Type.Integer({ minimum: 2 }) }), Type.Object({ lines: Type.Array(Line) })),
+
+  /** Every window the server knows. */
+  windows: method(none, Type.Object({ windows: Type.Array(Window) })),
+  /** A profile's main window (the same one each time), or a new connected window. No Pi starts until its first prompt. */
+  open: method(Type.Object({ profile: Type.String(), role: Type.Optional(Type.Enum(['main', 'connected'])), cwd: Type.Optional(Type.String()) }), Type.Object({ window: Window })),
+  /** Sends your message, starting the window's Pi first if it has none. In a run it is queued: `steer` (the default) reaches the
+   * agent after its current tool calls, `followUp` once it has stopped. `disposition` is Pi's: `started`, `queued`, or `handled`
+   * (a command took it and no run started). */
+  prompt: method(Type.Object({ window: Type.String(), text: Type.String(), images: Type.Optional(Type.Array(Image)), whenBusy: Type.Optional(Type.Enum(['steer', 'followUp'])) }),
+    Type.Object({ disposition: Type.Enum(['started', 'queued', 'handled']) })),
+  /** Stops the run, as Esc does in the terminal: answers once the agent is idle, with the messages that were still queued
+   * (Pi's `clear_queue`), which would otherwise start the next run. */
+  abort: method(window, Type.Object({ steering: Type.Array(Type.String()), followUp: Type.Array(Type.String()) })),
+  /** Ends a connected window and hands its work to the main chat (pi-optchat's `/complete`). */
+  complete: method(window, none),
+  /** Stops the window's Pi, letting it shut down cleanly. A main window stays in the list and starts again on its next prompt;
+   * a connected window leaves it. */
+  close: method(window, none),
+  /** The records a window pushed after number `after` and still keeps: everything since its latest run began. `complete` is false
+   * when older ones than these were dropped, so `history` has to fill in before them. */
+  records: method(Type.Object({ window: Type.String(), after: Type.Optional(id) }), Type.Object({ records: Type.Array(Type.Object({ seq: id, record: PiRecord })), complete: Type.Boolean() })),
+  /** Any other Pi RPC command (`get_state`, `set_model`, `get_commands`, ...), answered with Pi's `data`. */
+  command: method(Type.Object({ window: Type.String(), command: PiRecord }), Type.Object({ data: Type.Optional(Type.Unknown()) })),
+  /** Answers a dialog Pi asked for in an `extension_ui_request` (select, confirm, input, editor): Pi's `extension_ui_response`
+   * fields, `id` and one of `value`, `confirmed` or `cancelled`. */
+  answer: method(Type.Object({ window: Type.String(), id: Type.String(), value: Type.Optional(Type.String()), confirmed: Type.Optional(Type.Boolean()), cancelled: Type.Optional(Type.Boolean()) }), none),
+};
+export type Method = keyof typeof methods;
+export type Params<M extends Method> = Static<(typeof methods)[M]['params']>;
+export type Result<M extends Method> = Static<(typeof methods)[M]['result']>;
+
+/** What the client sends: `id` is its own number for the request, repeated in the response. */
+export const Request = Type.Object({ id, method: Type.Enum(Object.keys(methods) as Method[]), params: Type.Unknown() });
+export type Request = { [M in Method]: { id: number; method: M; params: Params<M> } }[Method];
+export type Response<M extends Method = Method> = { id: number; result: Result<M> } | { id: number; error: string };
+
+/** What the server sends unasked, to every client: a window that changed, and each record a window's Pi writes. */
+export const Push = Type.Union([
+  Type.Object({ push: Type.Literal('window'), window: Window }),
+  Type.Object({ push: Type.Literal('record'), window: Type.String(), seq: id, record: PiRecord }),
+]);
+export type Push = Static<typeof Push>;
+export type ServerMessage = Response | Push;

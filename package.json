@@ -1,0 +1,26 @@
+{
+  "name": "optchat-app",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "A desktop app for pi-optchat: one chat per profile, with its memory, windows and agents visible.",
+  "engines": {
+    "node": ">=22.19.0"
+  },
+  "scripts": {
+    "server": "node src/server/main.ts",
+    "check": "tsc --noEmit",
+    "test": "node --test test/*.test.ts",
+    "test:live": "node --test test/live.ts"
+  },
+  "dependencies": {
+    "pi-optchat": "0.11.8",
+    "typebox": "1.3.27",
+    "ws": "^8.22.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.5",
+    "@types/ws": "^8.18.2",
+    "typescript": "^7.0.2"
+  }
+}

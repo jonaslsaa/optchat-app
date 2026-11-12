@@ -1,0 +1,31 @@
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+
+/** A throwaway OPTCHAT_HOME under /tmp (a short path: profile sockets have a length limit), removed when the test process exits.
+ * No test may touch the real ~/.optchat. */
+export function temporaryHome() {
+  const home = realpathSync(mkdtempSync('/tmp/optchat-app-test-'));
+  process.on('exit', () => rmSync(home, { recursive: true, force: true }));
+  return home;
+}
+/** A profile as pi-optchat creates one. Cheap models, so a live turn costs next to nothing. */
+export function createProfile(home: string, name: string) {
+  const directory = join(home, 'profiles', name);
+  mkdirSync(directory, { recursive: true });
+  const model = { provider: 'anthropic', model: 'claude-haiku-5-5', thinking: 'off' };
+  writeFileSync(join(directory, 'config.json'), JSON.stringify({ compactor: model, subagent: model }));
+  writeFileSync(join(directory, 'AGENTS.md'), `# ${name}\n\nA test profile. Answer in one short sentence.\n`);
+  return directory;
+}
+/** Fills a profile's memory with `count` messages and every summary node above them, as files. */
+export function writeMemory(directory: string, count: number, text = (i: number) => `message ${i}`) {
+  for (const sub of ['main', 'tree']) mkdirSync(join(directory, sub), { recursive: true });
+  const entries: string[] = [], nodes: string[] = [];
+  for (let i = 0; i < count; i++) entries.push(JSON.stringify({ i, kind: i % 2 ? 'talk' : 'user', date: new Date(Date.UTC(2026, 0, 1, 0, 0, i)).toISOString(), text: text(i) }));
+  for (let l = 0; count >> l > 0; l++) for (let i = 0; i < count >> l; i++) {
+    const summary = l ? `summary of ${i * 2 ** l}+${2 ** l}` : `${i % 2 ? 'talk' : 'user'}: ${text(i)}`;
+    nodes.push(JSON.stringify({ l, i, text: summary, size: Buffer.byteLength(summary) }));
+  }
+  writeFileSync(join(directory, 'main', '2026-01-01.jsonl'), entries.join('\n') + '\n');
+  writeFileSync(join(directory, 'tree', '2026-01-01.jsonl'), nodes.join('\n') + '\n');
+}

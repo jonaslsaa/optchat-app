@@ -46,7 +46,7 @@ test('a real Pi turn on a throwaway profile, end to end through the WebSocket', 
   assert.ok(records.some(r => r.type === 'extension_ui_request' && r.method === 'setStatus' && String(r.statusText).startsWith('OptChat: live')));
   assert.ok(records.some(r => r.type === 'message_update'));
   assert.ok(records.some(r => r.type === 'message_end' && /"role":"assistant".*pong/.test(JSON.stringify(r))));
-  assert.deepEqual(pushes.flatMap(push => push.push === 'window' ? [push.window.status] : []), ['stopped', 'starting', 'idle', 'running', 'idle']);
+  assert.deepEqual(pushes.flatMap(push => push.push === 'window' ? [push.window.status] : []).filter((status, k, all) => status !== all[k - 1]), ['stopped', 'starting', 'idle', 'running', 'idle']);
 
   // The turn is in the profile's memory, written by Pi and read by the app from disk.
   const { messages } = await client.request('history', { profile: 'live' });
@@ -79,17 +79,15 @@ test('a connected window reads the profile\'s memory, and Complete hands its con
   assert.match(JSON.stringify((await record(window.id, r => said(r, 'assistant'))).record), /marzipan/);
   await record(window.id, r => r.type === 'agent_settled');
   const [connected] = (await client.request('windows', {})).windows.filter(w => w.id === window.id);
-  assert.partialDeepStrictEqual(connected, { role: 'connected', status: 'idle' });
-  assert.match(connected.agent ?? '', /^[0-9a-f]{8}$/);
-  assert.partialDeepStrictEqual((await client.request('windows', {})).windows.find(w => w.id === main), { role: 'main' });
+  assert.partialDeepStrictEqual(connected, { role: 'connected', status: 'idle', owner: false });
+  assert.partialDeepStrictEqual((await client.request('windows', {})).windows.find(w => w.id === main), { role: 'main', owner: true });
 
   // Complete: the window writes its handoff, and the main chat gets it as that agent's report, in its memory.
   await client.request('complete', { window: window.id });
   assert.ok(pushes.some(push => push.push === 'window' && push.window.id === window.id && push.window.completed));
-  const handoff = `[${connected.agent}] Connected conversation completed by user.`;
-  const report = await record(main, r => said(r, 'custom') && JSON.stringify(r.message).includes(handoff));
+  const handoff = /\[[0-9a-f]{8}\] Connected conversation completed by user\./;
+  const report = await record(main, r => said(r, 'custom') && handoff.test(JSON.stringify(r.message)));
   await record(main, r => r.type === 'agent_settled', report.seq);
   const { messages } = await client.request('history', { profile: 'live' });
-  assert.ok(messages.some(m => m.kind === 'work' && m.text.startsWith(handoff)), 'the handoff is in the profile\'s log');
-  await assert.rejects(client.request('prompt', { window: window.id, text: 'still there?' }), /completed and handed off/);
+  assert.ok(messages.some(m => m.kind === 'work' && handoff.test(m.text)), 'the handoff is in the profile\'s log');
 });

@@ -29,6 +29,14 @@ export function memoryDirectory(profile: string) {
   return join(profile, name);
 }
 
+/** An image of the memory in `directory`, which a message names as `[image <name>]`. */
+export function readImage(directory: string, name: string) {
+  if (!/^[0-9a-f]{16}$/.test(name)) return undefined;
+  for (const [extension, mimeType] of Object.entries(EXTENSIONS)) {
+    const file = join(directory, 'images', `${name}.${extension}`);
+    if (existsSync(file)) return { mimeType, data: readFileSync(file) };
+  }
+}
 const logs = (directory: string) => existsSync(directory) ? readdirSync(directory).filter(name => name.endsWith('.jsonl')).sort() : [];
 /** Changes whenever the memory's files do: the log and tree only grow, and the view is replaced. */
 export function fingerprint(memory: string) {
@@ -69,11 +77,5 @@ export class ReadOnlyStore implements Store {
   appendNode(): undefined {}
   saveView(): undefined {}
   putImage(): undefined {}
-  image(name: string) {
-    if (!/^[0-9a-f]{16}$/.test(name)) return undefined;
-    for (const [extension, mimeType] of Object.entries(EXTENSIONS)) {
-      const file = join(this.directory, 'images', `${name}.${extension}`);
-      if (existsSync(file)) return { mimeType, data: readFileSync(file) };
-    }
-  }
+  image(name: string) { return readImage(this.directory, name); }
 }

@@ -9,7 +9,7 @@ import { startServer, type ServerOptions } from '../src/server/server.ts';
 import { createProfile, temporaryHome } from './support.ts';
 
 const home = temporaryHome();
-for (const name of ['work', 'busy', 'stuck', 'old']) createProfile(home, name);
+for (const name of ['work', 'busy', 'stuck', 'mute']) createProfile(home, name);
 const fake = { command: process.execPath, args: [join(import.meta.dirname, 'fake-pi.ts')] };
 
 /** A server over the fake Pi, and a client that remembers what it was pushed. */
@@ -29,7 +29,8 @@ async function client(t: TestContext, url: string) {
     waiting.add(check); check();
   });
   const types = () => pushes.flatMap(push => push.push === 'record' ? [push.record.type] : []);
-  const statuses = (id: string) => pushes.flatMap(push => push.push === 'window' && push.window.id === id ? [push.window.status] : []);
+  /** The statuses a window went through; a push that changed something else repeats none. */
+  const statuses = (id: string) => pushes.flatMap(push => push.push === 'window' && push.window.id === id ? [push.window.status] : []).filter((status, k, all) => status !== all[k - 1]);
   const record = (type: string, from = 0) => pushed((push): push is Extract<Push, { push: 'record' }> => push.push === 'record' && push.record.type === type && push.seq > from);
   const status = (status: WindowState['status']) => pushed((push): push is Extract<Push, { push: 'window' }> => push.push === 'window' && push.window.status === status);
   return { request: connection.request, pushes, types, statuses, record, status };
@@ -85,14 +86,48 @@ test('a client that connects in the middle of a run catches up from the records 
   assert.equal(next.records[0].seq, settled + 1);
 });
 
-test('records over the limit are dropped oldest first, and the client is told', async t => {
-  const { request, record } = await setup(t, { keep: 200 });
+test('what Pi shows stands for a client that connects late: a status from before the run, and a dialog until it is answered', async t => {
+  const { server, request, record } = await setup(t);
   const { window } = await request('open', { profile: 'work' });
-  await request('prompt', { window: window.id, text: 'hello' });
-  await record('agent_settled');
-  const kept = await request('records', { window: window.id });
-  assert.equal(kept.complete, false);
-  assert.deepEqual(kept.records.map(r => r.record.type).slice(-2), ['agent_end', 'agent_settled']);
+  await request('prompt', { window: window.id, text: 'ask me' });
+  await record('agent_start');
+
+  const late = await client(t, server.url), shown = async () => (await late.request('records', { window: window.id })).ui.map(r => r.method);
+  assert.equal((await late.request('records', { window: window.id })).records.some(r => r.record.method === 'setStatus'), false);
+  assert.deepEqual(await shown(), ['setStatus', 'confirm']);
+  await late.request('answer', { window: window.id, id: 'dialog-1', confirmed: true });
+  assert.match(JSON.stringify((await record('message_end', (await record('agent_start')).seq + 2)).record), /confirmed: true/);
+  assert.deepEqual(await shown(), ['setStatus']);
+});
+
+test('two prompts to a stopped window share one start', async t => {
+  const { request, types } = await setup(t);
+  const { window } = await request('open', { profile: 'work' });
+  const answers = await Promise.all(['wait for me', 'and then this'].map(text => request('prompt', { window: window.id, text })));
+  assert.deepEqual(answers.map(answer => answer.disposition), ['started', 'queued']);
+  assert.equal(types().filter(type => type === 'extension_ui_request').length, 1, 'one Pi said what it is to the profile');
+});
+
+test('a Pi that dies in a run leaves its window stopped with the reason, and the prompt it had not answered fails', async t => {
+  const { request } = await setup(t);
+  const { window } = await request('open', { profile: 'work' });
+  await request('prompt', { window: window.id, text: 'wait for me' });
+  await assert.rejects(request('prompt', { window: window.id, text: 'crash' }), /Pi exited \(code 3\)/);
+  const [stopped] = (await request('windows', {})).windows;
+  assert.partialDeepStrictEqual(stopped, { status: 'stopped' });
+  assert.match(stopped.error ?? '', /Pi exited \(code 3\)/);
+  assert.equal(stopped.owner, undefined);
+  assert.deepEqual(await request('prompt', { window: window.id, text: 'hello' }), { disposition: 'started' });
+});
+
+test('a Pi that never answers its start can still be closed', async t => {
+  const { request, status } = await setup(t);
+  const { window } = await request('open', { profile: 'mute' });
+  const prompt = assert.rejects(request('prompt', { window: window.id, text: 'hello' }), /Pi exited/);
+  await status('starting');
+  await request('close', { window: window.id });
+  await prompt;
+  assert.equal((await request('windows', {})).windows[0].status, 'stopped');
 });
 
 test('a Pi that could not open the profile is stopped, and the prompt fails with its reason', async t => {
@@ -114,62 +149,66 @@ test('a message sent during a run is queued, and abort hands back what was still
 });
 
 test('a connected window starts the profile\'s owner first, joins it, and Complete hands it off', async t => {
-  const { request, status, pushes } = await setup(t);
+  const { request, status } = await setup(t);
   const { window } = await request('open', { profile: 'work', role: 'connected' });
-  assert.deepEqual((await request('windows', {})).windows.map(w => [w.id, w.role, w.status]), [['work/1', 'connected', 'stopped']]);
+  const windows = async () => (await request('windows', {})).windows.map(({ id, role, status, owner, completed }) => ({ id, role, status, owner, completed }));
+  assert.deepEqual(await windows(), [{ id: 'work/1', role: 'connected', status: 'stopped', owner: undefined, completed: undefined }]);
   await request('prompt', { window: window.id, text: 'hello' });
   const state = async (id: string) => (await request('command', { window: id, command: { type: 'get_state' } })).data;
   assert.partialDeepStrictEqual(await state('work/main'), { args: ['--optchat-profile', 'work', '--mode', 'rpc'] });
   assert.partialDeepStrictEqual(await state(window.id), { args: ['--optchat-profile', 'work', '--optchat-connect', 'join', '--mode', 'rpc'] });
-  assert.deepEqual((await request('windows', {})).windows.map(w => [w.id, w.role, w.status]), [['work/1', 'connected', 'idle'], ['work/main', 'main', 'idle']]);
+  assert.partialDeepStrictEqual(await windows(), [{ id: 'work/1', role: 'connected', status: 'idle', owner: false }, { id: 'work/main', role: 'main', status: 'idle', owner: true }]);
 
-  await assert.rejects(request('complete', { window: 'work/main' }), /nothing to hand off/);
+  await assert.rejects(request('complete', { window: 'work/main' }), /none to hand off/);
   await request('complete', { window: window.id });
-  assert.partialDeepStrictEqual((await request('windows', {})).windows[0], { id: window.id, agent: 'w1', completed: true });
-  await assert.rejects(request('prompt', { window: window.id, text: 'one more thing' }), /completed and handed off/);
+  assert.partialDeepStrictEqual((await windows())[0], { id: window.id, owner: false, completed: true });
   await request('close', { window: window.id });
   assert.equal((await status('closed')).window.id, window.id);
-  assert.deepEqual((await request('windows', {})).windows.map(w => w.id), ['work/main']);
-  assert.ok(pushes.some(push => push.push === 'window' && push.window.id === window.id && push.window.completed));
+  assert.deepEqual((await windows()).map(w => w.id), ['work/main']);
 });
 
-test('a main window is a connected one while another Pi owns the profile, and an old pi-optchat that cannot join says so', async t => {
-  // The fake Pi with --optchat-connect is what pi-optchat's default does on a taken profile: it joins.
+test('a main window says so when its Pi does not own the profile, and stays the main window', async t => {
+  // The fake Pi with --optchat-connect is what pi-optchat's default does on a profile a Pi outside the app holds: it joins.
   const { request } = await setup(t, { pi: { command: fake.command, args: [...fake.args, '--optchat-connect', 'auto'] } });
   await request('prompt', { window: (await request('open', { profile: 'work' })).window.id, text: 'hello' });
-  assert.partialDeepStrictEqual((await request('windows', {})).windows, [{ id: 'work/main', role: 'connected' }]);
-
-  const old = await setup(t);
-  const { window } = await old.request('open', { profile: 'old', role: 'connected' });
-  await assert.rejects(old.request('prompt', { window: window.id, text: 'hello' }), /cannot run a connected window yet.*after 0\.11\.8.*Profile already running: old/);
-  assert.partialDeepStrictEqual((await old.request('windows', {})).windows.map(w => [w.id, w.status]), [['old/1', 'stopped'], ['old/main', 'idle']]);
+  assert.partialDeepStrictEqual((await request('windows', {})).windows, [{ id: 'work/main', role: 'main', owner: false }]);
 });
 
-test('closing the server lets each Pi shut down in order, and kills one that does not', async t => {
+test('closing the server takes no more requests, stops connected windows before their owner, and kills a Pi that will not stop', async t => {
   const { server, cwd, request } = await setup(t, { grace: 300 });
   const pids: number[] = [];
-  for (const profile of ['work', 'stuck']) {
-    const { window } = await request('open', { profile });
+  for (const params of [{ profile: 'work', role: 'connected' }, { profile: 'stuck' }] as const) {
+    const { window } = await request('open', params);
     await request('prompt', { window: window.id, text: 'wait for me' });
     const { data } = await request('command', { window: window.id, command: { type: 'get_state' } });
     assert(typeof data === 'object' && data !== null && 'pid' in data && typeof data.pid === 'number');
     pids.push(data.pid);
   }
-  await server.close();
-  assert.equal(readFileSync(join(cwd, 'stopped-in-order'), 'utf8'), 'work');
+  const closed = server.close();
+  await assert.rejects(request('open', { profile: 'work' }), /server is closing/);
+  await closed;
+  assert.equal(readFileSync(join(cwd, 'stopped-in-order'), 'utf8'), 'work window\nwork owner\n');
   for (const pid of pids) assert.throws(() => process.kill(pid, 0), { code: 'ESRCH' });
   await assert.rejects(request('windows', {}), /connection to the server closed/);
 });
 
-test('a page from another site cannot connect, and a malformed request is refused', async t => {
-  const { server, request } = await setup(t);
-  const opened = (origin: string) => new Promise<boolean>(resolve => {
-    const socket = new WebSocket(server.url, { origin });
+test('only this machine\'s pages connect, and a request the server cannot serve is answered with why', async t => {
+  const { server, request } = await setup(t, { origins: ['optchat://app'] });
+  const opened = (origin: string, host?: string) => new Promise<boolean>(resolve => {
+    const socket = new WebSocket(server.url, { origin, headers: host ? { host } : {} });
     socket.on('open', () => { socket.close(); resolve(true); }).on('error', () => resolve(false));
   });
-  assert.equal(await opened('https://example.com'), false);
-  assert.equal(await opened('http://localhost:5173'), true);
+  assert.deepEqual(await Promise.all([opened('https://example.com'), opened('http://localhost:5173'), opened('optchat://app'), opened('http://localhost:5173', 'rebound.example')]), [false, true, true, false]);
+
   // @ts-expect-error: the compiler refuses it too.
   await assert.rejects(request('history', { profile: 'work', limit: 'all' }), /Invalid history request/);
   await assert.rejects(request('open', { profile: '../etc' }), /No profile named/);
+  const { window } = await request('open', { profile: 'work' });
+  await request('prompt', { window: window.id, text: 'hello' });
+  await assert.rejects(request('command', { window: window.id, command: { type: 'extension_ui_response', id: 'dialog-1' } }), /Send it with `answer`/);
+  const socket = new WebSocket(server.url);
+  t.after(() => socket.close());
+  const answer = new Promise(resolve => socket.on('message', data => resolve(JSON.parse(String(data)))));
+  socket.on('open', () => socket.send(JSON.stringify({ id: 7, method: 'teleport', params: {} })));
+  assert.deepEqual(await answer, { id: 7, error: 'Unknown method: teleport.' });
 });

@@ -1,6 +1,6 @@
 import { Memory, type Part } from 'pi-optchat/core';
 import type { Line, Params, Result } from '../protocol.ts';
-import { fingerprint, listProfiles, memoryDirectory, profileDirectory, ReadOnlyStore } from './disk.ts';
+import { fingerprint, listProfiles, memoryDirectory, profileDirectory, readImage, ReadOnlyStore } from './disk.ts';
 
 const PAGE = 50;
 /** A profile's memory as it is on disk now, in pi-optchat's own `Memory` over a store that never writes. It is closed before
@@ -31,8 +31,7 @@ export class Profiles {
   }
   history({ profile, before, limit = PAGE }: Params<'history'>): Result<'history'> {
     const memory = this.memory(profile), total = memory.root.length, end = Math.min(before ?? total, total);
-    const messages = memory.root.slice(Math.max(0, end - limit), end).map(({ i, kind, date, origin }) => ({ i, kind, date, text: memory.text(i), ...origin && { origin } }));
-    return { total, messages };
+    return { total, messages: memory.root.slice(Math.max(0, end - limit), end).map(message => ({ ...message, text: memory.text(message.i) })) };
   }
   view({ profile }: Params<'view'>): Result<'view'> {
     const memory = this.memory(profile);
@@ -44,6 +43,6 @@ export class Profiles {
     const l = Math.log2(n) - 1, i = 2 * id / n;
     return { lines: [{ l, i }, { l, i: i + 1 }].map(part => line(memory, part)) };
   }
-  /** An image a message names as `[image <name>]`. */
-  image(profile: string, name: string) { return this.memory(profile).store.image(name); }
+  /** An image a message names as `[image <name>]`, straight from its file. */
+  image(profile: string, name: string) { return readImage(memoryDirectory(profileDirectory(this.home, profile)), name); }
 }

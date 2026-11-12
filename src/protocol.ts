@@ -1,3 +1,4 @@
+import type { Entry } from 'pi-optchat/core';
 import { Type, type Static, type TSchema } from 'typebox';
 
 /** The protocol between the app's server and its UI: one WebSocket carrying JSON. The client sends requests and gets one response
@@ -6,13 +7,10 @@ import { Type, type Static, type TSchema } from 'typebox';
 
 const id = Type.Integer({ minimum: 0 });
 
-/** A message of a profile's log, as pi-optchat keeps it: `user` (your words), `talk` (the agent's replies), `tool` and `echo`
- * (tool calls and results), `note`, `work` (subagent reports). One with an `origin` is imported history. */
-export const Message = Type.Object({
-  i: id, kind: Type.Enum(['user', 'talk', 'tool', 'echo', 'note', 'work']), date: Type.String(), text: Type.String(),
-  origin: Type.Optional(Type.Object({ source: Type.String(), conversation: Type.String(), message: Type.String(), title: Type.String(), project: Type.Optional(Type.String()) })),
-});
-export type Message = Static<typeof Message>;
+/** A message of a profile's log, as pi-optchat keeps it (its `Entry`): `user` (your words), `talk` (the agent's replies), `tool`
+ * and `echo` (tool calls and results), `note`, `work` (subagent reports). One with an `origin` is imported history. */
+export const Message = Type.Unsafe<Entry>({});
+export type Message = Entry;
 
 /** A line of the summary tree, in pi-optchat's own notation: the `n` messages from `id` on. No `text` means its summary is not
  * built yet. */
@@ -24,17 +22,18 @@ export type Line = Static<typeof Line>;
 export const PiRecord = Type.Intersect([Type.Object({ type: Type.String() }), Type.Record(Type.String(), Type.Unknown())]);
 export type PiRecord = Static<typeof PiRecord>;
 
-/** A window is one Pi process on a profile. `role` is what pi-optchat says that Pi is: the profile's owner, which is the `main`
- * chat, or a `connected` window beside it, with its own conversation that ends in a handoff (`completed`, after which it takes no
- * more prompts). `agent` is the ID the main chat knows a connected window by, as in its reports. A main window is connected too
- * while another Pi, such as one in a terminal, owns the profile.
+/** A window is a conversation in the app, and one Pi process when it runs. `role` is its place in the app and never changes: the
+ * profile's `main` chat, or a `connected` window beside it, whose conversation ends in a handoff to the main chat.
+ * `owner` and `completed` are what pi-optchat says of the running Pi: whether it owns the profile (a connected window never
+ * does; a main window does unless a Pi outside the app got there first), and whether the conversation is handed off. A
+ * completed window's next prompt begins a new conversation in it.
  * `stopped`: no process (not started yet, closed, or it exited: `error` says why if it failed). `idle` and `running`: whether the
  * agent is in a run. `closed`: a connected window that is gone, pushed once as it leaves the list. `seq` is the number of the last
- * record the window pushed. */
+ * record the window pushed. `cwd` is where its Pi runs, set when the window is first opened. */
 export const WindowState = Type.Object({
   id: Type.String(), profile: Type.String(), role: Type.Enum(['main', 'connected']), cwd: Type.String(),
   status: Type.Enum(['stopped', 'starting', 'idle', 'running', 'closed']), seq: id,
-  agent: Type.Optional(Type.String()), completed: Type.Optional(Type.Boolean()), error: Type.Optional(Type.String()),
+  owner: Type.Optional(Type.Boolean()), completed: Type.Optional(Type.Boolean()), error: Type.Optional(Type.String()),
 });
 export type WindowState = Static<typeof WindowState>;
 
@@ -75,10 +74,14 @@ export const methods = {
   /** Stops the window's Pi, letting it shut down cleanly. A main window stays in the list and starts again on its next prompt;
    * a connected window leaves it. */
   close: method(target, none),
-  /** The records a window pushed after number `after` and still keeps: everything since its latest run began. `complete` is false
-   * when older ones than these were dropped, so `history` has to fill in before them. */
-  records: method(Type.Object({ window: Type.String(), after: Type.Optional(id) }), Type.Object({ records: Type.Array(Type.Object({ seq: id, record: PiRecord })), complete: Type.Boolean() })),
-  /** Any other Pi RPC command (`get_state`, `set_model`, `get_commands`, ...), answered with Pi's `data`. */
+  /** For a client that connects late. `records`: what the window pushed after number `after` and still keeps, which is
+   * everything since its latest run began. `complete` is false when there were more before these: a main window's are in
+   * `history` by now, a connected window's only in its Pi (`command` with Pi's `get_messages`). `ui`: what Pi's extensions
+   * show now, as the `extension_ui_request` records that said so: the latest status, widget and title, and the dialogs still
+   * waiting for an `answer`. */
+  records: method(Type.Object({ window: Type.String(), after: Type.Optional(id) }),
+    Type.Object({ records: Type.Array(Type.Object({ seq: id, record: PiRecord })), complete: Type.Boolean(), ui: Type.Array(PiRecord) })),
+  /** Any other Pi RPC command (`get_state`, `set_model`, `get_messages`, ...), answered with Pi's `data`. */
   command: method(Type.Object({ window: Type.String(), command: PiRecord }), Type.Object({ data: Type.Optional(Type.Unknown()) })),
   /** Answers a dialog Pi asked for in an `extension_ui_request` (select, confirm, input, editor): Pi's `extension_ui_response`
    * fields, `id` and one of `value`, `confirmed` or `cancelled`. */
@@ -89,8 +92,7 @@ export type Params<M extends Method> = Static<(typeof methods)[M]['params']>;
 export type Result<M extends Method> = Static<(typeof methods)[M]['result']>;
 
 /** What the client sends: `id` is its own number for the request, repeated in the response. */
-export const Request = Type.Object({ id, method: Type.Enum(Object.keys(methods) as Method[]), params: Type.Unknown() });
-export type Request = { [M in Method]: { id: number; method: M; params: Params<M> } }[Method];
+export const Envelope = Type.Object({ id, method: Type.String(), params: Type.Unknown() });
 export type Response<M extends Method = Method> = { id: number; result: Result<M> } | { id: number; error: string };
 
 /** What the server sends unasked, to every client: a window that changed, and each record a window's Pi writes. */

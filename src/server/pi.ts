@@ -1,21 +1,22 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import { StringDecoder } from 'node:string_decoder';
-import type { PiRecord } from '../protocol.ts';
+import { Value } from 'typebox/value';
+import { PiRecord } from '../protocol.ts';
 
 export interface PiOptions { command: string; args: readonly string[]; cwd: string; env: NodeJS.ProcessEnv }
-const isRecord = (value: unknown): value is PiRecord => typeof value === 'object' && value !== null && 'type' in value && typeof value.type === 'string';
+export const reason = (error: unknown) => error instanceof Error ? error.message : String(error);
 /** How much of Pi's stderr is kept to explain an exit. */
 const STDERR = 4000;
 
-/** One `pi --mode rpc` process (Pi's docs: rpc.md), `args` going before `--mode`. Commands go in as JSON lines and are matched to their responses by id; every
- * other record Pi writes goes to `onRecord`, with its size as written. `onExit` gets why Pi exited when it failed. */
+/** One `pi --mode rpc` process (Pi's docs: rpc.md), `args` going before `--mode`. Commands go in as JSON lines and are matched
+ * to their responses by id; every other record Pi writes goes to `onRecord`. `onExit` gets why Pi exited when it failed. */
 export class Pi {
   private readonly child: ChildProcess;
   private readonly pending = new Map<string, { resolve: (data: unknown) => void; reject: (error: Error) => void }>();
   private requests = 0;
   private stderr = '';
   private readonly exited: Promise<void>;
-  constructor({ command, args, cwd, env }: PiOptions, onRecord: (record: PiRecord, bytes: number) => void, onExit: (error?: string) => void) {
+  constructor({ command, args, cwd, env }: PiOptions, onRecord: (record: PiRecord) => void, onExit: (error?: string) => void) {
     // Its own process group, as T3 Code does: a Ctrl+C in the server's terminal then reaches only the server, which stops Pi in
     // order, and a kill takes the tools Pi started with it.
     const child = this.child = spawn(command, [...args, '--mode', 'rpc'], { cwd, env, stdio: ['pipe', 'pipe', 'pipe'], detached: process.platform !== 'win32' });
@@ -25,12 +26,11 @@ export class Pi {
     child.stdout?.on('data', (chunk: Buffer) => {
       buffer += decoder.write(chunk);
       for (let end: number; (end = buffer.indexOf('\n')) >= 0; buffer = buffer.slice(end + 1)) {
-        const line = buffer.slice(0, end);
         let record: unknown;
-        try { record = JSON.parse(line); } catch { continue; }
-        if (!isRecord(record)) continue;
+        try { record = JSON.parse(buffer.slice(0, end)); } catch { continue; }
+        if (!Value.Check(PiRecord, record)) continue;
         const waiting = record.type === 'response' && typeof record.id === 'string' ? this.pending.get(record.id) : undefined;
-        if (!waiting) { onRecord(record, line.length); continue; }
+        if (!waiting) { onRecord(record); continue; }
         this.pending.delete(String(record.id));
         if (record.success === true) waiting.resolve(record.data);
         else waiting.reject(new Error(typeof record.error === 'string' ? record.error : 'Pi refused the command.'));

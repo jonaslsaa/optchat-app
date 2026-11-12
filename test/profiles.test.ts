@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { appendFileSync, mkdirSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { get } from 'node:http';
 import { test } from 'node:test';
 import { Profiles } from '../src/server/profiles.ts';
 import { startServer } from '../src/server/server.ts';
@@ -82,4 +83,7 @@ test('a profile\'s images are served over HTTP', async t => {
   const image = await fetch(`http://127.0.0.1:${server.port}/images/pictures/0123456789abcdef`);
   assert.deepEqual([image.status, image.headers.get('content-type'), Buffer.from(await image.arrayBuffer())], [200, 'image/png', png]);
   assert.equal((await fetch(`http://127.0.0.1:${server.port}/images/pictures/fedcba9876543210`)).status, 404);
+  // A page whose own name points at this machine is refused by that name.
+  const status = await new Promise(resolve => get({ port: server.port, path: '/images/pictures/0123456789abcdef', headers: { host: 'rebound.example' } }, response => resolve(response.statusCode)));
+  assert.equal(status, 404);
 });

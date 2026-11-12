@@ -205,6 +205,7 @@ test('Complete\'s handoff is a part of its own under the conversation, and not t
   for (const session of [conversation, [...conversation, asks], [...conversation, asks, handoff]]) assert.deepEqual(kinds(chat(spoken(session), done)), whole);
   // A handoff that did not end on its text is none: the main chat writes it then.
   assert.deepEqual(kinds(spoken([...conversation, asks, reply(10, text('Let me check first.'), bash('c2', 'ls')), result(11, 'a.ts'), { ...reply(12), stopReason: 'error' }])).at(-1), ['handoff', '']);
+  assert.deepEqual(kinds(spoken([...conversation, asks, reply(10, bash('c2', 'ls'), text('Checking first.'))])).at(-1), ['handoff', '']);
   // Your next message is a conversation again.
   assert.deepEqual(kinds(spoken([...conversation, asks, handoff, user(20, 'and the host?'), reply(21, text('localhost'))])), [...whole, answered, ['reply', 'localhost']]);
 

@@ -233,8 +233,8 @@ const IMAGE = /\[image ([0-9a-f]{16})\]/g;
 function part(items: readonly Item[]): Part {
   const [first] = items, last = items.at(-1)!, common = { key: first.key, items };
   if (first.handoff) {
-    // The handoff is the text of the agent's last message, if it ended on that, as pi-optchat reads it (its `handoffText`).
-    const written = last.kind === 'talk' && !last.streaming;
+    // The handoff is the text of the agent's last message, if that was text and no tool call, as pi-optchat reads it (its `handoffText`).
+    const written = last.kind === 'talk' && !last.streaming && !items.some(item => item.kind === 'tool' && item.date === last.date);
     return { ...common, type: 'handoff', date: last.date, body: written ? items.filter(item => item.kind === 'talk' && item.date === last.date).map(item => item.text).join('\n\n') : '' };
   }
   if (first.kind === 'user') return { ...common, type: 'user', date: first.date, text: first.text.replace(IMAGE, '').trim(), images: [...first.text.matchAll(IMAGE)].map(match => match[1]) };

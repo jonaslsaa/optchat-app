@@ -7,7 +7,7 @@ import { test, type TestContext } from 'node:test';
 import type { Push, WindowState } from '../src/protocol.ts';
 import { startServer } from '../src/server/server.ts';
 import { transcript } from '../src/ui/agents.ts';
-import { building, polled } from '../src/ui/memory.ts';
+import { building, listed, path, polled } from '../src/ui/memory.ts';
 import { App, type State } from '../src/ui/store.ts';
 // pi-optchat's own lock, which only Pi takes: here it stands for a Pi in a terminal.
 import { describeOwner, lockProfile } from '../node_modules/pi-optchat/dist/profiles.js';
@@ -276,6 +276,58 @@ test('the memory view opens line by line down to a message, and what is open sta
   writeFileSync(join(directory, 'active-memory.json'), JSON.stringify(imported));
   await app.readMemory('deep');
   assert.deepEqual([memory().view?.total, memory().open, memory().under, memory().originals], [12, [], {}, {}]);
+});
+
+test('what a search found stands in the tree\'s place, and a message of it opens in the tree, down to where it is', async t => {
+  const home = temporaryHome(), directory = createProfile(home, 'sought'), log = join(directory, 'main', '2026-01-01.jsonl');
+  // Sixty-four messages the agent reads as two lines of thirty-two: one deep in the second says the word, and every other one "reply".
+  writeMemory(directory, 64, i => i === 37 ? 'The needle is here.' : i % 2 ? `reply ${i}` : `message ${i}`);
+  writeFileSync(join(directory, 'view.json'), JSON.stringify({ parts: [[5, 0], [5, 1]], merging: false }));
+  const server = await startServer({ home, app: mkdtempSync(join(home, 'app-')), cwd: home, pi });
+  t.after(() => server.close());
+  const { app } = page(t);
+  await app.start(server.url);
+  const memory = () => app.state.memory.sought;
+  // The search is typed before the view has been read: its answer, which comes after the view, is kept.
+  await Promise.all([app.readMemory('sought'), app.search('sought', 'NEEDLE')]);
+  await app.toggleLine('sought', memory().view!.lines[0]);
+  assert.deepEqual(memory().search, { text: 'NEEDLE', answer: { of: 'NEEDLE', hits: [{ id: 37, kind: 'talk', date: '2026-01-01T00:00:37.000Z', lead: 'The ', match: 'needle', rest: ' is here.' }], more: 0 } });
+  assert.deepEqual([listed(memory()), memory().open], [true, ['0+32']]);
+  // Opened, it is in the tree: each line from the view's down to its own is open, with what is under it read.
+  const down = ['32+32', '32+16', '32+8', '36+4', '36+2', '37+1'];
+  assert.deepEqual(path(memory().view!.lines, 37).map(line => `${line.id}+${line.n}`), down);
+  await app.find('sought', 37);
+  assert.deepEqual([listed(memory()), memory().found, memory().open], [false, 37, ['0+32', ...down]]);
+  assert.deepEqual(Object.keys(memory().under).sort(), ['0+32', ...down.slice(0, -1)].sort());
+  assert.deepEqual(memory().originals[37].map(message => message.text), ['The needle is here.']);
+  // Back at what was found, and then with the search ended while a message of it was still being opened: the tree is there,
+  // as it was left, and nothing in it is marked.
+  await app.find('sought');
+  assert.deepEqual([listed(memory()), memory().found], [true, undefined]);
+  const opening = app.find('sought', 37);
+  await app.search('sought', '');
+  await opening;
+  assert.deepEqual([memory().search, memory().found, memory().open], [undefined, undefined, ['0+32', ...down]]);
+
+  // The older ones are asked for after those that are here, and asked for twice they are still added once.
+  const answer = () => memory().search?.answer;
+  await app.search('sought', 'reply');
+  assert.deepEqual([answer()?.hits.length, answer()?.hits.at(-1)?.id, answer()?.more], [20, 23, 11]);
+  await Promise.all([app.moreFound('sought'), app.moreFound('sought')]);
+  assert.deepEqual([answer()?.hits.map(hit => hit.id), answer()?.more], [Array.from({ length: 32 }, (_, k) => 63 - 2 * k).filter(id => id !== 37), 0]);
+  // While the answer for other text is on its way the one before stands, and its older ones are not asked for under the new text.
+  const typed = app.search('sought', 'message');
+  await app.moreFound('sought');
+  assert.deepEqual([memory().search?.text, answer()?.of, answer()?.hits.length], ['message', 'reply', 31]);
+  await typed;
+  assert.deepEqual([answer()?.of, answer()?.hits[0].id, answer()?.more], ['message', 62, 12]);
+
+  // The log has grown since the view was read. The search finds the new message, and opening it reads the view again.
+  appendFileSync(log, `${JSON.stringify({ i: 64, kind: 'user', date: '2026-01-01T00:01:04.000Z', text: 'Another needle.' })}\n`);
+  await app.search('sought', 'needle');
+  assert.deepEqual(answer()?.hits.map(hit => hit.id), [64, 37]);
+  await app.find('sought', 64);
+  assert.deepEqual([memory().view?.total, memory().found, memory().open.at(-1), memory().originals[64]?.[0].text], [65, 64, '64+1', 'Another needle.']);
 });
 
 test('the memory view is looked at again by the clock while the chat says too little: its Pi runs, or a Pi outside the app has it', async t => {

@@ -42,7 +42,7 @@ Open the dmg and drag OptChat to Applications. Downloaded this way it opens like
 3. ~~The first usable UI, as a web page: profile tabs, windows sidebar, chat, composer, Complete.~~ Done.
 4. ~~Setup: the app's settings, installing Pi and pi-optchat from the app, and a profile a terminal already has open.~~ Done ([docs/setup.md](docs/setup.md)). Logging in to a model from the app is there too (macOS), and so are a profile's own settings: everything pi-optchat's settings page has in a terminal ([docs/ui.md](docs/ui.md#a-profiles-settings)). The model a chat and its subagents run on is picked in the composer ([docs/ui.md](docs/ui.md#model)).
 5. ~~The agents panel: the main chat's agents, live, each one's chat to read, and telling, interrupting, stopping and resuming one from there.~~ Done ([docs/ui.md](docs/ui.md#agents)). An agent's words as it writes them are next.
-6. The clickable memory tree. Its first part is done: the main chat as the agent reads it, every line opening down to its messages ([docs/ui.md](docs/ui.md#memory-view)). Searching it and changing it are next.
+6. The clickable memory tree. Reading it is done: the main chat as the agent reads it, every line opening down to its messages, and a search that finds a message and opens the tree at it ([docs/ui.md](docs/ui.md#memory-view)). Changing it is next.
 7. The GitHub list. Its first part is done: the issues and pull requests the main chat named by link, with how they stand ([docs/ui.md](docs/ui.md#github)). Tracking them is next.
 8. ~~The Electron shell around the same page.~~ Done for macOS ([docs/desktop.md](docs/desktop.md)): `npm run dist` builds the app and a dmg.
 

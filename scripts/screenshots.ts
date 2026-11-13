@@ -249,6 +249,29 @@ async function pictures(browser: Browser, control: Client) {
   await slim.keyboard.press('Alt+m');
   await slim.locator('[data-line]').first().waitFor();
   await shot(slim, '32-memory-narrow');
+  // Its search: the messages that say a word, newest first; the oldest of them opened in the tree, where it is; and a word
+  // nothing says.
+  const sought = memory.getByRole('searchbox', { name: 'Search the memory' }), found = memory.getByRole('region', { name: 'Messages found' });
+  await sought.fill('grace');
+  await memory.getByRole('button', { name: /Show older ones/ }).waitFor();
+  await shot(memory, '60-memory-search');
+  await memory.getByRole('button', { name: /Show older ones/ }).click();
+  await memory.getByRole('button', { name: /Show older ones/ }).waitFor({ state: 'detached' });
+  await found.locator('[data-line]').last().click();
+  await memory.locator('[data-found]').waitFor();
+  await shot(memory, '61-memory-found');
+  await sought.fill('gracefully');
+  await memory.getByText('No message contains').waitFor();
+  await shot(memory, '62-memory-search-none');
+  await dim.getByRole('searchbox', { name: 'Search the memory' }).fill('grace');
+  await dim.getByRole('button', { name: /Show older ones/ }).waitFor();
+  await shot(dim, '63-memory-search-dark');
+  await dim.getByRole('region', { name: 'Messages found' }).locator('[data-line]').nth(1).click();
+  await dim.locator('[data-found]').waitFor();
+  await shot(dim, '65-memory-found-dark');
+  await slim.getByRole('searchbox', { name: 'Search the memory' }).fill('grace');
+  await slim.getByRole('button', { name: /Show older ones/ }).waitFor();
+  await shot(slim, '64-memory-search-narrow');
 
   // The main chat's agents and what it named on GitHub, in one panel. The GitHub CLI is not signed in at first: the list is
   // there, and says so.
@@ -377,4 +400,18 @@ async function pictures(browser: Browser, control: Client) {
   await pick.getByRole('dialog', { name: 'Model' }).waitFor({ state: 'detached' });
   await pick.waitForTimeout(300);
   if (!await pick.getByRole('button', { name: 'Stop the agent' }).isVisible()) throw new Error('Esc in the model list stopped the run.');
+  // Nor is this: Esc in the memory view's search box ends the search and the run goes on, with nothing in the box too. Ending
+  // a search leaves the keys there, and the Esc after it once went to the shortcut that stops the agent.
+  const ended = pick.getByRole('region', { name: 'Messages found' });
+  await pick.keyboard.press('Alt+m');
+  await pick.locator('[data-line]').first().waitFor();
+  await pick.keyboard.press('ControlOrMeta+f');
+  await pick.keyboard.press('Escape');
+  await pick.keyboard.type('wait');
+  await ended.waitFor();
+  await pick.keyboard.press('Escape');
+  await ended.waitFor({ state: 'detached' });
+  await pick.keyboard.press('Escape');
+  await pick.waitForTimeout(300);
+  if (!await pick.getByRole('button', { name: 'Stop the agent' }).isVisible()) throw new Error('Esc in the memory view\'s search box stopped the run.');
 }

@@ -69,6 +69,8 @@ test('a real Pi turn on a throwaway profile, end to end through the WebSocket', 
   assert.deepEqual(view.lines, messages.map(({ i, kind, text, date }) => ({ id: i, n: 1, text: `${kind}: ${text}`, from: date, to: date })));
   assert.ok(view.total === 2 && view.size > 0 && view.size < view.budget);
   assert.deepEqual((await client.request('original', { profile: 'live', id: 1 })).messages, [messages[1]]);
+  // And a search of it, which finds what was said in any case, newest first.
+  assert.deepEqual((await client.request('search', { profile: 'live', text: 'PONG' })).hits.map(hit => [hit.id, hit.match]), [[1, 'pong'], [0, 'pong']]);
 
   // The model the chat runs on is Pi's word, and so is the list it is picked from. A pick goes to Pi, which takes the nearest
   // level the model has, and pi-optchat keeps it in the profile; Pi's own settings are no business of it.

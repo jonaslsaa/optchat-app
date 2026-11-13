@@ -2,7 +2,7 @@ import { useSyncExternalStore } from 'react';
 import { connect, type Client } from '../client.ts';
 import type { Config, Line, Message, Method, ModelChoice, Params, Push, Result, Settings, Setup, WindowState } from '../protocol.ts';
 import { current } from '../window.ts';
-import { calling, key, NO_TREE, read, toggled, type Tree } from './memory.ts';
+import { calling, key, NO_TREE, path, read, toggled, type Tree } from './memory.ts';
 import { apply, idle, isMessage, isObject, merged, replay, stopped, without, words, type Live, type PiMessage } from './transcript.ts';
 
 /** Everything the page knows, kept outside React: the connection to the server, and what it said. Components read it with
@@ -357,15 +357,47 @@ export class App {
     const of = this.memoryOf(profile), original = await this.ask('original', { profile, id });
     if (original && of === this.memoryOf(profile)) this.tree(profile, tree => ({ ...tree, originals: { ...tree.originals, [id]: original.messages } }));
   }
-  /** Opens a line of the memory view into the two lines under it, or a line of one message into that message; or closes it.
-   * What is under a line is read once: it is the same for as long as the memory is. */
-  async toggleLine(profile: string, line: Line) {
-    const before = this.state.memory[profile] ?? NO_TREE;
-    this.tree(profile, tree => toggled(tree, line));
-    if (read(before, line)) return;
+  /** What is under a line, read once: it is the same for as long as the memory is. */
+  private async under(profile: string, line: Pick<Line, 'id' | 'n'>) {
+    if (read(this.state.memory[profile] ?? NO_TREE, line)) return;
     if (line.n === 1) return this.original(profile, line.id);
     const of = this.memoryOf(profile), halves = await this.ask('zoom', { profile, id: line.id, n: line.n });
     if (halves && of === this.memoryOf(profile)) this.tree(profile, tree => ({ ...tree, under: { ...tree.under, [key(line)]: halves.lines } }));
+  }
+  /** Opens a line of the memory view into the two lines under it, or a line of one message into that message; or closes it. */
+  async toggleLine(profile: string, line: Line) {
+    this.tree(profile, tree => toggled(tree, line));
+    await this.under(profile, line);
+  }
+  /** Searches the profile's memory for `text`, as its agent would: the messages that say it stand in the tree's place, newest
+   * first. No text ends the search, and the tree is as it was. An answer that comes after other text was typed is not kept. */
+  async search(profile: string, text: string) {
+    this.tree(profile, ({ search, found, ...tree }) => text ? { ...tree, search: { ...search, text } } : tree);
+    const page = text ? await this.ask('search', { profile, text }) : undefined;
+    if (page) this.tree(profile, tree => tree.search?.text === text ? { ...tree, search: { text, answer: { of: text, ...page } } } : tree);
+  }
+  /** Asks for the messages older than those the search has, and adds them. Not while the answer for other text is on its way,
+   * and asked for twice they are added once. */
+  async moreFound(profile: string) {
+    const { text, answer } = this.state.memory[profile]?.search ?? {}, before = answer?.hits.at(-1)?.id;
+    if (text === undefined || answer?.of !== text || before === undefined) return;
+    const page = await this.ask('search', { profile, text, before });
+    if (page) this.tree(profile, tree => tree.search?.answer !== answer ? tree : { ...tree, search: { text, answer: { of: text, hits: [...answer.hits, ...page.hits], more: page.more } } });
+  }
+  /** Shows message `id` in the tree: every line from the view down to it is opened, and it is the one that was `found`. With
+   * no message, what the search found is shown again. */
+  async find(profile: string, id?: number) {
+    if (id === undefined) return this.tree(profile, ({ found, ...tree }) => tree);
+    const reach = () => path(this.state.memory[profile]?.view?.lines ?? [], id);
+    // The search reads the log as it is now, which can be longer than the view the page has.
+    if (!reach().length) await this.readMemory(profile);
+    const down = reach();
+    if (!down.length) return;
+    this.tree(profile, tree => ({ ...tree, open: [...new Set([...tree.open, ...down.map(key)])] }));
+    const text = this.state.memory[profile]?.search?.text;
+    await Promise.all(down.map(line => this.under(profile, line)));
+    // Unless the search was ended or is for other text by now: then the tree is open down to the message, and that is all.
+    this.tree(profile, tree => tree.search?.text === text ? { ...tree, found: id } : tree);
   }
   /** Sends your message. In a run it steers the agent, or with `later` waits until the agent has stopped. */
   async send(window: string, text: string, later = false) {

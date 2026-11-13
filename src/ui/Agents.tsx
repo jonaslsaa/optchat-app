@@ -7,9 +7,10 @@ import { Timer } from './Rows.tsx';
 import { app, type State } from './store.ts';
 import { Timeline } from './Timeline.tsx';
 import { idle, took } from './transcript.ts';
-import { Button, cn, StatusDot } from './ui.tsx';
+import { Button, cn, Section, StatusDot } from './ui.tsx';
 
-const NOTHING = idle(), SHOWN = 30, EVERY = 2000;
+/** `SHOWN` is how many agents that ended are listed until more are asked for: few, because the GitHub list is under them. */
+const NOTHING = idle(), SHOWN = 8, EVERY = 2000;
 const iso = (time: number) => new Date(time).toISOString();
 /** How long an agent has worked, counting while it does. */
 const Took = ({ agent }: { agent: Agent }) => working(agent) ? <Timer from={iso(agent.started)} /> : agent.ended !== undefined ? <>{took(iso(agent.started), iso(agent.ended))}</> : null;
@@ -41,13 +42,14 @@ export function AgentHead({ state, profile, id, onAgent }: { state: State; profi
   const agent = state.agents[profile]?.agents.find(agent => agent.id === id);
   return (
     <>
-      <Button variant="ghost-muted" size="icon-sm" aria-label="All agents" title="All agents" onClick={() => onAgent()}><ArrowLeftIcon /></Button>
+      <Button variant="ghost-muted" size="icon-sm" aria-label="Back to the lists" title="Back" onClick={() => onAgent()}><ArrowLeftIcon /></Button>
       <h2 title={id} className="min-w-0 flex-1 truncate font-medium text-sm">{agent ? named(agent) : `Agent ${id}`}</h2>
     </>
   );
 }
-/** The agents working for the profile's main chat, read from its files: a list of them, and the chat of the one that is opened
- * in its place. It is read again when the main chat changes (`pulse`: that is when an agent starts or reports), and every two
+/** The agents working for the profile's main chat, read from its files: a list of them (nothing, where there are none), and
+ * the chat of the one that is opened in its place.
+ * It is read again when the main chat changes (`pulse`: that is when an agent starts or reports), and every two
  * seconds while one of them works, or while a Pi outside the app has the chat (`outside`), which tells the app nothing of what
  * it starts. It only shows: an agent is told, stopped and resumed by the main agent. */
 export function Agents({ state, profile, agent: id, pulse, outside, onAgent }: { state: State; profile: string; agent?: string; pulse: string; outside: boolean; onAgent: (id?: string) => void }) {
@@ -59,14 +61,12 @@ export function Agents({ state, profile, agent: id, pulse, outside, onAgent }: {
   // Again once the server is back, too: what was asked while it was away got no answer.
   useEffect(() => { if (state.connection === 'open') read(); }, [profile, id, limit, pulse, state.connection]);
   useEffect(() => { if (!active) return; const timer = setInterval(read, EVERY); return () => clearInterval(timer); }, [active, profile, id, limit]);
-  if (id === undefined) return (
-    <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-3">
-      {list && agents.length === 0 && (
-        <div className="px-4 pt-16 text-center text-sm"><p className="font-medium">No agents yet</p><p className="mt-1 text-balance text-muted-foreground">The main chat starts agents for work it hands out. They are listed here while they work, and after.</p></div>
-      )}
+  const running = agents.filter(working).length;
+  if (id === undefined) return agents.length === 0 ? null : (
+    <Section title={running ? `Agents · ${running} running` : 'Agents'}>
       <ul className="flex flex-col gap-0.5">{listed(agents).map(({ agent, depth }) => <Row key={agent.id} agent={agent} depth={depth} onOpen={() => onAgent(agent.id)} />)}</ul>
       {list && list.more > 0 && <Button variant="ghost-muted" size="xs" className="mx-2.5 mt-2" onClick={() => setLimit(limit + SHOWN)}>Show {Math.min(list.more, SHOWN)} more</Button>}
-    </div>
+    </Section>
   );
   return (
     <>

@@ -1,5 +1,6 @@
 import { CheckIcon, ChevronsUpDownIcon, PlusIcon, XIcon } from 'lucide-react';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { badge } from './badge.ts';
 import { app, type State } from './store.ts';
 import { cn, WindowDot } from './ui.tsx';
 
@@ -31,11 +32,24 @@ export function ProfilePicker({ state, label, className, children }: { state: St
     </div>
   );
 }
+/** A profile's badge: its letters in its colour, on a tint of that. Drawn as T3 Code draws a project's (`ProjectMonogram`): text
+ * in an SVG is set on its baseline, so the capitals stand in the tile's middle, which a centred line of text does not give.
+ * It is there to tell profiles apart at a glance, and says nothing the name beside it does not. */
+function ProfileBadge({ profile }: { profile: string }) {
+  const { letters, colour } = badge(profile);
+  return (
+    <span aria-hidden="true" className="inline-flex size-4 shrink-0 items-center justify-center">
+      <svg viewBox="0 0 16 16" className={cn('size-full select-none overflow-hidden rounded-[25%] font-mono', colour)} style={{ backgroundColor: 'color-mix(in srgb, currentColor 14%, transparent)' }}>
+        <text x="8" y="10.8" textAnchor="middle" fill="currentColor" fontSize="8.25" fontWeight="700" textLength={letters.length === 1 ? 6 : 12} lengthAdjust="spacingAndGlyphs" textRendering="geometricPrecision">{letters}</text>
+      </svg>
+    </span>
+  );
+}
 /** The one open profile, named in the title bar: with a single profile there is no tab bar, and this is where a second one is opened. */
 export function ProfileName({ state, profile }: { state: State; profile: string }) {
   return (
-    <ProfilePicker state={state} label="Open a profile" className="flex h-7 max-w-40 items-center gap-1 rounded-md px-1.5 text-muted-foreground text-sm hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring">
-      <span className="min-w-0 truncate">{profile}</span><ChevronsUpDownIcon className="size-3 shrink-0" />
+    <ProfilePicker state={state} label="Open a profile" className="flex h-7 max-w-40 items-center gap-1.5 rounded-md px-1.5 text-muted-foreground text-sm hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring">
+      <ProfileBadge profile={profile} /><span className="min-w-0 truncate">{profile}</span><ChevronsUpDownIcon className="size-3 shrink-0" />
     </ProfilePicker>
   );
 }
@@ -49,7 +63,7 @@ export function Tabs({ state }: { state: State }) {
         {state.tabs.map(tab => (
           <div key={tab} className={cn('group/tab flex h-7 max-w-48 min-w-0 items-center rounded-md border text-sm', tab === state.profile ? 'border-border bg-background text-foreground shadow-xs' : 'border-transparent text-muted-foreground hover:bg-accent hover:text-foreground')}>
             <button type="button" role="tab" aria-selected={tab === state.profile} onClick={() => void app.openProfile(tab)} className="flex min-w-0 items-center gap-1.5 rounded-md py-1 pr-1 pl-2.5 font-medium focus-visible:ring-2 focus-visible:ring-ring">
-              <WindowDot windows={state.windows.filter(window => window.profile === tab)} /><span className="min-w-0 truncate">{tab}</span>
+              <ProfileBadge profile={tab} /><WindowDot windows={state.windows.filter(window => window.profile === tab)} /><span className="min-w-0 truncate">{tab}</span>
             </button>
             <button type="button" aria-label={`Close ${tab}`} onClick={() => app.closeTab(tab)} className="mr-1 rounded-sm p-0.5 opacity-0 hover:bg-foreground/10 focus-visible:opacity-100 group-hover/tab:opacity-100"><XIcon className="size-3" /></button>
           </div>

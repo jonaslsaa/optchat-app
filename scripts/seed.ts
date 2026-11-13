@@ -74,7 +74,7 @@ export const TEAM: Said[][] = [
 export const SHIPPING: Said[][] = [
   [
     ['user', 'Where does 0.2.0 stand? The Windows failure is https://github.com/acme/optchat-app/issues/38.'],
-    ['talk', 'Two things went in since 0.1.0: the numbered records (https://github.com/acme/optchat-app/pull/36), which closed https://github.com/acme/optchat-app/issues/29, and the first try at the Windows stop, https://github.com/acme/pi-tools/pull/112, which was closed unmerged.\n\nStill open: https://github.com/acme/optchat-app/pull/41 stops a Pi that does not answer, and https://github.com/acme/optchat-app/pull/43 reconnects by sequence number. #40 can wait.'],
+    ['talk', 'Two things went in since 0.1.0: the numbered records (https://github.com/acme/optchat-app/pull/36), which closed https://github.com/acme/optchat-app/issues/29, and the first try at the Windows stop, https://github.com/acme/pi-tools/pull/112, which was closed unmerged.\n\nStill open: https://github.com/acme/optchat-app/pull/41 stops a Pi that does not answer, and https://github.com/acme/optchat-app/pull/43 reconnects by sequence number. #40 can wait, and so can https://github.com/acme/optchat-app/issues/31 and https://github.com/acme/optchat-app/issues/33.'],
   ],
   [
     ['user', 'Open a draft for the release notes, and ask infra whether the runner image changed.'],
@@ -87,6 +87,7 @@ export const SHIPPING: Said[][] = [
 /** What GitHub has of the SHIPPING chat's items, as its GraphQL answers for each: for the fake `gh`. One of them is in a
  * repository this login is not shown. */
 export const SHIPPED = {
+  'acme/optchat-app#31': issue('Say which window a queued message is for', 'CLOSED'), 'acme/optchat-app#33': issue('Esc in the settings stops the run', 'CLOSED'),
   'acme/optchat-app#38': issue('The shutdown test fails on Windows', 'OPEN'), 'acme/optchat-app#29': issue('A window forgets its queue when the page reloads', 'CLOSED'),
   'acme/optchat-app#36': pullRequest('Number each window\'s records', 'MERGED'), 'acme/pi-tools#112': pullRequest('Use taskkill /T on Windows', 'CLOSED'),
   'acme/optchat-app#41': pullRequest('Stop a Pi that does not answer', 'OPEN', { checks: 'SUCCESS', reviewDecision: 'APPROVED' }),

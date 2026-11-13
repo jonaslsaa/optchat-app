@@ -1,4 +1,4 @@
-import { BotIcon, CheckIcon, GitPullRequestIcon, PanelLeftIcon, SettingsIcon, XIcon } from 'lucide-react';
+import { CheckIcon, PanelLeftIcon, PanelRightIcon, SettingsIcon, XIcon } from 'lucide-react';
 import { Fragment, useCallback, useMemo, useState } from 'react';
 import { canComplete, current } from '../window.ts';
 import { busy } from './agents.ts';
@@ -20,15 +20,13 @@ import { Button, Choice, cn } from './ui.tsx';
 /** A window that has not run yet. */
 const NOTHING = idle();
 const SHOWS = [['Chat', false], ['Memory', true]] as const;
-/** How a title bar button looks while what it opens is open. */
-const PRESSED = 'aria-pressed:bg-accent aria-pressed:text-foreground';
 
 /** One profile: its windows on the left, the selected window's chat, and beside the main chat its agents or what it named on
  * GitHub, when they are opened. */
 function Profile({ state, profile, onSettings }: { state: State; profile: string; onSettings: () => void }) {
   const [sidebar, setSidebar] = useState(() => innerWidth >= 768);
   // What the panel beside the main chat shows, while it is open: `panel.agent` is the agent whose chat is open in it.
-  const [panel, setPanel] = useState<Shown>(), openAgent = useCallback((agent?: string) => setPanel({ tab: 'agents', agent }), []);
+  const [panel, setPanel] = useState<Shown>(), openAgent = useCallback((agent?: string) => setPanel({ agent }), []);
   // The main chat as the agent reads its memory, in the chat's place. A message sent from there is answered in the chat.
   const [remembering, setMemory] = useState(false), toChat = useCallback(() => setMemory(false), []);
   const windows = state.windows.filter(window => window.profile === profile), ids = windows.map(window => window.id).join(' ');
@@ -51,8 +49,7 @@ function Profile({ state, profile, onSettings }: { state: State; profile: string
   // What says a turn of it began or ended, for what reads the whole log: that is too much to do at every message.
   const turn = [window?.status, log?.total, state.connection].join(' ');
   // A Pi that has stopped counts nothing: its last status line still stands, and is about agents that went with it.
-  // The list is read only while it is in sight, so it says nothing of now behind the GitHub list.
-  const agentsWork = busy(window?.status === 'stopped' ? undefined : live.status.optchat, panel?.tab === 'agents' ? state.agents[profile]?.agents : undefined);
+  const agentsWork = busy(window?.status === 'stopped' ? undefined : live.status.optchat, panel && state.agents[profile]?.agents);
   if (!window) return <p className="m-auto text-muted-foreground text-sm">Opening {profile}…</p>;
   const more = !own && log && log.entries.length > 0 && log.entries[0].i > 0;
   // Nothing has been said here, as far as is known: a window that may have a conversation waits for it rather than say so.
@@ -73,11 +70,11 @@ function Profile({ state, profile, onSettings }: { state: State; profile: string
           )}
           {canComplete(window) && <Button variant="outline" title="Complete: hand this conversation to the main chat" onClick={() => void app.complete(window.id)}><CheckIcon />Complete</Button>}
           {!own && (
-            <Button variant="ghost-muted" size="icon-sm" aria-label="Agents" title={agentsWork ? 'Agents: some are working' : 'Agents'} aria-pressed={panel?.tab === 'agents'} className={PRESSED} onClick={() => setPanel(panel?.tab === 'agents' ? undefined : { tab: 'agents' })}>
-              <BotIcon />{agentsWork && <span className="absolute top-0.5 right-0.5 size-1.5 rounded-full bg-sky-500 dark:bg-sky-300/80" />}
+            <Button variant="ghost-muted" size="icon-sm" aria-label="Agents and GitHub" title={agentsWork ? 'Agents and GitHub: agents are working' : 'Agents and GitHub'} aria-pressed={panel !== undefined}
+              className="aria-pressed:bg-accent aria-pressed:text-foreground" onClick={() => setPanel(panel ? undefined : {})}>
+              <PanelRightIcon />{agentsWork && <span className="absolute top-0.5 right-0.5 size-1.5 rounded-full bg-sky-500 dark:bg-sky-300/80" />}
             </Button>
           )}
-          {!own && <Button variant="ghost-muted" size="icon-sm" aria-label="GitHub" title="GitHub: pull requests and issues" aria-pressed={panel?.tab === 'github'} className={PRESSED} onClick={() => setPanel(panel?.tab === 'github' ? undefined : { tab: 'github' })}><GitPullRequestIcon /></Button>}
           <Button variant="ghost-muted" size="icon-sm" aria-label="Settings" title="Settings" onClick={onSettings}><SettingsIcon /></Button>
         </header>
         <Fragment key={window.id}>

@@ -2,11 +2,11 @@ import { CircleCheckIcon, CircleDashedIcon, CircleDotIcon, CircleXIcon, GitMerge
 import { useEffect, useState } from 'react';
 import type { GitHubItem, Result } from '../protocol.ts';
 import { app, type State } from './store.ts';
-import { Button, cn } from './ui.tsx';
+import { Button, cn, Section } from './ui.tsx';
 
 /** How many are listed, how often GitHub is asked while the list is in sight (ms), and how soon the answer to a question
  * that was just asked is looked for. */
-const SHOWN = 30, EVERY = 60_000, SOON = 1000;
+const SHOWN = 8, EVERY = 60_000, SOON = 1000;
 type Sign = [Icon: LucideIcon, label: string, tone: string];
 // The glyphs and their colours are T3 Code's (its `pullRequestIcons.tsx` and `pullRequestPresentation.tsx`).
 const GOOD = 'text-emerald-600 dark:text-emerald-300/90', BAD = 'text-red-600 dark:text-red-300/90', DONE = 'text-violet-600 dark:text-violet-300/90', QUIET = 'text-muted-foreground/60';
@@ -48,7 +48,8 @@ function help({ gh, message }: Pick<Result<'github'>, 'gh' | 'message'>) {
   return <>GitHub could not be asked for their status: {message ?? 'gh failed'}</>;
 }
 
-/** The issues and pull requests the profile's main chat named by their link, and how they stand on GitHub. Only those: one the
+/** The issues and pull requests the profile's main chat named by their link, and how they stand on GitHub (nothing, where it
+ * named none). Only those: one the
  * chat spoke of as "#12" is not here, because nothing says which repository that is in, and a guess would show another's
  * status. It is read when it comes into sight and when a turn of the main chat begins or ends (`pulse`), and once a minute
  * while it is in sight, which is when the server asks GitHub again about the open ones. It only shows: a row is a link to
@@ -62,18 +63,15 @@ export function GitHub({ state, profile, pulse }: { state: State; profile: strin
   // The server answers with what it knows and asks GitHub behind that: what GitHub said is there a moment later.
   const asking = list?.gh === 'ok' && list.pending > 0;
   useEffect(() => { const timer = setInterval(() => read(), asking ? SOON : EVERY); return () => clearInterval(timer); }, [asking, profile, limit]);
-  return (
-    <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-3">
-      {list && items.length === 0 ? (
-        <div className="px-4 pt-16 text-center text-sm"><p className="font-medium">No pull requests or issues yet</p><p className="mt-1 text-balance text-muted-foreground">PRs and issues the chat names by link are listed here, with how they stand on GitHub.</p></div>
-      ) : list && <p className="px-2.5 pt-0.5 pb-2 text-muted-foreground text-xs">PRs and issues the chat named by link.</p>}
-      {list && list.gh !== 'ok' && items.length > 0 && (
+  return !list || items.length === 0 ? null : (
+    <Section title="GitHub · PRs and issues the chat named by link">
+      {list.gh !== 'ok' && (
         <p role="status" className="mx-2.5 mb-2 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg bg-muted/60 px-3 py-2 text-muted-foreground text-xs">
           <span className="min-w-0 flex-1 basis-40 [overflow-wrap:anywhere]">{help(list)}</span><Button variant="outline" size="xs" onClick={() => read(true)}>Check again</Button>
         </p>
       )}
       <ul className="flex flex-col gap-0.5">{items.map(item => <Row key={`${item.repo}#${item.number}`.toLowerCase()} item={item} />)}</ul>
-      {list && list.more > 0 && <Button variant="ghost-muted" size="xs" className="mx-2.5 mt-2" onClick={() => setLimit(limit + SHOWN)}>Show {Math.min(list.more, SHOWN)} more</Button>}
-    </div>
+      {list.more > 0 && <Button variant="ghost-muted" size="xs" className="mx-2.5 mt-2" onClick={() => setLimit(limit + SHOWN)}>Show {Math.min(list.more, SHOWN)} more</Button>}
+    </Section>
   );
 }

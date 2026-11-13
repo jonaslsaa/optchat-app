@@ -35,8 +35,11 @@ seed(createProfile(home, 'notes'), 2, NOW);
 const long = createProfile(home, 'long');
 seed(long, 95, NOW, undefined, 40 * 60_000);
 remember(long);
-// A chat that names issues and pull requests, and a GitHub CLI that is not signed in yet.
-seed(createProfile(home, 'ship'), SHIPPING.length, NOW, SHIPPING);
+// A chat that names issues and pull requests and has agents, one that only names them, and a GitHub CLI that is not signed in yet.
+const ship = createProfile(home, 'ship');
+seed(ship, SHIPPING.length, NOW, SHIPPING);
+agents(ship, NOW + 42_000);
+seed(createProfile(home, 'links'), SHIPPING.length, NOW, SHIPPING);
 const gh = { command: process.execPath, args: [join(import.meta.dirname, '../test/fake-gh.ts')] }, github = (state: object) => writeFileSync(join(home, 'gh', 'gh.json'), JSON.stringify(state));
 process.env.FAKE_GH_HOME = join(home, 'gh');
 mkdirSync(join(home, 'gh'));
@@ -202,7 +205,7 @@ async function pictures(browser: Browser, control: Client) {
   const panel = await open(['team']), small = await open(['team'], { width: 420, height: 800 });
   const working = await lockProfile(team, describeOwner({ profile: 'team', pid: process.pid, host: 'jonas-macbook', cwd: home }));
   try {
-    await panel.getByRole('button', { name: 'Agents' }).click();
+    await panel.getByRole('button', { name: 'Agents and GitHub' }).click();
     await panel.getByText('Draft the release notes').waitFor();
     await shot(panel, '24-agents');
     await panel.getByText('Run the shutdown test on Windows').last().click();
@@ -212,7 +215,7 @@ async function pictures(browser: Browser, control: Client) {
     await panel.getByRole('button', { name: 'Report: How T3 Code reconnects' }).click();
     await panel.getByText('Completed · 1m 42s').waitFor();
     await shot(panel, '26-agent-report');
-    await small.getByRole('button', { name: 'Agents' }).click();
+    await small.getByRole('button', { name: 'Agents and GitHub' }).click();
     await small.getByText('Draft the release notes').waitFor();
     await shot(small, '27-agents-narrow');
   } finally { await working(); }
@@ -241,25 +244,31 @@ async function pictures(browser: Browser, control: Client) {
   await slim.locator('[data-line]').first().waitFor();
   await shot(slim, '32-memory-narrow');
 
-  // What the chat named on GitHub, beside it. The GitHub CLI is not signed in at first: the list is there, and says so.
-  const ship = await open(['ship']);
-  await ship.getByRole('button', { name: 'GitHub' }).click();
-  await ship.getByText('gh auth login').waitFor();
-  await shot(ship, '33-github-signed-out');
-  github({ items: SHIPPED });
-  await ship.getByRole('button', { name: 'Check again' }).click();
-  await ship.getByText('Release notes for 0.2.0').waitFor();
-  await shot(ship, '34-github');
-  const shade = await open(['ship'], { dark: true });
-  await shade.getByRole('button', { name: 'GitHub' }).click();
-  await shade.getByText('Release notes for 0.2.0').waitFor();
-  await shot(shade, '35-github-dark');
-  const thin = await open(['ship'], { width: 420, height: 800 });
-  await thin.getByRole('button', { name: 'GitHub' }).click();
-  await thin.getByText('Release notes for 0.2.0').waitFor();
-  await shot(thin, '36-github-narrow');
-  // A chat that named none.
-  await empty.getByRole('button', { name: 'GitHub' }).click();
-  await empty.getByText('No pull requests or issues yet').waitFor();
-  await shot(empty, '37-github-empty');
+  // The main chat's agents and what it named on GitHub, in one panel. The GitHub CLI is not signed in at first: the list is
+  // there, and says so.
+  const both = await open(['ship']), shade = await open(['ship'], { dark: true }), thin = await open(['ship'], { width: 420, height: 800 });
+  const shipping = await lockProfile(ship, describeOwner({ profile: 'ship', pid: process.pid, host: 'jonas-macbook', cwd: home }));
+  try {
+    await both.getByRole('button', { name: 'Agents and GitHub' }).click();
+    await both.getByText('gh auth login').waitFor();
+    await shot(both, '33-github-signed-out');
+    github({ items: SHIPPED });
+    await both.getByRole('button', { name: 'Check again' }).click();
+    await both.getByText('Release notes for 0.2.0').waitFor();
+    await shot(both, '34-agents-and-github');
+    await shade.getByRole('button', { name: 'Agents and GitHub' }).click();
+    await shade.getByText('Release notes for 0.2.0').waitFor();
+    await shot(shade, '35-agents-and-github-dark');
+    await thin.getByRole('button', { name: 'Agents and GitHub' }).click();
+    await thin.getByText('Release notes for 0.2.0').waitFor();
+    await shot(thin, '36-agents-and-github-narrow');
+  } finally { await shipping(); }
+  // A chat with neither, and one that only named pull requests and issues.
+  await empty.getByRole('button', { name: 'Agents and GitHub' }).click();
+  await empty.getByText('Nothing yet.').waitFor();
+  await shot(empty, '37-panel-empty');
+  const links = await open(['links']);
+  await links.getByRole('button', { name: 'Agents and GitHub' }).click();
+  await links.getByText('Release notes for 0.2.0').waitFor();
+  await shot(links, '38-github-only');
 }

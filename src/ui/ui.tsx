@@ -1,5 +1,5 @@
 import { CheckIcon, CopyIcon, LoaderCircleIcon } from 'lucide-react';
-import { useState, useSyncExternalStore, type ComponentProps } from 'react';
+import { useState, useSyncExternalStore, type ComponentProps, type ReactNode } from 'react';
 import type { WindowState } from '../protocol.ts';
 import { extendTailwindMerge, type ClassNameValue } from 'tailwind-merge';
 
@@ -44,6 +44,16 @@ export function Choice<T extends string | boolean>({ label, name, title, options
         </label>
       ))}
     </div>
+  );
+}
+/** One of the things the panel beside the main chat lists, under a small heading, with a line between it and the one above.
+ * One with nothing to list is not drawn at all. */
+export function Section({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <section aria-label={title} className="border-border/65 px-2 pt-1 pb-2.5 first:[&>h3]:pe-10 [section+&]:border-t">
+      <h3 className="flex min-h-8 items-center px-2.5 font-medium text-2xs text-muted-foreground select-none"><span className="min-w-0 truncate">{title}</span></h3>
+      {children}
+    </section>
   );
 }
 /** The dot that says what a window is doing. */

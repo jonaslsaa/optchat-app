@@ -74,6 +74,20 @@
   to { background-position: -200% 0; }
 }
 
+/* The desktop app's window has no title bar of its own, and its shell marks the page (`data-shell`). The page's top rows are
+ * the title bar: the window is dragged by a `window-bar`, though not by what is pressed or typed in it. As T3 Code has it:
+ * Electron inherits the region, so the children are set back, or a menu that drops out of the bar would drag as well. */
+[data-shell] .window-bar { -webkit-app-region: drag; }
+@layer base { [data-shell] .window-bar > * { -webkit-app-region: initial; } }
+[data-shell] .window-bar :is(button, a, input, label, select, textarea) { -webkit-app-region: no-drag; }
+/* The row at the window's top left leaves the window's buttons their room, which a window that fills the screen does not
+ * need. A row under another bar is not at the top (`window-start`), unless it lies over that bar (`window-corner`).
+ * `--window-start` is how far from the window's edge a row starts by itself. */
+@utility window-start { :root[data-shell='windowed'] &:not(.window-bar ~ * &) { padding-inline-start: max(0px, var(--window-buttons) - var(--window-start, 0px)); } }
+@utility window-corner { :root[data-shell='windowed'] & { padding-inline-start: var(--window-buttons); } }
+/* So what the app has to tell you, which a browser has above everything, is at the window's foot. */
+[data-shell] .notice { order: 1; }
+
 :root {
   color-scheme: light;
   --radius: 0.5rem;
@@ -82,6 +96,7 @@
   --topbar-height: 52px;
   --sidebar-width: 16rem;
   --panel-width: 26rem;
+  --window-buttons: 6rem;
   --glass-blur: 12px;
   --glass-opacity: 80%;
   --glass-saturation: 1.14;

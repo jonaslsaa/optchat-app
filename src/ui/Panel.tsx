@@ -33,9 +33,9 @@ export function Panel({ state, profile, shown: { agent }, pulse, turn, outside, 
     return () => removeEventListener('keydown', pressed, true);
   }, [sheet]);
   const panel = (
-    <aside aria-label="Agents and GitHub" className="relative flex h-full w-(--panel-width) max-w-[calc(100vw-2.5rem)] shrink-0 flex-col border-border border-l bg-background">
+    <aside aria-label="Agents and GitHub" className="relative flex h-full w-(--panel-width) max-w-[calc(100vw-2.5rem)] in-data-[shell=windowed]:max-w-[calc(100vw-var(--window-buttons)-0.5rem)] shrink-0 flex-col border-border border-l bg-background">
       {/* An agent's chat has a bar over it. The lists have none: the way out stands at the end of their first heading. */}
-      <div className={cn('flex h-(--topbar-height) shrink-0 items-center gap-1.5 px-2.5', agent === undefined && 'absolute top-0 right-0 z-10 rounded-bl-lg bg-background')}>
+      <div className={cn('flex h-(--topbar-height) shrink-0 items-center gap-1.5 px-2.5', agent === undefined ? 'absolute top-0 right-0 z-10 rounded-bl-lg bg-background' : 'window-bar')}>
         {agent !== undefined && <AgentHead state={state} profile={profile} id={agent} onAgent={onAgent} />}
         <Button variant="ghost-muted" size="icon-sm" aria-label="Close the panel" title="Close" onClick={close}><XIcon /></Button>
       </div>

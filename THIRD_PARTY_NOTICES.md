@@ -6,7 +6,9 @@ Parts of the UI come from [T3 Code](https://github.com/pingdotgg/t3code) (commit
 
 - `src/ui/markdownStreamBlocks.ts`: copied from `apps/web/src/components/chat/markdownStreamBlocks.ts`, without its handling of Claude's insight callouts.
 - `src/ui/WorkLog.tsx`: the row and its details, copied from `apps/web/src/components/chat/WorkLog.tsx`.
-- `src/ui/index.css`: the colour tokens, the `surface-glass` utility and the `.chat-markdown` rules, from `apps/web/src/index.css`.
+- `src/ui/index.css`: the colour tokens, the `surface-glass` utility, the `.chat-markdown` rules and the window drag region (`window-bar`), from `apps/web/src/index.css`.
+- `src/desktop/environment.ts`: how the login shell is asked for its environment (`-ilc`, the values between marks), after `packages/shared/src/shell.ts`.
+- `src/desktop/main.ts`: the window's title bar options, from `apps/desktop/src/window/DesktopWindow.ts`.
 - `src/ui/ui.tsx`: the `Button` and `Kbd` class strings, from `apps/web/src/components/ui/button.tsx` and `kbd.tsx`, without Base UI.
 - `src/ui/Composer.tsx`, `Rows.tsx`, `Markdown.tsx`, `Sidebar.tsx`, `Timeline.tsx` and `App.tsx`: the looks (Tailwind class strings) of T3 Code's composer, timeline rows, code block frame, sidebar thread row and new-thread heading. The components themselves are written for this app.
 - `src/server/github.ts`: the patterns for where a shell starts a command and where its word ends (`START`, `END`), from `apps/server/src/orchestration-v2/PullRequestSyncReactor.ts`.

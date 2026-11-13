@@ -11,8 +11,8 @@ export function Sidebar({ state, profile, selected }: { state: State; profile: s
   const windows = state.windows.filter(window => window.profile === profile), hints = useAltHeld();
   return (
     <nav aria-label="Windows" className="flex h-full w-(--sidebar-width) shrink-0 flex-col border-sidebar-border border-r bg-sidebar text-sidebar-foreground">
-      <div className="flex h-(--topbar-height) shrink-0 items-center justify-between ps-4.5 pe-2.5">
-        <span className="font-medium text-sidebar-muted-foreground text-xs">Windows</span>
+      <div className="window-bar window-start max-md:window-corner flex h-(--topbar-height) shrink-0 items-center justify-between ps-4.5 pe-2.5">
+        <span className="text-sidebar-muted-foreground text-xs"><b className="font-semibold text-sidebar-foreground">Opt</b>Chat</span>
         <Button variant="ghost-muted" size="icon-sm" aria-label="New window" title={`New window (${label('mod+shift+o')})`} onClick={() => void app.newWindow(profile)}><SquarePenIcon /></Button>
       </div>
       <ul className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto px-2 pb-2">

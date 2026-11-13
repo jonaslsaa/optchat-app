@@ -23,7 +23,8 @@ function Page({ title, action, children }: { title: string; action?: ReactNode; 
   return (
     <main className="min-h-0 flex-1 overflow-y-auto bg-background">
       <div className="mx-auto max-w-2xl px-5 pb-10">
-        <header className="flex h-(--topbar-height) items-center gap-2"><h1 className="flex-1 font-medium text-sm">{title}</h1>{action}</header>
+        {/* The heading is in the middle column, 1.25rem in from its edge: it reaches the desktop window's buttons only in a narrow window. */}
+        <header className="window-bar window-start flex h-(--topbar-height) items-center gap-2 [--window-start:calc(1.25rem+max(0px,(100vw-42rem)/2))] in-data-shell:sticky in-data-shell:top-0 in-data-shell:z-10 in-data-shell:bg-background"><h1 className="flex-1 font-medium text-sm">{title}</h1>{action}</header>
         {children}
       </div>
     </main>

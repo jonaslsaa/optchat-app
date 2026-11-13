@@ -70,7 +70,6 @@ Pi signs in to a provider with `pi auth login <provider>`, which needs a termina
 
 ### Not handled yet
 
-- **The PATH of a desktop app.** Started from a terminal, the server has your PATH. A desktop shell started from the Dock will not, and has to read it from your login shell first, as T3 Code does; that comes with the shell.
 - **Windows.** Installing is written for macOS and Linux: on Windows npm is `npm.cmd` and the installed Pi is `.bin/pi.cmd`, which the server does not run yet.
 - **A second profile from the app.** The field is on the first page only; more profiles are made in Pi's terminal UI for now.
 

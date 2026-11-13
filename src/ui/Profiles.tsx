@@ -44,7 +44,7 @@ export function ProfileName({ state, profile }: { state: State; profile: string 
  * or has failed, since its windows are out of sight. */
 export function Tabs({ state }: { state: State }) {
   return (
-    <div className="flex h-10 shrink-0 items-center gap-1 border-b bg-sidebar px-2">
+    <div className="window-bar window-start flex h-10 shrink-0 items-center gap-1 border-b bg-sidebar px-2 in-data-shell:h-(--topbar-height)">
       <div role="tablist" aria-label="Profiles" className="flex min-w-0 items-center gap-1">
         {state.tabs.map(tab => (
           <div key={tab} className={cn('group/tab flex h-7 max-w-48 min-w-0 items-center rounded-md border text-sm', tab === state.profile ? 'border-border bg-background text-foreground shadow-xs' : 'border-transparent text-muted-foreground hover:bg-accent hover:text-foreground')}>

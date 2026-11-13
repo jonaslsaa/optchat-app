@@ -70,13 +70,13 @@ test('setup tells a Pi that is ready from one that lacks pi-optchat, has an old 
   // pi-optchat from a folder of yours is read where it is, and is not the app's to update.
   const checkout = join(folder, 'checkout');
   mkdirSync(checkout);
-  writeFileSync(join(checkout, 'package.json'), JSON.stringify({ name: 'pi-optchat', version: '0.11.9' }));
+  writeFileSync(join(checkout, 'package.json'), JSON.stringify({ name: 'pi-optchat', version: '0.11.11' }));
   // It is found however many packages Pi lists after it.
   const others = Object.fromEntries(Array.from({ length: 150 }, (_, at) => [`npm:something-else-${at}`, folder]));
   writeFileSync(join(folder, 'state.json'), JSON.stringify({ version: '1.4.0', providers: ['openai', 'anthropic'], packages: { '../checkout': checkout, ...others } }));
   assert.equal((await request('setup', {})).optchat.state, 'missing', 'what was found is kept until it is asked for afresh');
   const old = await request('setup', { fresh: true });
-  assert.partialDeepStrictEqual(old, { pi: { state: 'old', version: '1.4.0' }, optchat: { state: 'old', version: '0.11.9', path: checkout }, login: { state: 'ok', providers: ['anthropic', 'openai'], models: ['anthropic/a-model', 'openai/a-model'] } });
+  assert.partialDeepStrictEqual(old, { pi: { state: 'old', version: '1.4.0' }, optchat: { state: 'old', version: '0.11.11', path: checkout }, login: { state: 'ok', providers: ['anthropic', 'openai'], models: ['anthropic/a-model', 'openai/a-model'] } });
   assert.equal(old.optchat.installable, undefined);
   await assert.rejects(request('install', { what: 'optchat' }), /a folder of yours/);
   // Nor is a Pi of yours the app's to change, too old or not: it says which command updates it, and runs none.
@@ -90,7 +90,7 @@ test('the app installs pi-optchat with Pi\'s own installer, and says how it went
   const { pushed, ended, request } = await setup(t, {}, { version: '1.5.2', providers: ['anthropic'], packages: {} });
   await request('install', { what: 'optchat' });
   const done = await ended();
-  assert.partialDeepStrictEqual(done, { optchat: { state: 'ok', version: '0.11.10' }, job: { what: 'optchat', state: 'done' } });
+  assert.partialDeepStrictEqual(done, { optchat: { state: 'ok', version: '0.11.12' }, job: { what: 'optchat', state: 'done' } });
   assert.match(pushed[0].job?.line ?? '', /^Running: .* install npm:pi-optchat$/);
   await assert.rejects(request('install', { what: 'optchat' }), /installed already/);
 });

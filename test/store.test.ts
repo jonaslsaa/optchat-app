@@ -203,6 +203,24 @@ test('an agent\'s chat is read on from where the page has it, and a report that 
   assert.deepEqual(transcript({ ...app.state.chats['team/aaaaaaaa'], report: ' Twelve so far.\n' }, true).length, 3);
 });
 
+test('what you told an agent waits under its chat until it reads it, and a refusal is handed back whole, not shown as a failure', async t => {
+  const home = temporaryHome(), profile = createProfile(home, 'crew'), server = await startServer({ home, cwd: home, pi });
+  t.after(() => server.close());
+  writeRun(profile, { id: 'aaaaaaaa', state: 'running', started: 1000 });
+  writeRun(profile, { id: 'bbbbbbbb', state: 'completed', started: 900, ended: 950, parentId: 'aaaaaaaa' });
+  const { app, until } = page(t);
+  void app.start(server.url);
+  await until(state => state.connection === 'open');
+
+  await app.readAgent('crew', 'aaaaaaaa');
+  assert.equal(await app.act('tellAgent', { profile: 'crew', id: 'aaaaaaaa', text: 'Skip the slow test.' }), undefined);
+  // Nothing new was said in its chat: the message alone is news.
+  await app.readAgent('crew', 'aaaaaaaa');
+  assert.deepEqual(app.state.chats['crew/aaaaaaaa'].queued, ['Skip the slow test.']);
+  assert.match(await app.act('tellAgent', { profile: 'crew', id: 'bbbbbbbb', text: 'Go on.' }) ?? '', /^Only bbbbbbbb's parent aaaaaaaa can resume it/);
+  assert.equal(app.state.error, undefined);
+});
+
 test('the memory view opens line by line down to a message, and what is open stays open when it is read again', async t => {
   const home = temporaryHome(), directory = createProfile(home, 'deep'), log = join(directory, 'main', '2026-01-01.jsonl'), tree = join(directory, 'tree', '2026-01-01.jsonl');
   const entry = (i: number, kind: string, text: string) => `${JSON.stringify({ i, kind, date: new Date(Date.UTC(2026, 0, 1, 0, 0, i)).toISOString(), text })}\n`;

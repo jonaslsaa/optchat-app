@@ -28,7 +28,7 @@ export interface State {
   agents: Record<string, Result<'agents'>>;
   /** Each profile's issues and pull requests, as last read. */
   github: Record<string, Result<'github'>>;
-  chats: Record<string, { total: number; messages: PiMessage[]; report?: string; ended?: number }>;
+  chats: Record<string, { total: number; messages: PiMessage[]; report?: string; ended?: number; queued?: string[] }>;
   /** Each profile's memory view, once it was looked at, with the lines that were opened in it. */
   memory: Record<string, Tree>;
   /** Each profile's settings and instructions as pi-optchat keeps them, once the settings page has shown them. */
@@ -314,8 +314,17 @@ export class App {
     const had = this.state.chats[key], total = had?.total ?? 0;
     // Asked twice at once, two answers start at the same message: of each, only what goes on from what is here is added, and
     // one with nothing new changes nothing.
-    if (!read || read.total < total || (had && read.total === total && read.report === had.report)) return;
-    this.set({ chats: { ...this.state.chats, [key]: { total: read.total, messages: [...had?.messages ?? [], ...read.messages.slice(total - after).filter(isMessage)], report: read.report, ended: read.ended } } });
+    if (!read || read.total < total || (had && read.total === total && read.report === had.report && JSON.stringify(read.queued) === JSON.stringify(had.queued))) return;
+    this.set({ chats: { ...this.state.chats, [key]: { total: read.total, messages: [...had?.messages ?? [], ...read.messages.slice(total - after).filter(isMessage)], report: read.report, ended: read.ended, queued: read.queued } } });
+  }
+  /** Tells an agent, interrupts it or stops it, and answers why not when it was refused: those are pi-optchat's words, to be
+   * read whole where the agent is, so they are handed back and not shown as other failures are. What it did is then in the
+   * profile's files, which the panel reads. */
+  async act<M extends 'tellAgent' | 'interruptAgent' | 'stopAgent'>(method: M, params: Params<M>): Promise<string | undefined> {
+    try {
+      if (!this.client) throw new Error('Not connected to the server.');
+      await this.client.request(method, params);
+    } catch (error) { return error instanceof Error ? error.message : String(error); }
   }
   private tree(profile: string, change: (tree: Tree) => Tree) { this.set({ memory: { ...this.state.memory, [profile]: change(this.state.memory[profile] ?? NO_TREE) } }); }
   /** A profile's memory view as its files have it now. The lines that are open stay open, unless it is another memory by

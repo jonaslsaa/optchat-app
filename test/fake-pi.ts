@@ -1,10 +1,14 @@
 import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { hostname } from 'node:os';
 import { join } from 'node:path';
+// pi-optchat's own lock, which a Pi holds while it has a profile open.
+import { describeOwner, lockProfile } from '../node_modules/pi-optchat/dist/profiles.js';
+import { fakeOwner } from './fake-owner.ts';
 
 /** Stands in for `pi --mode rpc` with pi-optchat: the same records on stdin and stdout, scripted by the profile's name and the
  * prompt's words, so the server's tests and the UI's screenshots need no model.
- * - It says it owns its profile, or with `--optchat-connect join` that it is a window on it. An owner logs what is said to the
- *   profile's `main/`, as pi-optchat does; a window keeps its conversation to itself (`get_messages`), and writes a handoff
+ * - It says it owns its profile, or with `--optchat-connect join` that it is a window on it. An owner holds the profile's lock
+ *   and answers for its agents (`fake-owner.ts`), and logs what is said to the profile's `main/`, as pi-optchat does; a window keeps its conversation to itself (`get_messages`), and writes a handoff
  *   when it is completed with `/complete`.
  * - A prompt holding "wait" stays mid-reply until a `release` command or an abort; "ask" asks a dialog first and replies with its
  *   answer; "crash" kills it without an answer. A message sent during a run waits in the queue it was sent to: one that steers
@@ -42,7 +46,7 @@ if ((verb === 'install' || verb === 'update') && folder && kept) {
     const name = source.replace('npm:', ''), path = join(folder, 'npm', 'node_modules', name);
     console.log(`Installing ${source}...\n`);
     mkdirSync(path, { recursive: true });
-    writeFileSync(join(path, 'package.json'), JSON.stringify({ name, version: '0.11.10' }));
+    writeFileSync(join(path, 'package.json'), JSON.stringify({ name, version: '0.11.12' }));
     installed.packages[source] = path;
     console.log(`added 1 package in 409ms\nInstalled ${source}`);
   }
@@ -196,6 +200,12 @@ if (profile === 'busy') {
   if (profile === 'noisy') write({ type: 'extension_error', extensionPath: 'something-else', event: 'session_start', error: 'No API key' });
   status('optchat', joins ? `OptChat: ${profile} · connected window` : `OptChat: ${profile} · ${logged} messages · 0 pending · 0 agents`);
   if (profile !== 'old') role();
+}
+// An owner has its profile before it answers anything, as Pi has once its session has started.
+const directory = join(process.env.OPTCHAT_HOME ?? '.', 'profiles', profile);
+if (!joins && !['busy', 'bare'].includes(profile) && existsSync(directory)) {
+  await lockProfile(directory, describeOwner({ profile, pid: process.pid, host: hostname(), cwd: process.cwd() }));
+  await fakeOwner(directory, () => script.clock ?? Date.now());
 }
 let buffer = '';
 process.stdin.on('data', chunk => {

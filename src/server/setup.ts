@@ -12,8 +12,10 @@ import { killTree, Pi } from './pi.ts';
  * in. The shape follows T3 Code's provider checks (its `provider-pi/src/server/status.ts` and `providerMaintenanceRunner.ts`):
  * one state per thing with one message that names the exact command, and installs that push their latest line as they run. */
 
-/** The Pi and pi-optchat this app is tested with; older ones are told to update. */
-export const MINIMUM_PI = '1.5.2', MINIMUM_OPTCHAT = '0.11.10';
+/** The Pi and pi-optchat this app is tested with; older ones are told to update. pi-optchat's Pi has to take what the app asks
+ * of it through the profile's socket: a word to an agent (0.11.11) and a change of settings (0.11.12). An older one drops the
+ * connection instead. */
+export const MINIMUM_PI = '1.5.2', MINIMUM_OPTCHAT = '0.11.12';
 const PI_PACKAGE = '@earendil-works/pi-coding-agent', OPTCHAT = 'npm:pi-optchat';
 /** A command, and the arguments that are part of it (a script's path, for a Pi that is run through Node). */
 export interface Launch { command: string; args: readonly string[] }

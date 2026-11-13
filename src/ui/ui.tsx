@@ -58,7 +58,7 @@ export function Section({ title, children }: { title: string; children: ReactNod
 }
 /** The dot that says what a window is doing. */
 export function StatusDot({ tone, pulse = false }: { tone: 'working' | 'failed'; pulse?: boolean }) {
-  const colour = { working: 'bg-sky-500 dark:bg-sky-300/80', failed: 'bg-red-500 dark:bg-red-300/90' }[tone];
+  const colour = { working: 'bg-info-foreground', failed: 'bg-red-500 dark:bg-red-300/90' }[tone];
   return <span role="img" aria-label={tone === 'working' ? 'Working' : 'Failed'} className="inline-flex size-3.5 shrink-0 items-center justify-center"><span className={cn('size-[9px] rounded-full', colour, pulse && 'motion-safe:animate-status-pulse')} /></span>;
 }
 /** A dot for windows of which one is working, or one's Pi failed. */

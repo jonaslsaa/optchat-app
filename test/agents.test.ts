@@ -58,3 +58,37 @@ test('a profile\'s agents are read from its files: who works on what now, and wh
   for (const id of ['dddddddd', 'eeeeeeee']) assert.deepEqual(await client.request('agent', { profile: 'work', id }), { total: 0, messages: [] });
   await assert.rejects(client.request('agents', { profile: 'nobody' }), /No profile named nobody\./);
 });
+
+test('an agent is told, interrupted, stopped and resumed through the Pi that has its profile open', { timeout: 30_000 }, async t => {
+  const directory = createProfile(home, 'crew');
+  const server = await startServer({ home, cwd: home, pi }), client = await connect(server.url);
+  t.after(async () => { client.close(); await server.close(); });
+  writeRun(directory, { id: 'aaaaaaaa', state: 'running', started: 3000 });
+  writeRun(directory, { id: 'bbbbbbbb', state: 'completed', started: 2000, ended: 2500, report: 'Done.' });
+  writeRun(directory, { id: 'cccccccc', state: 'completed', started: 2100, ended: 2400, parentId: 'bbbbbbbb' });
+  const agent = (id: string) => ({ profile: 'crew', id });
+  const states = async () => Object.fromEntries((await client.request('agents', { profile: 'crew' })).agents.map(({ id, state }) => [id, state]));
+
+  // No Pi has the profile, so there is no agent to reach: pi-optchat says so, and nothing is started to interrupt or stop one.
+  await assert.rejects(client.request('stopAgent', agent('aaaaaaaa')), /No running OptChat session on this profile accepts connections/);
+  assert.deepEqual((await client.request('windows', {})).windows, []);
+  // A message is worth a Pi: the main window's is started. An agent that has ended is resumed with it, and one at work is
+  // told, which it keeps until it reads it: you do not choose between the two.
+  assert.deepEqual(await client.request('tellAgent', { ...agent('bbbbbbbb'), text: 'And the Windows run?' }), { resumed: true });
+  assert.partialDeepStrictEqual((await client.request('windows', {})).windows, [{ id: 'crew/main', status: 'idle' }]);
+  assert.deepEqual(await client.request('tellAgent', { ...agent('aaaaaaaa'), text: 'Skip the slow test.' }), { resumed: false });
+  assert.deepEqual(await states(), { aaaaaaaa: 'running', bbbbbbbb: 'running', cccccccc: 'completed' });
+  assert.deepEqual((await client.request('agent', agent('aaaaaaaa'))).queued, ['Skip the slow test.']);
+
+  // pi-optchat refuses in its own words, which are the answer: an agent's own agent is resumed by that agent alone.
+  await assert.rejects(client.request('tellAgent', { ...agent('cccccccc'), text: 'Go on.' }), /^Error: Only cccccccc's parent bbbbbbbb can resume it, and that parent is no longer running\./);
+  await assert.rejects(client.request('stopAgent', agent('eeeeeeee')), /^Error: No subagent eeeeeeee in this profile$/);
+
+  // Interrupted, it goes on with what it was told, which it has read by then; with nothing to go on with, it waits.
+  assert.deepEqual(await client.request('interruptAgent', agent('aaaaaaaa')), {});
+  assert.deepEqual([(await states()).aaaaaaaa, (await client.request('agent', agent('aaaaaaaa'))).queued], ['running', undefined]);
+  assert.deepEqual(await client.request('interruptAgent', agent('aaaaaaaa')), {});
+  assert.deepEqual(await client.request('stopAgent', agent('bbbbbbbb')), {});
+  assert.deepEqual(await states(), { aaaaaaaa: 'paused', bbbbbbbb: 'stopped', cccccccc: 'completed' });
+  assert.equal((await client.request('agent', agent('bbbbbbbb'))).report, 'Stopped by the user.');
+});

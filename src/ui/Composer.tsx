@@ -51,6 +51,31 @@ function Failure({ error }: { error: string }) {
   );
 }
 
+/** Your messages an agent has not read yet, under its chat: the last `later` of them wait for its run to end. */
+export function Queued({ messages, later = 0 }: { messages: readonly string[]; later?: number }) {
+  if (!messages.length) return null;
+  return (
+    <ol aria-label="Messages waiting for the agent" className="flex flex-col items-end gap-2 pb-1">
+      {messages.map((message, index) => (
+        <li key={index} className="flex min-w-0 max-w-[80%] flex-col items-end gap-0.5">
+          <span className="me-1 flex items-center gap-1 text-muted-foreground text-xs leading-none">
+            {index < messages.length - later ? <><CornerUpRightIcon className="size-3" />Steer · waiting to be read</> : <><ListPlusIcon className="size-3" />Queued for after this run</>}
+          </span>
+          <p className="whitespace-pre-wrap rounded-2xl border border-muted-foreground/40 border-dashed px-3 py-2 text-muted-foreground text-sm [overflow-wrap:anywhere]">{message}</p>
+        </li>
+      ))}
+    </ol>
+  );
+}
+/** The round button that sends what is typed: to an agent in a run (`steer`) it is a message on its way in. */
+export function SendButton({ steer, ...props }: { steer: boolean; disabled: boolean; onClick: () => void }) {
+  return (
+    <button type="button" aria-label={steer ? 'Steer the agent' : 'Send'} title={steer ? `Steer (${label('enter')})` : `Send (${label('enter')})`} {...props}
+      className="relative isolate flex size-8 shrink-0 items-center justify-center overflow-hidden rounded-full bg-message-action text-message-action-foreground shadow-xs transition-all duration-150 enabled:inset-shadow-control-highlight hover:scale-105 hover:bg-message-action-hover active:shadow-none disabled:pointer-events-none disabled:bg-foreground/12 disabled:text-muted-foreground disabled:shadow-none">
+      {steer ? <CornerUpRightIcon className="size-3.5" /> : <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M7 11.5V2.5M7 2.5L3 6.5M7 2.5L11 6.5" /></svg>}
+    </button>
+  );
+}
 /** Where you type. You can always type: while the agent runs, Enter steers it and ⌘Enter queues your message for when it has
  * stopped, and Esc stops it. The line under it says only what is news: how to steer a run, that Pi is starting, agents at
  * work. The look is T3 Code's composer (MIT, see THIRD_PARTY_NOTICES.md), over a plain textarea. */
@@ -78,18 +103,7 @@ export function Composer({ window, live, onSend }: { window: WindowState; live: 
   return (
     <div className="shrink-0 px-3 pb-3 sm:px-12 sm:pb-4">
       <div className="mx-auto flex w-full max-w-(--chat-content-max-width) flex-col gap-2">
-        {queued.length > 0 && (
-          <ol aria-label="Messages waiting for the agent" className="flex flex-col items-end gap-2 pb-1">
-            {queued.map((message, index) => (
-              <li key={index} className="flex min-w-0 max-w-[80%] flex-col items-end gap-0.5">
-                <span className="me-1 flex items-center gap-1 text-muted-foreground text-xs leading-none">
-                  {index < live.queued.steering.length ? <><CornerUpRightIcon className="size-3" />Steer · waiting to be read</> : <><ListPlusIcon className="size-3" />Queued for after this run</>}
-                </span>
-                <p className="whitespace-pre-wrap rounded-2xl border border-muted-foreground/40 border-dashed px-3 py-2 text-muted-foreground text-sm [overflow-wrap:anywhere]">{message}</p>
-              </li>
-            ))}
-          </ol>
-        )}
+        <Queued messages={queued} later={live.queued.followUp.length} />
         {live.dialogs.map(dialog => <Dialog key={String(dialog.id)} window={window.id} dialog={dialog} />)}
         {window.error && window.status === 'stopped' && <Failure error={window.error} />}
         <div className="relative isolate rounded-2xl bg-card shadow-composer after:pointer-events-none after:absolute after:inset-0 after:rounded-[inherit] after:border after:border-black/8 dark:bg-(--surface-raised) dark:shadow-none dark:after:border-white/8">
@@ -116,10 +130,7 @@ export function Composer({ window, live, onSend }: { window: WindowState; live: 
                 <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor" aria-hidden="true"><rect x="2" y="2" width="8" height="8" rx="1.5" /></svg>
               </button>
             ) : (
-              <button type="button" aria-label={running ? 'Steer the agent' : 'Send'} title={running ? `Steer (${label('enter')})` : `Send (${label('enter')})`} disabled={!text.trim() || sending} onClick={() => void send(false)}
-                className={cn('relative isolate flex size-8 items-center justify-center overflow-hidden rounded-full bg-message-action text-message-action-foreground shadow-xs transition-all duration-150 enabled:inset-shadow-control-highlight hover:scale-105 hover:bg-message-action-hover active:shadow-none disabled:pointer-events-none disabled:bg-foreground/12 disabled:text-muted-foreground disabled:shadow-none')}>
-                {running ? <CornerUpRightIcon className="size-3.5" /> : <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M7 11.5V2.5M7 2.5L3 6.5M7 2.5L11 6.5" /></svg>}
-              </button>
+              <SendButton steer={running} disabled={!text.trim() || sending} onClick={() => void send(false)} />
             )}
           </div>
         </div>

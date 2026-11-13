@@ -1,5 +1,5 @@
 import { readFileSync, statSync } from 'node:fs';
-import { profileOwner, readRuns, type RunInfo } from 'pi-optchat/files';
+import { attachAgent, profileOwner, readRuns, type AttachedAgent, type RunInfo } from 'pi-optchat/files';
 import { working } from '../agent.ts';
 import type { Agent, Params, Result } from '../protocol.ts';
 import { profileDirectory } from './profiles.ts';
@@ -66,6 +66,25 @@ export class Agents {
   one({ profile, id, after = 0 }: Params<'agent'>): Result<'agent'> {
     // A report in the chat outlives its agent's record, and a click on it asks for that agent: it has no chat, which is no error.
     const run = this.runs(profile).find(run => run.id === id), messages = run ? this.chat(run) : [];
-    return { total: messages.length, messages: messages.slice(after), ...run?.report !== undefined && { report: run.report }, ...run?.ended !== undefined && { ended: run.ended } };
+    // What you told it and it has not read: pi-optchat keeps that in the record, and the chat has it once it is read.
+    const queued = run?.guidance.flatMap(({ state, from, text }) => state === 'queued' && from === 'user' ? [text] : []) ?? [];
+    return { total: messages.length, messages: messages.slice(after), ...run?.report !== undefined && { report: run.report }, ...run?.ended !== undefined && { ended: run.ended }, ...queued.length && { queued } };
   }
+
+  /** One of the profile's agents, in the Pi that has the profile open: only that Pi reaches its agents, and pi-optchat's
+   * `attachAgent` asks it. The app's own Pi or one in a terminal alike, and nothing is kept open: an agent is read from its files. */
+  private async reach<T>({ profile, id }: Params<'stopAgent'>, act: (agent: AttachedAgent) => Promise<T>) {
+    const agent = await attachAgent(profileDirectory(this.home, profile), id, () => {});
+    try { return await act(agent); } finally { agent.close(); }
+  }
+  /** Your message to an agent. One at work is told (`say`), which pi-optchat does not wake an ended one with; an ended one is
+   * resumed with it (`resume`), which pi-optchat refuses for one at work. Which it is, is read from pi-optchat's record of the
+   * agent as it is now. Should the agent end or go on in the moment between, pi-optchat refuses and says so. */
+  async tell({ text, ...agent }: Params<'tellAgent'>): Promise<Result<'tellAgent'>> {
+    const run = this.runs(agent.profile).find(run => run.id === agent.id), resumed = run !== undefined && !working(run);
+    await this.reach(agent, reached => resumed ? reached.resume(text) : reached.say(text));
+    return { resumed };
+  }
+  async interrupt(agent: Params<'interruptAgent'>): Promise<Result<'interruptAgent'>> { await this.reach(agent, reached => reached.interrupt()); return {}; }
+  async stop(agent: Params<'stopAgent'>): Promise<Result<'stopAgent'>> { await this.reach(agent, reached => reached.stop()); return {}; }
 }

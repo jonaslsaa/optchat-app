@@ -59,6 +59,9 @@ export async function startServer({ port = 0, origins = [], ui = join(import.met
   const handlers: { [M in Method]: (params: Params<M>) => Result<M> | Promise<Result<M>> } = {
     agents: params => agents.list(params), agent: params => agents.one(params), github: params => github.list(params),
     config: params => profiles.config(params), configure: params => profiles.configure(params), instruct: params => profiles.instruct(params),
+    // An agent is reached through the Pi that has its profile open, and a message to one is worth starting that Pi for.
+    tellAgent: async params => { await windows.owned(params.profile); return agents.tell(params); },
+    interruptAgent: params => agents.interrupt(params), stopAgent: params => agents.stop(params),
     profiles: () => profiles.list(), createProfile: params => profiles.create(params), history: params => profiles.history(params), view: params => profiles.view(params), zoom: params => profiles.zoom(params), original: params => profiles.original(params),
     windows: () => windows.list(), open: params => windows.open(params), prompt: params => windows.prompt(params), abort: params => windows.abort(params),
     complete: params => windows.complete(params), close: params => windows.close(params), records: params => windows.records(params),

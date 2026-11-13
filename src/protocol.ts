@@ -144,9 +144,21 @@ export const methods = {
   agents: method(Type.Object({ profile: Type.String(), limit: Type.Optional(Type.Integer({ minimum: 0 })) }), Type.Object({ agents: Type.Array(Agent), more: id })),
   /** One agent's chat, from its Pi session file: its messages as Pi wrote them (Pi's docs: session.md), from number `after` on,
    * of `total`. The first is its task, without the view of the profile's memory it was sent with, and images are left out.
-   * `report` is what it reported, whole, and `ended` when it ended. An agent there is no record of has no messages. */
+   * `report` is what it reported, whole, and `ended` when it ended. `queued`: your messages to it that it has not read yet
+   * (`tellAgent`). An agent there is no record of has no messages. */
   agent: method(Type.Object({ profile: Type.String(), id: Type.String(), after: Type.Optional(id) }),
-    Type.Object({ total: id, messages: Type.Array(Type.Unknown()), report: Type.Optional(Type.String()), ended: Type.Optional(Type.Number()) })),
+    Type.Object({ total: id, messages: Type.Array(Type.Unknown()), report: Type.Optional(Type.String()), ended: Type.Optional(Type.Number()), queued: Type.Optional(Type.Array(Type.String())) })),
+  /** Your message to one of a profile's agents, through the Pi that has the profile open (pi-optchat's `attachAgent`), which
+   * is the only one that reaches it: the main window's Pi is started first if no Pi has it. An agent at work reads the message
+   * after its current tool calls; one that has ended goes on with it in its earlier conversation, and its new report goes to
+   * the agent that started it (`resumed`). The server picks by how pi-optchat's record of the agent stands. pi-optchat can
+   * refuse, and the error is its own words: only the main agent's own agents are resumed, not the agents those started. */
+  tellAgent: method(Type.Object({ profile: Type.String(), id: Type.String(), text: Type.String() }), Type.Object({ resumed: Type.Boolean() })),
+  /** Cuts an agent's current step, as Esc does in its terminal view: it goes on at once with your messages it has not read
+   * yet, or else waits (`paused`) for the next one. It ends nothing. */
+  interruptAgent: method(Type.Object({ profile: Type.String(), id: Type.String() }), none),
+  /** Ends an agent and the agents it started. The agent that started it gets a report that says you stopped it. */
+  stopAgent: method(Type.Object({ profile: Type.String(), id: Type.String() }), none),
 
   /** The issues and pull requests the profile's main chat named by their address on github.com, with what GitHub says of
    * them: the open ones first, then the latest named, `limit` of them (30 unless said), and `more` for how many that leaves

@@ -32,11 +32,18 @@ export function ProfilePicker({ state, label, className, children }: { state: St
     </div>
   );
 }
-/** A profile's badge: its letters in its colour, on a tint of that, as T3 Code draws a project's. It is there to tell profiles
- * apart at a glance, and says nothing the name beside it does not. */
+/** A profile's badge: its letters in its colour, on a tint of that. Drawn as T3 Code draws a project's (`ProjectMonogram`): text
+ * in an SVG is set on its baseline, so the capitals stand in the tile's middle, which a centred line of text does not give.
+ * It is there to tell profiles apart at a glance, and says nothing the name beside it does not. */
 function ProfileBadge({ profile }: { profile: string }) {
   const { letters, colour } = badge(profile);
-  return <span aria-hidden="true" className={cn('flex size-4 shrink-0 select-none items-center justify-center rounded-[25%] bg-current/15 font-bold font-mono text-[9px] leading-none', colour)}>{letters}</span>;
+  return (
+    <span aria-hidden="true" className="inline-flex size-4 shrink-0 items-center justify-center">
+      <svg viewBox="0 0 16 16" className={cn('size-full select-none overflow-hidden rounded-[25%] font-mono', colour)} style={{ backgroundColor: 'color-mix(in srgb, currentColor 14%, transparent)' }}>
+        <text x="8" y="10.8" textAnchor="middle" fill="currentColor" fontSize="8.25" fontWeight="700" textLength={letters.length === 1 ? 6 : 12} lengthAdjust="spacingAndGlyphs" textRendering="geometricPrecision">{letters}</text>
+      </svg>
+    </span>
+  );
 }
 /** The one open profile, named in the title bar: with a single profile there is no tab bar, and this is where a second one is opened. */
 export function ProfileName({ state, profile }: { state: State; profile: string }) {

@@ -43,13 +43,13 @@ else {
   });
   app.on('window-all-closed', () => app.quit());
 
-  // Quitting stops every Pi in order, so each saves its memory and frees its profile; quitting again quits at once.
-  let stopping = false;
+  // Quitting stops every Pi in order, so each saves its memory and frees its profile, and is put off until that is done:
+  // also when you quit again meanwhile, as a Cmd+Q held a moment too long does. The server gives a Pi 15 seconds at most.
+  let closing: Promise<void> | undefined, closed = false;
   app.on('before-quit', event => {
-    if (stopping) return;
-    stopping = true;
+    if (closed) return;
     event.preventDefault();
-    void server.close().then(() => app.quit());
+    closing ??= server.close().then(() => { closed = true; app.quit(); });
   });
   for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP'] as const) process.on(signal, () => app.quit());
 }

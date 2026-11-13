@@ -1,13 +1,13 @@
-import { BotIcon, CheckIcon, PanelLeftIcon, SettingsIcon, XIcon } from 'lucide-react';
+import { BotIcon, CheckIcon, GitPullRequestIcon, PanelLeftIcon, SettingsIcon, XIcon } from 'lucide-react';
 import { Fragment, useCallback, useMemo, useState } from 'react';
 import { canComplete, current } from '../window.ts';
-import { AgentsPanel } from './Agents.tsx';
 import { busy } from './agents.ts';
 import { Composer } from './Composer.tsx';
 import { label, useShortcuts } from './keys.ts';
 import { MemoryView } from './Memory.tsx';
 import { NO_TREE } from './memory.ts';
 import { Outside } from './Outside.tsx';
+import { Panel, type Shown } from './Panel.tsx';
 import { ProfileName, Tabs } from './Profiles.tsx';
 import { Settings, Welcome } from './Settings.tsx';
 import { missing } from './Setup.tsx';
@@ -15,16 +15,20 @@ import { Sidebar } from './Sidebar.tsx';
 import { app, mainOf, title, UNTITLED, useApp, type State } from './store.ts';
 import { Timeline } from './Timeline.tsx';
 import { chat, idle, logged, spoken } from './transcript.ts';
-import { Button, cn } from './ui.tsx';
+import { Button, Choice, cn } from './ui.tsx';
 
 /** A window that has not run yet. */
 const NOTHING = idle();
+const SHOWS = [['Chat', false], ['Memory', true]] as const;
+/** How a title bar button looks while what it opens is open. */
+const PRESSED = 'aria-pressed:bg-accent aria-pressed:text-foreground';
 
-/** One profile: its windows on the left, the selected window's chat, and beside the main chat its agents, when they are opened. */
+/** One profile: its windows on the left, the selected window's chat, and beside the main chat its agents or what it named on
+ * GitHub, when they are opened. */
 function Profile({ state, profile, onSettings }: { state: State; profile: string; onSettings: () => void }) {
   const [sidebar, setSidebar] = useState(() => innerWidth >= 768);
-  // The agents are the main chat's: `panel.agent` is the one whose chat is open in the panel.
-  const [panel, setPanel] = useState<{ agent?: string }>(), openAgent = useCallback((agent?: string) => setPanel({ agent }), []);
+  // What the panel beside the main chat shows, while it is open: `panel.agent` is the agent whose chat is open in it.
+  const [panel, setPanel] = useState<Shown>(), openAgent = useCallback((agent?: string) => setPanel({ tab: 'agents', agent }), []);
   // The main chat as the agent reads its memory, in the chat's place. A message sent from there is answered in the chat.
   const [remembering, setMemory] = useState(false), toChat = useCallback(() => setMemory(false), []);
   const windows = state.windows.filter(window => window.profile === profile), ids = windows.map(window => window.id).join(' ');
@@ -44,8 +48,11 @@ function Profile({ state, profile, onSettings }: { state: State; profile: string
   }), [profile, ids, own]);
   // What of the main chat says its agents changed: its Pi started or stopped, an agent was started or ended, a report came.
   const pulse = [window?.status, live.status.optchat, live.messages.length, log?.total].join(' ');
+  // What says a turn of it began or ended, for what reads the whole log: that is too much to do at every message.
+  const turn = [window?.status, log?.total, state.connection].join(' ');
   // A Pi that has stopped counts nothing: its last status line still stands, and is about agents that went with it.
-  const agentsWork = busy(window?.status === 'stopped' ? undefined : live.status.optchat, panel && state.agents[profile]?.agents);
+  // The list is read only while it is in sight, so it says nothing of now behind the GitHub list.
+  const agentsWork = busy(window?.status === 'stopped' ? undefined : live.status.optchat, panel?.tab === 'agents' ? state.agents[profile]?.agents : undefined);
   if (!window) return <p className="m-auto text-muted-foreground text-sm">Opening {profile}…</p>;
   const more = !own && log && log.entries.length > 0 && log.entries[0].i > 0;
   // Nothing has been said here, as far as is known: a window that may have a conversation waits for it rather than say so.
@@ -62,26 +69,20 @@ function Profile({ state, profile, onSettings }: { state: State; profile: string
           {own && <span className="shrink-0 rounded-full border px-2 py-0.5 text-2xs text-muted-foreground">{window.completed ? 'Completed' : 'Connected window'}</span>}
           <span className="flex-1" />
           {!own && (
-            <div role="radiogroup" aria-label="What the page shows" title={`Chat or memory view (${label('alt+m')})`} className="flex shrink-0 rounded-[var(--control-radius)] border bg-muted/50 p-0.5">
-              {/* The browser's own radio buttons, for its arrow keys; only their labels are drawn. */}
-              {([['Chat', false], ['Memory', true]] as const).map(([name, on]) => (
-                <label key={name} className={cn('flex h-5.5 items-center rounded-[calc(var(--control-radius)-2px)] px-2 text-xs has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring', memory === on ? 'bg-background font-medium text-foreground shadow-xs' : 'text-muted-foreground hover:text-foreground')}>
-                  <input type="radio" name={`shows-${profile}`} className="sr-only" checked={memory === on} onChange={() => setMemory(on)} />{name}
-                </label>
-              ))}
-            </div>
+            <Choice label="What the page shows" name={`shows-${profile}`} title={`Chat or memory view (${label('alt+m')})`} options={SHOWS} value={memory} onChange={setMemory} />
           )}
           {canComplete(window) && <Button variant="outline" title="Complete: hand this conversation to the main chat" onClick={() => void app.complete(window.id)}><CheckIcon />Complete</Button>}
           {!own && (
-            <Button variant="ghost-muted" size="icon-sm" aria-label="Agents" title={agentsWork ? 'Agents: some are working' : 'Agents'} aria-pressed={panel !== undefined} onClick={() => setPanel(panel ? undefined : {})}>
+            <Button variant="ghost-muted" size="icon-sm" aria-label="Agents" title={agentsWork ? 'Agents: some are working' : 'Agents'} aria-pressed={panel?.tab === 'agents'} className={PRESSED} onClick={() => setPanel(panel?.tab === 'agents' ? undefined : { tab: 'agents' })}>
               <BotIcon />{agentsWork && <span className="absolute top-0.5 right-0.5 size-1.5 rounded-full bg-sky-500 dark:bg-sky-300/80" />}
             </Button>
           )}
+          {!own && <Button variant="ghost-muted" size="icon-sm" aria-label="GitHub" title="GitHub: pull requests and issues" aria-pressed={panel?.tab === 'github'} className={PRESSED} onClick={() => setPanel(panel?.tab === 'github' ? undefined : { tab: 'github' })}><GitPullRequestIcon /></Button>}
           <Button variant="ghost-muted" size="icon-sm" aria-label="Settings" title="Settings" onClick={onSettings}><SettingsIcon /></Button>
         </header>
         <Fragment key={window.id}>
           {/* An empty window says what it is, with the composer under it in the middle of the page, as T3 Code's new thread does. */}
-          {memory ? <MemoryView tree={state.memory[profile] ?? NO_TREE} profile={profile} window={window} pulse={`${window.status} ${log?.total} ${state.connection}`} /> : fresh ? (
+          {memory ? <MemoryView tree={state.memory[profile] ?? NO_TREE} profile={profile} window={window} pulse={turn} /> : fresh ? (
             <div className="flex min-h-0 flex-1 flex-col items-center justify-end gap-2 px-6 pb-7 text-center">
               <h2 className="max-w-full truncate font-normal text-2xl tracking-tight sm:text-3xl">{!own ? profile : window.completed ? 'Completed' : 'New connected window'}</h2>
               <p className="max-w-xl text-balance text-muted-foreground text-sm">
@@ -93,7 +94,7 @@ function Profile({ state, profile, onSettings }: { state: State; profile: string
           {fresh && !memory && <div className="flex-[1.6]" />}
         </Fragment>
       </main>
-      {panel && !own && <AgentsPanel state={state} profile={profile} agent={panel.agent} pulse={pulse} outside={window.outside !== undefined} onAgent={openAgent} onClose={() => setPanel(undefined)} />}
+      {panel && !own && <Panel state={state} profile={profile} shown={panel} pulse={pulse} turn={turn} outside={window.outside !== undefined} onShow={setPanel} />}
     </div>
   );
 }

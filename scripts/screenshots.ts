@@ -7,7 +7,7 @@ import { startServer } from '../src/server/server.ts';
 // pi-optchat's own lock, which only Pi takes: here it stands for a Pi in a terminal.
 import { describeOwner, lockProfile } from '../node_modules/pi-optchat/dist/profiles.js';
 import { createProfile } from '../test/support.ts';
-import { agents, demo, remember, seed, TEAM } from './seed.ts';
+import { agents, demo, remember, seed, SHIPPED, SHIPPING, TEAM } from './seed.ts';
 
 /** `npm run screenshots [directory] [--dark]`: a PNG of every main state of the UI, in /tmp/optchat-app-shots unless a directory
  * is named, and all of them in dark mode with `--dark`. It builds the UI, serves it against throwaway profiles under /tmp with
@@ -35,6 +35,12 @@ seed(createProfile(home, 'notes'), 2, NOW);
 const long = createProfile(home, 'long');
 seed(long, 95, NOW, undefined, 40 * 60_000);
 remember(long);
+// A chat that names issues and pull requests, and a GitHub CLI that is not signed in yet.
+seed(createProfile(home, 'ship'), SHIPPING.length, NOW, SHIPPING);
+const gh = { command: process.execPath, args: [join(import.meta.dirname, '../test/fake-gh.ts')] }, github = (state: object) => writeFileSync(join(home, 'gh', 'gh.json'), JSON.stringify(state));
+process.env.FAKE_GH_HOME = join(home, 'gh');
+mkdirSync(join(home, 'gh'));
+github({ items: {}, signedOut: true });
 writeFileSync(join(home, 'fake-pi.json'), JSON.stringify(demo(NOW)));
 process.env.FAKE_PI_SCRIPT = join(home, 'fake-pi.json');
 mkdirSync(out, { recursive: true });
@@ -49,7 +55,7 @@ writeFileSync(join(home, 'pi', 'pi-optchat', 'package.json'), JSON.stringify({ n
 writeFileSync(join(home, 'pi', 'state.json'), JSON.stringify({ version: '1.5.2', providers: ['anthropic', 'openai'], packages: { 'npm:pi-optchat': join(home, 'pi', 'pi-optchat') } }));
 
 await build({ logLevel: 'warn' });
-const server = await startServer({ home, app: join(home, 'app'), cwd: home, pi });
+const server = await startServer({ home, app: join(home, 'app'), cwd: home, pi, gh });
 // A machine with nothing on it yet: no Pi, no profile.
 mkdirSync(join(home, 'new'));
 const fresh = await startServer({ home: join(home, 'new'), app: join(home, 'new', 'app'), cwd: home, pi: { command: join(home, 'no-such-pi'), args: [] }, npm: { command: process.execPath, args: [join(import.meta.dirname, '../test/fake-npm.ts')] },
@@ -234,4 +240,26 @@ async function pictures(browser: Browser, control: Client) {
   await slim.keyboard.press('Alt+m');
   await slim.locator('[data-line]').first().waitFor();
   await shot(slim, '32-memory-narrow');
+
+  // What the chat named on GitHub, beside it. The GitHub CLI is not signed in at first: the list is there, and says so.
+  const ship = await open(['ship']);
+  await ship.getByRole('button', { name: 'GitHub' }).click();
+  await ship.getByText('gh auth login').waitFor();
+  await shot(ship, '33-github-signed-out');
+  github({ items: SHIPPED });
+  await ship.getByRole('button', { name: 'Check again' }).click();
+  await ship.getByText('Release notes for 0.2.0').waitFor();
+  await shot(ship, '34-github');
+  const shade = await open(['ship'], { dark: true });
+  await shade.getByRole('button', { name: 'GitHub' }).click();
+  await shade.getByText('Release notes for 0.2.0').waitFor();
+  await shot(shade, '35-github-dark');
+  const thin = await open(['ship'], { width: 420, height: 800 });
+  await thin.getByRole('button', { name: 'GitHub' }).click();
+  await thin.getByText('Release notes for 0.2.0').waitFor();
+  await shot(thin, '36-github-narrow');
+  // A chat that named none.
+  await empty.getByRole('button', { name: 'GitHub' }).click();
+  await empty.getByText('No pull requests or issues yet').waitFor();
+  await shot(empty, '37-github-empty');
 }

@@ -24,7 +24,7 @@ Status: the local server ([docs/server.md](docs/server.md)) and a first usable U
 ## Decisions so far
 
 - **Profiles open lazily.** History is read from disk, so a main window shows at once with no Pi process running. Pi starts the first time you type in that profile.
-- **The GitHub list is rebuilt from the chat log**, so it survives a restart without its own storage. Only status (open, merged, CI) is fetched, through `gh`, and only for open items.
+- **The GitHub list is rebuilt from the chat log**, so it survives a restart without its own storage. Only status (open, merged, CI) is fetched, through `gh`: once for each item, and again only for those not merged or closed.
 - **Tracking an issue or PR** (poll every five minutes, tell the main agent when it changes) comes after the first version.
 
 ## Build order
@@ -35,7 +35,7 @@ Status: the local server ([docs/server.md](docs/server.md)) and a first usable U
 4. ~~Setup: the app's settings, installing Pi and pi-optchat from the app, and a profile a terminal already has open.~~ Done ([docs/setup.md](docs/setup.md)). Logging in to a model from the app is there too (macOS).
 5. The agents panel. Its first part is done: the main chat's agents, live, and each one's chat to read ([docs/ui.md](docs/ui.md#agents)). Steering, stopping and resuming one from the panel are next.
 6. The clickable memory tree. Its first part is done: the main chat as the agent reads it, every line opening down to its messages ([docs/ui.md](docs/ui.md#memory-view)). Searching it and changing it are next.
-7. The GitHub list, then tracking.
+7. The GitHub list. Its first part is done: the issues and pull requests the main chat named by link, with how they stand ([docs/ui.md](docs/ui.md#github)). Tracking them is next.
 8. The Electron shell around the same page.
 
 ## Open

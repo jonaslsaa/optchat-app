@@ -10,6 +10,11 @@ export function temporaryHome() {
   process.on('exit', () => rmSync(home, { recursive: true, force: true }));
   return home;
 }
+/** An item as GitHub's GraphQL answers for it, for the fake `gh` (`fake-gh.ts`): a pull request, with how its checks stand
+ * and what its review came to, and an issue. */
+export const pullRequest = (title: string, state: 'OPEN' | 'CLOSED' | 'MERGED', { isDraft = false, reviewDecision = null, checks }: { isDraft?: boolean; reviewDecision?: string | null; checks?: string } = {}) =>
+  ({ __typename: 'PullRequest', title, state, isDraft, reviewDecision, commits: { nodes: [{ commit: { statusCheckRollup: checks ? { state: checks } : null } }] } });
+export const issue = (title: string, state: 'OPEN' | 'CLOSED') => ({ __typename: 'Issue', title, state });
 /** A profile as pi-optchat creates one. Cheap models, so a live turn costs next to nothing. */
 export function createProfile(home: string, name: string) {
   const directory = join(home, 'profiles', name);

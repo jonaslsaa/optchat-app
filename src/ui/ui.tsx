@@ -33,6 +33,19 @@ export function Kbd({ className, ...props }: ComponentProps<'kbd'>) {
 export function Spinner({ className }: { className?: string }) {
   return <LoaderCircleIcon aria-label="Working" className={cn('size-3.5 motion-safe:animate-spin', className)} />;
 }
+/** A choice between a few things that are all in sight. The browser's own radio buttons, for its arrow keys; only their
+ * labels are drawn. */
+export function Choice<T extends string | boolean>({ label, name, title, options, value, onChange }: { label: string; name: string; title?: string; options: readonly (readonly [text: string, value: T])[]; value: T; onChange: (value: T) => void }) {
+  return (
+    <div role="radiogroup" aria-label={label} title={title} className="flex shrink-0 rounded-[var(--control-radius)] border bg-muted/50 p-0.5">
+      {options.map(([text, option]) => (
+        <label key={text} className={cn('flex h-5.5 items-center rounded-[calc(var(--control-radius)-2px)] px-2 text-xs has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring', value === option ? 'bg-background font-medium text-foreground shadow-xs' : 'text-muted-foreground hover:text-foreground')}>
+          <input type="radio" name={name} className="sr-only" checked={value === option} onChange={() => onChange(option)} />{text}
+        </label>
+      ))}
+    </div>
+  );
+}
 /** The dot that says what a window is doing. */
 export function StatusDot({ tone, pulse = false }: { tone: 'working' | 'failed'; pulse?: boolean }) {
   const colour = { working: 'bg-sky-500 dark:bg-sky-300/80', failed: 'bg-red-500 dark:bg-red-300/90' }[tone];

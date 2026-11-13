@@ -18,6 +18,14 @@ export type Message = Entry;
  * keeps it. No `text` means its summary is not built yet. `from` and `to` are the dates of its earliest and latest message. */
 export const Line = Type.Object({ id, n: Type.Integer({ minimum: 1 }), text: Type.Optional(Type.String()), from: Type.String(), to: Type.String() });
 export type Line = Static<typeof Line>;
+/** A message that a search found: message `id`, with who said it (`kind`), when (`date`) and whether it is `imported` history,
+ * and the stretch of it around where it first says what was searched for: `lead`, then the `match` as the message writes it,
+ * then `rest`. A stretch that is cut from more begins or ends with an ellipsis. */
+export const Hit = Type.Object({
+  id, kind: Type.Unsafe<Entry['kind']>(Type.String()), date: Type.String(), imported: Type.Optional(Type.Boolean()),
+  lead: Type.String(), match: Type.String(), rest: Type.String(),
+});
+export type Hit = Static<typeof Hit>;
 
 /** A record Pi wrote in RPC mode, passed through as it is: a session event (`agent_start`, `message_update`, `tool_execution_end`,
  * ...) or an `extension_ui_request`. Pi's docs (rpc.md, json.md, rpc-extension-ui.md) define them; the server reads only what tells it a window's state. */
@@ -151,6 +159,10 @@ export const methods = {
   /** Message `id` as it was said, under a line of one message. A tool call comes with what it printed, and what a tool
    * printed with its call, since the chat draws the two as one row. */
   original: method(Type.Object({ profile: Type.String(), id }), Type.Object({ messages: Type.Array(Message) })),
+  /** The messages that contain `text`, as the agent's own `search` tool finds them (pi-optchat's `Memory.search`): the messages
+   * as they were said, never their summaries nor a logged zoom or search, in any case, newest first. `hits` are the newest 20
+   * of those before message `before` (of all, without it), and `more` is how many older ones that leaves. */
+  search: method(Type.Object({ profile: Type.String(), text: Type.String({ minLength: 1 }), before: Type.Optional(id) }), Type.Object({ hits: Type.Array(Hit), more: id })),
 
   /** A profile's subagents, read from disk: those at work, and the newest `limit` of those that have ended (30 unless said);
    * `more` is how many ended ones that leaves out. No Pi is asked, so the list is there whether or not one runs. */

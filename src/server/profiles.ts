@@ -5,6 +5,10 @@ import { createProfile, defaults, fingerprint, listProfiles, loadConfig, memoryD
 import type { Line, Params, Result } from '../protocol.ts';
 
 const PAGE = 50;
+/** How many messages a search answers at a time, which is the agent's own page (pi-optchat's `SEARCH_PAGE`). */
+const FOUND = 20;
+/** How much of a found message is shown, in characters: this much before the match and after it. */
+const LEAD = 40, REST = 160;
 /** The directory of a profile that exists: pi-optchat reads a missing one as an empty memory. */
 export function profileDirectory(home: string, name: string) {
   const directory = profilePath(name, home);
@@ -107,6 +111,20 @@ export class Profiles {
     const memory = await this.memory(profile), { root } = memory;
     if (!root[id]) throw new Error(`No message ${id}: the log has ${root.length}.`);
     return { messages: (pair(memory, id) ?? [id]).map(at => ({ ...root[at], text: memory.text(at) })) };
+  }
+  /** The messages that say `text`, found by pi-optchat's own `search`, a page at a time, each with the stretch around where it
+   * first says it. Lower case is as long as the text it is of for all but a few letters (İ): with one of those before the
+   * match the place is only near, so nothing is marked. */
+  async search({ profile, text, before }: Params<'search'>): Promise<Result<'search'>> {
+    const memory = await this.memory(profile), found = memory.search(text, before), needle = text.toLowerCase();
+    // Half of a character that is two units long is not shown.
+    const whole = (cut: string) => cut.replace(/^[\udc00-\udfff]|[\ud800-\udbff]$/g, '');
+    const hits = found.slice(0, FOUND).map(({ i, kind, date, origin }) => {
+      const said = memory.text(i), lower = said.toLowerCase(), at = lower.indexOf(needle), exact = lower.length === said.length;
+      const from = Math.max(0, at - LEAD), to = exact ? at + needle.length : at, end = Math.min(said.length, to + REST);
+      return { id: i, kind, date, ...origin && { imported: true }, lead: `${from ? '…' : ''}${whole(said.slice(from, at))}`, match: said.slice(at, to), rest: `${whole(said.slice(to, end))}${end < said.length ? '…' : ''}` };
+    });
+    return { hits, more: found.length - hits.length };
   }
   /** An image a message names as `[image <name>]`, straight from its file. */
   image(profile: string, name: string) { return readImage(this.directory(profile), name); }

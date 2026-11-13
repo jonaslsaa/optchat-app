@@ -130,3 +130,25 @@ test('a profile\'s images are served over HTTP', async t => {
   const status = await new Promise(resolve => get({ port: server.port, path: '/images/pictures/0123456789abcdef', headers: { host: 'rebound.example' } }, response => resolve(response.statusCode)));
   assert.equal(status, 404);
 });
+
+test('a search finds the messages that say the text as the agent\'s own search does: newest first, a page at a time, in any case', async () => {
+  const directory = createProfile(home, 'found'), log = join(directory, 'main', '2026-01-01.jsonl');
+  // Fifty messages name the town, and one long one says something else in the middle of itself.
+  writeMemory(directory, 100, i => i === 40 ? `${'before '.repeat(20)}BLÅBÆRSYLTETØY${' after'.repeat(60)}` : i % 2 ? `reply ${i}` : `Vi møtes i Århus, ${i}`);
+  // The agent's own looks into its memory are in the log too, and only copy it.
+  const call = (i: number, kind: string, text: string) => `${JSON.stringify({ i, kind, date: '2026-01-02T00:00:00.000Z', text })}\n`;
+  appendFileSync(log, call(100, 'tool', 'search {"text":"Århus"}') + call(101, 'echo', 'search: 49 messages contain "Århus", newest first'));
+
+  const newest = await profiles.search({ profile: 'found', text: 'århus' });
+  assert.deepEqual([newest.hits.map(hit => hit.id), newest.more], [Array.from({ length: 20 }, (_, k) => 98 - 2 * k), 29]);
+  assert.deepEqual(newest.hits[0], { id: 98, kind: 'user', date: '2026-01-01T00:01:38.000Z', lead: 'Vi møtes i ', match: 'Århus', rest: ', 98' });
+  const older = await profiles.search({ profile: 'found', text: 'århus', before: 60 });
+  assert.deepEqual([older.hits[0].id, older.hits.at(-1)?.id, older.more], [58, 18, 9]);
+  assert.deepEqual((await profiles.search({ profile: 'found', text: 'ÅRHUS', before: 4 })).hits.map(hit => hit.id), [2, 0]);
+
+  // Of a long message, the stretch around where it says it, with the words as the message writes them.
+  const { hits: [long], more } = await profiles.search({ profile: 'found', text: 'blåbærsyltetøy' });
+  assert.deepEqual([long.id, more, long.match], [40, 0, 'BLÅBÆRSYLTETØY']);
+  assert.deepEqual([long.lead, long.rest.length, long.rest.slice(0, 12), long.rest.at(-1)], [`…${'before '.repeat(20).slice(-40)}`, 161, ' after after', '…']);
+  assert.deepEqual(await profiles.search({ profile: 'found', text: 'Aarhus' }), { hits: [], more: 0 });
+});

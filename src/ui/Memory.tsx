@@ -1,15 +1,17 @@
-import { ChevronRightIcon } from 'lucide-react';
+import { ArrowLeftIcon, ChevronRightIcon, SearchIcon, XIcon } from 'lucide-react';
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
-import type { Line, Message, WindowState } from '../protocol.ts';
-import { isOpen, key, polled, since, type Tree } from './memory.ts';
+import type { Hit, Line, Message, WindowState } from '../protocol.ts';
+import { escapes, label, useShortcuts } from './keys.ts';
+import { isOpen, key, listed, polled, since, WHO, type Search, type Tree } from './memory.ts';
 import { NoteRow, ReplyRow, ReportRow, StepRow, UserRow } from './Rows.tsx';
 import { app } from './store.ts';
 import { logged, parts } from './transcript.ts';
-import { cn, Spinner } from './ui.tsx';
+import { Button, cn, Spinner } from './ui.tsx';
 
 /** The memory view: the lines the agent reads its memory as, each opening into the two it was made from, down to the message
- * itself. It is the main chat at another distance, so it stands where the chat does. It only reads: the server reads the
- * profile's files (`view`, `zoom`, `original`), and nothing here changes a memory. */
+ * itself. It is the main chat at another distance, so it stands where the chat does. Its search finds messages as the agent's
+ * own does, and a message that was found opens in the tree, where it is. It only reads: the server reads the profile's files
+ * (`view`, `zoom`, `original`, `search`), and nothing here changes a memory. */
 
 const year = new Date().getFullYear();
 const day = (date: Date) => date.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short', ...date.getFullYear() !== year && { year: 'numeric' } });
@@ -35,7 +37,7 @@ const Original = memo(function Original({ messages, profile }: { messages: Messa
 });
 /** One line, and under it what it opens into. */
 function TreeLine({ tree, line, profile, heading }: { tree: Tree; line: Line; profile: string; heading: string }) {
-  const open = isOpen(tree, line), halves = tree.under[key(line)], original = tree.originals[line.id];
+  const open = isOpen(tree, line), halves = tree.under[key(line)], original = tree.originals[line.id], found = line.n === 1 && tree.found === line.id;
   // What a line you just opened holds is brought into sight, once it is there: at the end of the view it is under the fold.
   // The line itself stays in sight, where what it holds is taller than the page.
   const under = useRef<HTMLDivElement>(null), asked = useRef(false), there = open && (line.n === 1 ? original : halves) !== undefined;
@@ -45,8 +47,8 @@ function TreeLine({ tree, line, profile, heading }: { tree: Tree; line: Line; pr
   }, [there, open]);
   return (
     <div>
-      <button type="button" data-line aria-expanded={open} onClick={() => { asked.current = !open; void app.toggleLine(profile, line); }}
-        className="flex w-full scroll-mt-10 items-start gap-1.5 rounded-md px-1.5 py-1.5 text-left outline-none hover:bg-accent/60 focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:ring-inset">
+      <button type="button" data-line data-found={found || undefined} aria-current={found || undefined} aria-expanded={open} onClick={() => { asked.current = !open; void app.toggleLine(profile, line); }}
+        className={cn(ROW, 'scroll-mt-10', found && 'bg-primary/8 ring-1 ring-primary/40 ring-inset hover:bg-primary/12')}>
         <ChevronRightIcon className={cn('mt-0.5 size-3.5 shrink-0 text-muted-foreground transition-transform duration-200', open && 'rotate-90')} />
         <span className="min-w-0 flex-1">
           <span className="block text-muted-foreground text-xs tabular-nums">{when(line, heading)} · {line.n === 1 ? `message ${line.id.toLocaleString()}` : `${line.n.toLocaleString()} messages`}</span>
@@ -60,6 +62,42 @@ function TreeLine({ tree, line, profile, heading }: { tree: Tree; line: Line; pr
             : halves ? halves.map(half => <TreeLine key={half.id} tree={tree} line={half} profile={profile} heading={heading} />) : <Reading />}
         </div>
       )}
+    </div>
+  );
+}
+const ROW = 'flex w-full items-start gap-1.5 rounded-md px-1.5 py-1.5 text-left outline-none hover:bg-accent/60 focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:ring-inset';
+/** The arrows walk the lines that are in sight, and open and close the one you are on. */
+function keys(event: KeyboardEvent) {
+  const at = event.target instanceof Element ? event.target.closest<HTMLElement>('[data-line]') : null;
+  if (!at || event.metaKey || event.ctrlKey || event.altKey) return;
+  const lines = [...event.currentTarget.querySelectorAll<HTMLElement>('[data-line]')], open = at.getAttribute('aria-expanded') === 'true';
+  const to = event.key === 'ArrowDown' ? lines[lines.indexOf(at) + 1] : event.key === 'ArrowUp' ? lines[lines.indexOf(at) - 1] : undefined;
+  if (to) to.focus();
+  else if (event.key === 'ArrowRight' && !open || event.key === 'ArrowLeft' && open) at.click();
+  else return;
+  event.preventDefault();
+}
+/** A message a search found: who said it and when, and where it says it. It opens in the tree. */
+function Found({ hit, profile }: { hit: Hit; profile: string }) {
+  const date = new Date(hit.date);
+  return (
+    <button type="button" data-line onClick={() => void app.find(profile, hit.id)} className={ROW}>
+      <span className="min-w-0 flex-1">
+        <span className="block text-muted-foreground text-xs tabular-nums"><span className="font-medium text-foreground">{WHO[hit.kind]}</span> · {day(date)}, {time(date)} · message {hit.id.toLocaleString()}{hit.imported && ' · imported'}</span>
+        <span className="line-clamp-2 text-muted-foreground text-sm leading-relaxed [overflow-wrap:anywhere]">{hit.lead}<mark className="bg-transparent font-semibold text-foreground">{hit.match}</mark>{hit.rest}</span>
+      </span>
+    </button>
+  );
+}
+/** What a search found, newest first, in the tree's place. */
+function Results({ search, profile }: { search: Search; profile: string }) {
+  const { hits, more, text } = search;
+  return (
+    <div role="region" aria-label="Messages found" onKeyDown={keys} className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-y-contain px-3 sm:px-5">
+      <div className="mx-auto w-full min-w-0 max-w-(--chat-content-max-width) pt-2 pb-6">
+        {hits?.map(hit => <Found key={hit.id} hit={hit} profile={profile} />)}
+        {hits && more > 0 && <Button variant="ghost-muted" size="xs" className="ms-1.5 mt-2" onClick={() => void app.search(profile, text, hits.at(-1)?.id)}>Show older ones ({more.toLocaleString()} more)</Button>}
+      </div>
     </div>
   );
 }
@@ -86,30 +124,48 @@ export const MemoryView = memo(function MemoryView({ tree, profile, window, puls
   }, [view]);
   // They go back there when the chat is shown again.
   useEffect(() => () => { if (before instanceof HTMLElement && before.isConnected) before.focus(); }, [before]);
-  // The arrows walk the lines that are in sight, and open and close the one you are on.
-  const keys = (event: KeyboardEvent) => {
-    const at = event.target instanceof Element ? event.target.closest<HTMLElement>('[data-line]') : null;
-    if (!at || event.metaKey || event.ctrlKey || event.altKey) return;
-    const lines = [...event.currentTarget.querySelectorAll<HTMLElement>('[data-line]')], open = at.getAttribute('aria-expanded') === 'true';
-    const to = event.key === 'ArrowDown' ? lines[lines.indexOf(at) + 1] : event.key === 'ArrowUp' ? lines[lines.indexOf(at) - 1] : undefined;
-    if (to) to.focus();
-    else if (event.key === 'ArrowRight' && !open || event.key === 'ArrowLeft' && open) at.click();
-    else return;
-    event.preventDefault();
-  };
+  // A message that was found is brought to the top of the page, with the keys on its line, once the tree is open down to it.
+  const { search, found } = tree, results = listed(tree), box = useRef<HTMLInputElement>(null);
+  useLayoutEffect(() => {
+    const at = found === undefined ? null : scroller.current?.querySelector<HTMLElement>('[data-found]');
+    at?.scrollIntoView({ block: 'start' });
+    at?.focus({ preventScroll: true });
+  }, [found]);
+  useShortcuts(() => ({ 'mod+f': () => { box.current?.focus(); box.current?.select(); } }), []);
+  // Ending the search leaves the keys in its box: what they were on may be gone.
+  const end = () => { void app.search(profile, ''); box.current?.focus(); };
+  const count = (search?.hits?.length ?? 0) + (search?.more ?? 0), matches = `${count.toLocaleString()} ${count === 1 ? 'message' : 'messages'}`;
   // Each line stands under the day its first message was said, which is written once, over the first line of that day.
   const first = view && since(view.lines), days = useMemo(() => view?.lines.map(line => day(new Date(line.from))) ?? [], [view]);
   return (
-    <section aria-label="Memory view" className="flex min-h-0 flex-1 flex-col">
+    <section aria-label="Memory view" onKeyDown={event => { if (search) escapes(event, end); }} className="flex min-h-0 flex-1 flex-col">
       <header className="mx-auto w-full max-w-(--chat-content-max-width) shrink-0 border-border/60 border-b px-4.5 pt-3 pb-3 sm:px-6.5">
-        <h2 className="font-medium text-sm">Memory view</h2>
-        <p className="mt-0.5 text-muted-foreground text-xs leading-relaxed">
+        <div className="flex items-center gap-3">
+          <h2 className="shrink-0 font-medium text-sm">Memory view</h2>
+          <label className="ms-auto flex h-7 w-64 min-w-0 items-center gap-1.5 rounded-[var(--control-radius)] border border-input bg-background px-2 text-muted-foreground shadow-xs/5 focus-within:text-foreground focus-within:ring-2 focus-within:ring-ring dark:bg-input/32">
+            <SearchIcon className="size-3.5 shrink-0" />
+            <input ref={box} type="search" aria-label="Search the memory" title={`Search the messages (${label('mod+f')})`} placeholder="Search messages" value={search?.text ?? ''} spellCheck={false} autoCapitalize="off" autoCorrect="off"
+              onChange={event => void app.search(profile, event.target.value)}
+              onKeyDown={event => { if (event.key === 'ArrowDown' && results) { event.preventDefault(); event.currentTarget.closest('section')?.querySelector<HTMLElement>('[data-line]')?.focus(); } }}
+              className="min-w-0 flex-1 bg-transparent text-foreground text-sm outline-none placeholder:text-muted-foreground [&::-webkit-search-cancel-button]:hidden" />
+            {search && <Button variant="ghost-muted" size="icon-xs" className="-me-1.5 size-5" aria-label="Clear the search" onClick={end}><XIcon className="size-3" /></Button>}
+          </label>
+        </div>
+        {search ? (
+          <p className="mt-0.5 flex min-h-5 items-center text-muted-foreground text-xs leading-relaxed">
+            {!search.hits ? 'Searching…' : found !== undefined
+              ? <Button variant="ghost-muted" size="xs" className="-ms-2" onClick={() => { void app.find(profile); box.current?.focus(); }}><ArrowLeftIcon />Back to the {matches} found</Button>
+              : count ? `${matches} ${count === 1 ? 'contains' : 'contain'} “${search.text}”, newest first. Open one to see it where it is in the tree.` : `No message contains “${search.text}”.`}
+          </p>
+        ) : <p className="mt-0.5 text-muted-foreground text-xs leading-relaxed">
           {!view ? 'Reading the memory…' : !first ? 'No messages yet.'
             : `${view.total.toLocaleString()} messages since ${day(new Date(first))}. The agent reads them as ${view.lines.length.toLocaleString()} lines, ${kilobytes(view.size)} of ${kilobytes(view.budget)} kB.`}
           {first && ' Older messages are folded into summaries: open a line to see the two it was made from, down to the message itself. This is read from the profile\'s files, so it can trail the running chat.'}
-        </p>
+        </p>}
       </header>
-      <div ref={scroller} onKeyDown={keys} className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-y-contain px-3 sm:px-5">
+      {/* The tree stays where it is under what a search found, so that it is as it was when the search ends. */}
+      {search && results && <Results search={search} profile={profile} />}
+      <div ref={scroller} hidden={results} onKeyDown={keys} className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-y-contain px-3 sm:px-5">
         <div className="mx-auto w-full min-w-0 max-w-(--chat-content-max-width) pt-2 pb-6">
           {view?.lines.map((line, at) => (
             <div key={line.id}>

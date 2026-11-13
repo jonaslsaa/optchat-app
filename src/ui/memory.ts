@@ -1,14 +1,20 @@
-import type { Line, Message, Result, WindowState } from '../protocol.ts';
+import type { Hit, Line, Message, Result, WindowState } from '../protocol.ts';
 
+/** A search of the memory: what is searched for, the messages found so far, newest first (none until the first answer is
+ * here), and how many older ones there are to ask for. */
+export interface Search { text: string; hits?: Hit[]; more: number }
 /** A profile's memory view as the page has it: the view as the server last read it, the two lines under each line that was
  * opened and the message under a line of one, and which lines are open. A line is the same line for as long as the memory is
- * the same one, so what was read under one stays right, and a line stays open while the view is read again. Nothing here
- * touches the DOM. */
+ * the same one, so what was read under one stays right, and a line stays open while the view is read again. With a `search`
+ * the messages it found stand in the tree's place, until one of them is opened: `found` is that message, shown in the tree.
+ * Nothing here touches the DOM. */
 export interface Tree {
   view?: Result<'view'>;
   under: Record<string, Line[]>;
   originals: Record<number, Message[]>;
   open: readonly string[];
+  search?: Search;
+  found?: number;
 }
 export const NO_TREE: Tree = { under: {}, originals: {}, open: [] };
 /** A line's name, in pi-optchat's own notation: the `n` messages from `id` on. */
@@ -20,7 +26,19 @@ export function toggled(tree: Tree, line: Line): Tree {
   return { ...tree, open: tree.open.includes(name) ? tree.open.filter(open => open !== name) : [...tree.open, name] };
 }
 /** Whether what is under `line` has been read: its two halves, or the message itself. */
-export const read = (tree: Tree, line: Line) => line.n === 1 ? line.id in tree.originals : key(line) in tree.under;
+export const read = (tree: Tree, line: Pick<Line, 'id' | 'n'>) => line.n === 1 ? line.id in tree.originals : key(line) in tree.under;
+/** Who said a message, by its kind. */
+export const WHO: Record<Hit['kind'], string> = { user: 'You', talk: 'Agent', tool: 'Tool call', echo: 'Tool result', note: 'Note', work: 'Report' };
+/** Whether the messages a search found stand in the tree's place: until one of them is opened. */
+export const listed = (tree: Tree) => tree.search !== undefined && tree.found === undefined;
+/** The lines to open to get to message `id`, outermost first: the line of the view that holds it, then of each line the half
+ * that does, down to the line of the message alone. A line begins at a multiple of its length, so they are known without
+ * being read. None when the view does not reach the message. */
+export function path(lines: readonly Line[], id: number) {
+  const top = lines.find(line => line.id <= id && id < line.id + line.n), down: Pick<Line, 'id' | 'n'>[] = [];
+  for (let n = top?.n ?? 0; n >= 1; n /= 2) down.push({ id: id - id % n, n });
+  return down;
+}
 /** Whether a line in sight waits for its summary, which only a line of one message can: a summary of more is written
  * before the view takes it. */
 export const building = (tree: Tree) => tree.view?.lines.some(line => line.text === undefined) ?? false;

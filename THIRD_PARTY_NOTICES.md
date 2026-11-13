@@ -15,6 +15,7 @@ Parts of the UI come from [T3 Code](https://github.com/pingdotgg/t3code) (commit
 - `src/server/github.ts`: the patterns for where a shell starts a command and where its word ends (`START`, `END`), from `apps/server/src/orchestration-v2/PullRequestSyncReactor.ts`.
 - `src/ui/Mark.tsx`: the Claude and OpenAI marks (`ClaudeAI`, `OpenAI`), from `apps/web/src/components/Icons.tsx`.
 - `src/ui/Model.tsx`, `src/ui/models.ts`: the look and the keys of the model picker (a search over a list, the options beside it), from `apps/web/src/components/chat/ModelPickerContent.tsx`, `ModelListRow.tsx` and `ComposerModelEffort.tsx`, and the order of its search results, after `packages/client-runtime/src/modelSearch.ts`. The components themselves are written here, without Base UI.
+- `src/ui/Memory.tsx`: how a match is marked in what a search found (bold on muted text), from `apps/web/src/components/ThreadSearchMatch.tsx`.
 - `src/ui/GitHub.tsx`: which glyph and colour stand for a pull request's state, its checks and its review, from `apps/web/src/components/pullRequest/pullRequestIcons.tsx` and `pullRequestPresentation.tsx`.
 
 ```

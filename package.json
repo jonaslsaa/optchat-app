@@ -19,7 +19,7 @@
     "screenshots": "node scripts/screenshots.ts",
     "build:desktop": "vite build && vite build -c vite.desktop.config.ts",
     "desktop": "npm run build:desktop && electron .",
-    "dist": "npm run build:desktop && electron-builder --mac"
+    "dist": "npm run build:desktop && electron-builder --mac --publish never"
   },
   "dependencies": {
     "lucide-react": "^1.72.0",

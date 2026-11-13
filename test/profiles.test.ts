@@ -121,7 +121,7 @@ test('a profile\'s images are served over HTTP', async t => {
   const directory = createProfile(home, 'pictures'), png = Buffer.from('not really a png');
   mkdirSync(join(directory, 'images'));
   writeFileSync(join(directory, 'images', '0123456789abcdef.png'), png);
-  const server = await startServer({ home });
+  const server = await startServer({ home, cwd: home });
   t.after(() => server.close());
   const image = await fetch(`http://127.0.0.1:${server.port}/images/pictures/0123456789abcdef`);
   assert.deepEqual([image.status, image.headers.get('content-type'), Buffer.from(await image.arrayBuffer())], [200, 'image/png', png]);

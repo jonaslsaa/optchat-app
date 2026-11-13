@@ -1,5 +1,5 @@
-import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { hostname } from 'node:os';
+import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
+import { homedir, hostname } from 'node:os';
 import { join } from 'node:path';
 // pi-optchat's own lock, which a Pi holds while it has a profile open.
 import { describeOwner, lockProfile } from 'pi-optchat/files';
@@ -20,7 +20,11 @@ import { clamp, levels, type Thinking } from '../src/models.ts';
  *   `bare` is a Pi without pi-optchat, `old` one whose pi-optchat is from before 0.11.9 and names no role, and in `noisy`
  *   another extension fails.
  * - It runs on a model, as Pi does: the one the profile keeps as its main chat's when it owns the profile, else the first it
- *   lists. `set_model` and `set_thinking_level` change it, and an owner keeps the pick in the profile, as pi-optchat does. */
+ *   lists. `set_model` and `set_thinking_level` change it, and an owner keeps the pick in the profile, as pi-optchat does.
+ * - It writes nowhere but in its profile and FAKE_PI_HOME, and in the file FAKE_PI_STOPPED names, where each one with a
+ *   profile that is asked to stop says so, in the order they did. It does not run in your home folder: a test or a screenshot run that starts it
+ *   there has forgotten to say where (`cwd`), and fails. */
+if (process.cwd() === realpathSync(homedir())) { console.error('The fake Pi was started in your home folder. Give the server a `cwd`.'); process.exit(70); }
 /** Pi outside a chat, as the app's setup asks it: its version, its packages (`list`, `install`, `update`), and the models it has
  * credentials for. FAKE_PI_HOME stands for Pi's own folder: `state.json` there says which Pi this is, and `install` puts a
  * package under it as Pi does. Without it this is Pi 1.5.2 with no packages and no login. */
@@ -257,6 +261,6 @@ process.stdin.on('data', chunk => {
 });
 process.stdin.on('end', () => {
   if (profile === 'stuck') { setInterval(() => {}, 1000); return; }
-  appendFileSync('stopped-in-order', `${profile} ${joins ? 'window' : 'owner'}\n`);
+  if (process.env.FAKE_PI_STOPPED && process.argv.includes('--optchat-profile')) appendFileSync(process.env.FAKE_PI_STOPPED, `${profile} ${joins ? 'window' : 'owner'}\n`);
   process.exit(0);
 });

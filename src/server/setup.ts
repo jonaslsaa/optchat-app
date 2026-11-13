@@ -1,6 +1,5 @@
 import { spawn } from 'node:child_process';
 import { accessSync, constants, mkdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs';
-import { homedir } from 'node:os';
 import { basename, delimiter, dirname, isAbsolute, join, resolve, sep } from 'node:path';
 import { stripVTControlCharacters } from 'node:util';
 import { Type } from 'typebox';
@@ -23,6 +22,9 @@ export interface Launch { command: string; args: readonly string[] }
 export interface SetupOptions {
   /** The app's own folder. The Pi the app installs goes in `pi` under it, and never anywhere else. */
   app: string;
+  /** Where a Pi that is only asked something runs (its version, its packages, its models): the folder the server's windows
+   * run in while the settings name none. */
+  cwd: string;
   /** The Pi to look for first: yours, on the PATH. */
   pi?: Launch;
   /** The npm that installs Pi into the app's folder. */
@@ -93,8 +95,8 @@ export class Setup {
   private job?: State['job'];
   private pushing?: ReturnType<typeof setTimeout>;
   private readonly closing = new AbortController();
-  constructor({ app, push, opener, pi = { command: 'pi', args: [] }, npm = { command: 'npm', args: [] } }: SetupOptions) {
-    this.options = { app, push, pi, npm, opener };
+  constructor({ app, cwd, push, opener, pi = { command: 'pi', args: [] }, npm = { command: 'npm', args: [] } }: SetupOptions) {
+    this.options = { app, cwd, push, pi, npm, opener };
     this.managed = { command: join(app, 'pi', 'node_modules', '.bin', 'pi'), args: [] };
   }
   /** The Pi a window runs: yours if you have one, else the one the app installed. */
@@ -190,7 +192,7 @@ export class Setup {
     return fresh || !before ? this.checked = (async () => { await before; return this.check(); })() : before;
   }
   /** One of Pi's commands that ends by itself, and everything it printed. */
-  private ask(launch: Launch, args: string[], timeout: number) { return run(launch, args, { cwd: homedir(), timeout, signal: this.closing.signal }); }
+  private ask(launch: Launch, args: string[], timeout: number) { return run(launch, args, { cwd: this.options.cwd, timeout, signal: this.closing.signal }); }
   private async find(): Promise<Found | undefined> {
     for (const [{ command, args }, listed] of [[this.options.pi, true], [this.managed, false]] as const) {
       const path = where(command);
@@ -243,6 +245,6 @@ export class Setup {
     return { state: 'missing', installable: true, message: 'Not installed in this Pi. Install it here, or in a terminal:', command: shown(named, ['install', OPTCHAT]) };
   }
   /** The models Pi can use and what it runs on by itself, asked of a Pi started for the question (`catalog`). */
-  async catalog() { return catalog(await this.launch(), this.closing.signal); }
-  private models(launch: Launch) { return catalog(launch, this.closing.signal).then(({ models }) => models, () => undefined); }
+  async catalog() { return catalog(await this.launch(), this.options.cwd, this.closing.signal); }
+  private models(launch: Launch) { return catalog(launch, this.options.cwd, this.closing.signal).then(({ models }) => models, () => undefined); }
 }

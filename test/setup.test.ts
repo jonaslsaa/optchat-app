@@ -17,7 +17,7 @@ const nowhere = { command: join(home, 'no-such-pi'), args: [] };
 
 /** A server with its own app folder and its own fake Pi folder (which says which Pi the fake one is), and a client that keeps
  * the setups it was pushed. */
-async function setup(t: TestContext, options: ServerOptions = {}, pi?: object) {
+async function setup(t: TestContext, options: Partial<ServerOptions> = {}, pi?: object) {
   const app = mkdtempSync(join(home, 'app-')), folder = process.env.FAKE_PI_HOME = mkdtempSync(join(home, 'pi-'));
   if (pi) writeFileSync(join(folder, 'state.json'), JSON.stringify(pi));
   // A window's Pi gets flags, and after flags Pi reads a word such as `list` as a message to the agent: the setup's commands
@@ -245,4 +245,11 @@ test('an install that says all is well and leaves nothing there has failed', asy
   assert.equal(pi.state, 'missing');
   assert.partialDeepStrictEqual(job, { what: 'pi', state: 'failed' });
   assert.match(job?.line ?? '', /ran to its end, but what it was to install is not there/);
+});
+
+test('the fake Pi does not run in a home folder, so a test that forgot where its server runs fails and writes nothing there', () => {
+  // Its own home for the question, so nothing is started in yours.
+  const mine = mkdtempSync(join(home, 'home-'));
+  const { status, stderr } = spawnSync(process.execPath, [join(import.meta.dirname, 'fake-pi.ts'), '--version'], { cwd: mine, env: { ...process.env, HOME: mine }, encoding: 'utf8' });
+  assert.deepEqual([status, stderr.trim()], [70, 'The fake Pi was started in your home folder. Give the server a `cwd`.']);
 });

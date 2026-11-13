@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { request } from 'node:http';
 import { join } from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
@@ -17,7 +17,7 @@ for (const name of ['work', 'busy', 'stuck', 'mute', 'bare', 'old', 'noisy']) cr
 const fake = { command: process.execPath, args: [join(import.meta.dirname, 'fake-pi.ts')] };
 
 /** A server over the fake Pi, and a client that remembers what it was pushed. */
-async function setup(t: TestContext, options: ServerOptions = {}) {
+async function setup(t: TestContext, options: Partial<ServerOptions> = {}) {
   const cwd = mkdtempSync(join(home, 'cwd-'));
   const server = await startServer({ home, cwd, pi: fake, ...options });
   t.after(() => server.close());
@@ -232,7 +232,8 @@ test('a connected window starts the profile\'s owner first, joins it, and Comple
 
 test('closing the server takes no more requests, stops connected windows before their owner, and kills a Pi that will not stop', async t => {
   const { server, cwd, request } = await setup(t, { grace: 300 });
-  const pids: number[] = [];
+  const pids: number[] = [], stopped = process.env.FAKE_PI_STOPPED = join(home, 'stopped-in-order');
+  t.after(() => { delete process.env.FAKE_PI_STOPPED; });
   for (const params of [{ profile: 'work', role: 'connected' }, { profile: 'stuck' }] as const) {
     const { window } = await request('open', params);
     await request('prompt', { window: window.id, text: 'wait for me' });
@@ -243,7 +244,8 @@ test('closing the server takes no more requests, stops connected windows before 
   const closed = server.close();
   await assert.rejects(request('open', { profile: 'work' }), /server is closing/);
   await closed;
-  assert.equal(readFileSync(join(cwd, 'stopped-in-order'), 'utf8'), 'work window\nwork owner\n');
+  assert.equal(readFileSync(stopped, 'utf8'), 'work window\nwork owner\n');
+  assert.deepEqual(readdirSync(cwd), [], 'the fake Pi writes nothing where it runs');
   for (const pid of pids) assert.throws(() => process.kill(pid, 0), { code: 'ESRCH' });
   await assert.rejects(request('windows', {}), /connection to the server closed/);
 });

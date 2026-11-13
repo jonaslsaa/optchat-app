@@ -1,6 +1,5 @@
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import { createServer, type IncomingMessage } from 'node:http';
-import { homedir } from 'node:os';
 import { extname, join, resolve, sep } from 'node:path';
 import type { AddressInfo } from 'node:net';
 import { dataHome } from 'pi-optchat/files';
@@ -19,8 +18,9 @@ export interface ServerOptions extends Partial<Pick<WindowsOptions, 'home' | 'gr
   port?: number;
   /** The app's own folder: its settings, and the Pi it installs. */
   app?: string;
-  /** Where windows run while the settings name no folder. */
-  cwd?: string;
+  /** Where windows run while the settings name no folder, and a Pi that is only asked something (its version, its models).
+   * It has no default, so a test cannot forget it and start something in your home folder: the app itself names that. */
+  cwd: string;
   /** How Pi is run: yours on the PATH unless named. Where there is none, the Pi the app installed is run. */
   pi?: Launch;
   /** More arguments for a window's Pi, such as the cheap model the live tests name. Only a window's: after them, a word like
@@ -44,7 +44,7 @@ const loopback = (url: string) => { try { return LOOPBACK.includes(new URL(url).
 
 /** Starts the app's server on this machine only: the protocol of `protocol.ts` on a WebSocket at `/ws`, a profile's images at
  * `/images/<profile>/<name>`, and the UI's page everywhere else. `close` stops every Pi it started and waits for them. */
-export async function startServer({ port = 0, origins = [], ui = join(import.meta.dirname, '../../dist/ui'), home = dataHome(), app = appHome(), cwd = homedir(), pi, flags = [], npm, gh, opener, grace = 15_000 }: ServerOptions = {}) {
+export async function startServer({ port = 0, origins = [], ui = join(import.meta.dirname, '../../dist/ui'), home = dataHome(), app = appHome(), cwd, pi, flags = [], npm, gh, opener, grace = 15_000 }: ServerOptions) {
   ui = resolve(ui);
   home = resolve(home); // Pi runs in each window's directory, and has to find the same profiles from there.
   app = resolve(app); // And npm runs in the app's folder, where a path that is not whole would be another folder.
@@ -53,7 +53,7 @@ export async function startServer({ port = 0, origins = [], ui = join(import.met
   const send = (socket: WebSocket, message: ServerMessage) => { if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify(message)); };
   const push = (push: Push) => { for (const socket of sockets.clients) send(socket, push); };
   let settings = readSettings(app);
-  const setup = new Setup({ app, pi, npm, opener, push: setup => push({ push: 'setup', setup }) });
+  const setup = new Setup({ app, cwd, pi, npm, opener, push: setup => push({ push: 'setup', setup }) });
   // A window runs in the folder the settings name, unless that folder is gone since it was kept.
   const windows = new Windows({ home, grace, push, cwd: () => settings.cwd && isDirectory(settings.cwd) ? settings.cwd : cwd, pi: async () => { const { command, args } = await setup.launch(); return { command, args: [...args, ...flags] }; }, catalog: () => setup.catalog() });
   const handlers: { [M in Method]: (params: Params<M>) => Result<M> | Promise<Result<M>> } = {

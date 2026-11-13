@@ -1,4 +1,5 @@
 import { app, BrowserWindow, dialog, shell } from 'electron';
+import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { startServer } from '../server/server.ts';
 import { terminal } from '../server/setup.ts';
@@ -18,7 +19,7 @@ if (!app.requestSingleInstanceLock()) app.quit();
 else {
   // Opened from the Finder, the app has launchd's environment. Run from a terminal it has yours already, and what you typed stays.
   if (app.isPackaged) Object.assign(process.env, await loginEnvironment());
-  const options = { ui: join(import.meta.dirname, '../ui'), opener: terminal() };
+  const options = { ui: join(import.meta.dirname, '../ui'), cwd: homedir(), opener: terminal() };
   const server = await startServer({ ...options, port: PORT }).catch(() => startServer(options));
   let updates: ReturnType<typeof updater> | undefined;
   // Electron is ready only once this file has run to its end, so the window is not waited for here.

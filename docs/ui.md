@@ -29,13 +29,13 @@ npm run screenshots       # a PNG of every main state, in /tmp/optchat-app-shots
 | --- | --- |
 | Enter / Shift+Enter | Send (or steer) / new line |
 | ⌘Enter | Queue for after the run |
-| Esc | Stop the run; in the settings, close them; with the panel lying over the chat, close it, and the run goes on; in a search of the memory, end it, and the run goes on |
+| Esc | Stop the run; in the settings, close them; with the panel lying over the chat, close it, and the run goes on; in a search of the memory, end it, and in its box with nothing in it do nothing: either way the run goes on |
 | ⌘⇧O | New window |
 | ⌥1 … ⌥9 | Go to a window |
 | ⌘B | Show or hide the sidebar |
 | ⌥M | The main chat, or its memory view |
 | ↑ ↓ / → ← | In the memory view: the line above or below / open or close it |
-| ⌘F | In the memory view: search it. ↓ goes to what was found, Enter opens a message in the tree, Esc ends the search |
+| ⌘F | In the memory view: search it. ↓ goes to what was found and ↑ from the first of it back to the box, Enter opens a message in the tree, Esc ends the search |
 | ⌘, | Settings |
 
 ## How it is built

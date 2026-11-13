@@ -288,10 +288,9 @@ test('what a search found stands in the tree\'s place, and a message of it opens
   const { app } = page(t);
   await app.start(server.url);
   const memory = () => app.state.memory.sought;
-  await app.readMemory('sought');
+  // The search is typed before the view has been read: its answer, which comes after the view, is kept.
+  await Promise.all([app.readMemory('sought'), app.search('sought', 'NEEDLE')]);
   await app.toggleLine('sought', memory().view!.lines[0]);
-
-  await app.search('sought', 'NEEDLE');
   assert.deepEqual(memory().search, { text: 'NEEDLE', answer: { of: 'NEEDLE', hits: [{ id: 37, kind: 'talk', date: '2026-01-01T00:00:37.000Z', lead: 'The ', match: 'needle', rest: ' is here.' }], more: 0 } });
   assert.deepEqual([listed(memory()), memory().open], [true, ['0+32']]);
   // Opened, it is in the tree: each line from the view's down to its own is open, with what is under it read.
@@ -301,10 +300,13 @@ test('what a search found stands in the tree\'s place, and a message of it opens
   assert.deepEqual([listed(memory()), memory().found, memory().open], [false, 37, ['0+32', ...down]]);
   assert.deepEqual(Object.keys(memory().under).sort(), ['0+32', ...down.slice(0, -1)].sort());
   assert.deepEqual(memory().originals[37].map(message => message.text), ['The needle is here.']);
-  // Back at what was found, and then with the search ended: the tree is there, as it was left.
+  // Back at what was found, and then with the search ended while a message of it was still being opened: the tree is there,
+  // as it was left, and nothing in it is marked.
   await app.find('sought');
   assert.deepEqual([listed(memory()), memory().found], [true, undefined]);
+  const opening = app.find('sought', 37);
   await app.search('sought', '');
+  await opening;
   assert.deepEqual([memory().search, memory().found, memory().open], [undefined, undefined, ['0+32', ...down]]);
 
   // The older ones are asked for after those that are here, and asked for twice they are still added once.

@@ -133,11 +133,17 @@ export const MemoryView = memo(function MemoryView({ tree, profile, window, puls
   useShortcuts(() => ({ 'mod+f': () => { box.current?.focus(); box.current?.select(); } }), []);
   // Ending the search leaves the keys in its box: what they were on may be gone.
   const end = () => { void app.search(profile, ''); box.current?.focus(); };
+  // Esc ends a search from anywhere in the view, and in the box it is taken with no search on too: ending one leaves the
+  // keys there, and the next Esc is not meant for the agent. From the first message found, ↑ goes back to the box.
+  const keyed = (event: KeyboardEvent) => {
+    if (search || event.target === box.current) escapes(event, end);
+    if (event.key === 'ArrowUp' && results && !event.defaultPrevented && event.target !== box.current) { event.preventDefault(); box.current?.focus(); }
+  };
   const answer = search?.answer, count = (answer?.hits.length ?? 0) + (answer?.more ?? 0), matches = `${count.toLocaleString()} ${count === 1 ? 'message' : 'messages'}`;
   // Each line stands under the day its first message was said, which is written once, over the first line of that day.
   const first = view && since(view.lines), days = useMemo(() => view?.lines.map(line => day(new Date(line.from))) ?? [], [view]);
   return (
-    <section aria-label="Memory view" onKeyDown={event => { if (search) escapes(event, end); }} className="flex min-h-0 flex-1 flex-col">
+    <section aria-label="Memory view" onKeyDown={keyed} className="flex min-h-0 flex-1 flex-col">
       <header className="mx-auto w-full max-w-(--chat-content-max-width) shrink-0 border-border/60 border-b px-4.5 pt-3 pb-3 sm:px-6.5">
         <div className="flex items-center gap-3">
           <h2 className="shrink-0 font-medium text-sm">Memory view</h2>

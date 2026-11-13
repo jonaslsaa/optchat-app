@@ -400,4 +400,18 @@ async function pictures(browser: Browser, control: Client) {
   await pick.getByRole('dialog', { name: 'Model' }).waitFor({ state: 'detached' });
   await pick.waitForTimeout(300);
   if (!await pick.getByRole('button', { name: 'Stop the agent' }).isVisible()) throw new Error('Esc in the model list stopped the run.');
+  // Nor is this: Esc in the memory view's search box ends the search and the run goes on, with nothing in the box too. Ending
+  // a search leaves the keys there, and the Esc after it once went to the shortcut that stops the agent.
+  const ended = pick.getByRole('region', { name: 'Messages found' });
+  await pick.keyboard.press('Alt+m');
+  await pick.locator('[data-line]').first().waitFor();
+  await pick.keyboard.press('ControlOrMeta+f');
+  await pick.keyboard.press('Escape');
+  await pick.keyboard.type('wait');
+  await ended.waitFor();
+  await pick.keyboard.press('Escape');
+  await ended.waitFor({ state: 'detached' });
+  await pick.keyboard.press('Escape');
+  await pick.waitForTimeout(300);
+  if (!await pick.getByRole('button', { name: 'Stop the agent' }).isVisible()) throw new Error('Esc in the memory view\'s search box stopped the run.');
 }

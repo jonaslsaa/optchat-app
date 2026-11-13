@@ -4,6 +4,7 @@ import { join } from 'node:path';
 // pi-optchat's own lock, which a Pi holds while it has a profile open.
 import { describeOwner, lockProfile } from '../node_modules/pi-optchat/dist/profiles.js';
 import { fakeOwner } from './fake-owner.ts';
+import { clamp, levels, type Thinking } from '../src/models.ts';
 
 /** Stands in for `pi --mode rpc` with pi-optchat: the same records on stdin and stdout, scripted by the profile's name and the
  * prompt's words, so the server's tests and the UI's screenshots need no model.
@@ -17,7 +18,9 @@ import { fakeOwner } from './fake-owner.ts';
  *   that word's turns and answer.
  * - Profile `busy` fails as a profile another Pi owns, `stuck` ignores the request to shut down, `mute` never answers a command,
  *   `bare` is a Pi without pi-optchat, `old` one whose pi-optchat is from before 0.11.9 and names no role, and in `noisy`
- *   another extension fails. */
+ *   another extension fails.
+ * - It runs on a model, as Pi does: the one the profile keeps as its main chat's when it owns the profile, else the first it
+ *   lists. `set_model` and `set_thinking_level` change it, and an owner keeps the pick in the profile, as pi-optchat does. */
 /** Pi outside a chat, as the app's setup asks it: its version, its packages (`list`, `install`, `update`), and the models it has
  * credentials for. FAKE_PI_HOME stands for Pi's own folder: `state.json` there says which Pi this is, and `install` puts a
  * package under it as Pi does. Without it this is Pi 1.5.2 with no packages and no login. */
@@ -25,6 +28,18 @@ import { fakeOwner } from './fake-owner.ts';
 interface Installed { version: string; providers: string[]; packages: Record<string, string>; broken?: boolean }
 const folder = process.env.FAKE_PI_HOME, kept = folder && join(folder, 'state.json');
 const installed: Installed = { version: '1.5.2', providers: [], packages: {}, ...kept && existsSync(kept) && JSON.parse(readFileSync(kept, 'utf8')) };
+/** Models as Pi lists them (`get_available_models`), a few of each provider it knows, with the fields the app reads; a
+ * provider it does not know has one model, named as the id is, as one a user adds in Pi's models.json. */
+interface Model { provider: string; id: string; name: string; reasoning: boolean; thinkingLevelMap?: Record<string, string | null> }
+const ALL = { off: null, minimal: null, low: 'low', medium: 'medium', high: 'high', xhigh: 'xhigh', max: 'max' }, HIGHEST = { off: null, xhigh: 'xhigh', max: 'max' };
+const NONE = { off: 'none', minimal: null, low: 'low', medium: 'medium', high: 'high', xhigh: 'xhigh', max: 'max' }, MINIMAL = { ...NONE, minimal: 'low' };
+const KNOWN: Record<string, [id: string, name: string, map?: Model['thinkingLevelMap'], reasoning?: boolean][]> = {
+  anthropic: [['claude-fable-5', 'Claude Fable 5', HIGHEST], ['claude-haiku-4-5', 'Claude Haiku 4.5 (latest)'], ['claude-haiku-5-5', 'Claude Haiku 5.5', { minimal: null, low: 'low', medium: 'medium', high: 'high', xhigh: 'xhigh', max: 'max' }], ['claude-opus-5-5', 'Claude Opus 5.5', ALL], ['claude-sonnet-5-5', 'Claude Sonnet 5.5', ALL]],
+  'github-copilot': [['claude-opus-5.5', 'Claude Opus 5.5', ALL], ['gemini-4-argon', 'Gemini 4 Argon'], ['gpt-6-sol', 'GPT-6 Sol', NONE]],
+  openai: [['gpt-4.1', 'GPT-4.1', undefined, false], ['gpt-5.5', 'GPT-5.5', { ...NONE, max: null }], ['gpt-6-sol', 'GPT-6 Sol', NONE], ['gpt-6.1-terra', 'GPT-6.1 Terra', NONE], ['o3', 'o3', { ...ALL, xhigh: null, max: null }]],
+  'openai-codex': [['gpt-5.6-luna', 'GPT-5.6 Luna', { xhigh: 'xhigh', max: 'max', minimal: 'low' }], ['gpt-6-sol', 'GPT-6 Sol', MINIMAL]],
+};
+const models: Model[] = installed.providers.flatMap(provider => (KNOWN[provider] ?? [['a-model', 'a-model']]).map(([id, name, thinkingLevelMap, reasoning = true]) => ({ provider, id, name, reasoning, ...thinkingLevelMap && { thinkingLevelMap } })));
 const [verb, source = ''] = process.argv.slice(2);
 if (verb === '--version') { console.log(installed.version); process.exit(0); }
 if (verb === 'list') {
@@ -76,6 +91,15 @@ function now() {
   if (script.clock !== undefined) return clock += 1000;
   while (Date.now() <= clock); // Under a millisecond.
   return clock = Date.now();
+}
+
+/** What it runs on. An owner starts on the model the profile keeps for its main chat, where it lists that one, and keeps a pick
+ * there (pi-optchat's `main` in config.json); everything else starts on the first it lists, thinking at Pi's `medium`. */
+const config = join(process.env.OPTCHAT_HOME ?? '.', 'profiles', profile, 'config.json');
+const saved: { provider: string; model: string; thinking: Thinking } | undefined = !joins && existsSync(config) ? JSON.parse(readFileSync(config, 'utf8')).main : undefined;
+let model = models.find(model => model.provider === saved?.provider && model.id === saved.model) ?? models.at(0), thinkingLevel: Thinking = model ? clamp(levels(model), saved?.thinking ?? 'medium') : 'medium';
+function picked() {
+  if (model && !joins && existsSync(config)) writeFileSync(config, JSON.stringify({ ...JSON.parse(readFileSync(config, 'utf8')), main: { provider: model.provider, model: model.id, thinking: thinkingLevel } }));
 }
 
 /** The profile's log, as pi-optchat writes it: one entry for each thing a message said. */
@@ -166,9 +190,18 @@ function handoff() {
   write({ type: 'agent_settled', aborted: false });
 }
 const commands: Record<string, (command: Record<string, unknown>) => unknown> = {
-  get_state: () => ({ pid: process.pid, args: process.argv.slice(2), home: process.env.OPTCHAT_HOME, cwd: process.cwd() }),
+  get_state: () => ({ model, thinkingLevel, isStreaming: running, pid: process.pid, args: process.argv.slice(2), home: process.env.OPTCHAT_HOME, cwd: process.cwd() }),
   get_messages: () => ({ messages }),
-  get_available_models: () => ({ models: installed.providers.map(provider => ({ provider, id: 'a-model' })) }),
+  get_available_models: () => ({ models }),
+  // Pi answers with the model, and gives it a level it can think at; one it does not list is an error (below).
+  set_model: ({ provider, modelId }) => {
+    const found = models.find(model => model.provider === provider && model.id === modelId);
+    if (!found) throw new Error(`Model not found: ${String(provider)}/${String(modelId)}`);
+    const take = () => { model = found; thinkingLevel = clamp(levels(found), thinkingLevel); picked(); return found; };
+    // Pi sets a model in its own time (it looks for the provider's key first) and takes its next command meanwhile.
+    return found.id === 'gpt-6.1-terra' ? new Promise(done => setTimeout(() => done(take()), 100)) : take();
+  },
+  set_thinking_level: ({ level }) => { if (model) thinkingLevel = clamp(levels(model), level as Thinking); picked(); },
   prompt: ({ message, streamingBehavior }) => {
     const text = String(message);
     if (text === '/complete') {
@@ -214,7 +247,11 @@ process.stdin.on('data', chunk => {
     const command: Record<string, unknown> = JSON.parse(buffer.slice(0, end)), handler = commands[String(command.type)];
     if (profile === 'mute') continue;
     if (command.type === 'extension_ui_response') handler(command);
-    else if (handler) write({ id: command.id, type: 'response', command: command.type, success: true, data: handler(command) });
+    else if (handler) {
+      const answer = (data: unknown) => write({ id: command.id, type: 'response', command: command.type, success: true, data });
+      try { const data = handler(command); if (data instanceof Promise) void data.then(answer); else answer(data); }
+      catch (error) { write({ id: command.id, type: 'response', command: command.type, success: false, error: (error as Error).message }); }
+    }
     else write({ id: command.id, type: 'response', command: command.type, success: false, error: `Unknown command: ${String(command.type)}` });
   }
 });

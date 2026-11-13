@@ -1,6 +1,7 @@
 import type { Entry } from 'pi-optchat/core';
-import type { ModelChoice, RunState } from 'pi-optchat/files';
+import type { RunState } from 'pi-optchat/files';
 import { Type, type Static, type TSchema } from 'typebox';
+import { THINKING } from './models.ts';
 
 /** The protocol between the app's server and its UI: one WebSocket carrying JSON. The client sends requests and gets one response
  * each; the server also pushes what happens in windows. Every type the UI needs is inferred from the schemas in this file, which
@@ -23,6 +24,16 @@ export type Line = Static<typeof Line>;
 export const PiRecord = Type.Intersect([Type.Object({ type: Type.String() }), Type.Record(Type.String(), Type.Unknown())]);
 export type PiRecord = Static<typeof PiRecord>;
 
+/** A model and how hard it thinks, as pi-optchat names one in a profile (its `ModelChoice`): Pi's `provider`, the model's id
+ * there, and one of Pi's thinking levels. */
+const Thinking = Type.Enum([...THINKING]);
+export const ModelChoice = Type.Object({ provider: Type.String(), model: Type.String(), thinking: Thinking });
+export type ModelChoice = Static<typeof ModelChoice>;
+/** A model Pi can use now, as Pi lists it: its `name`, and the `levels` it can think at (`off` alone for one that does not
+ * reason). */
+export const Offered = Type.Object({ provider: Type.String(), id: Type.String(), name: Type.String(), levels: Type.Array(Thinking) });
+export type Offered = Static<typeof Offered>;
+
 /** A window is a conversation in the app, and one Pi process when it runs. `role` is its place in the app and never changes: the
  * profile's `main` chat, or a `connected` window beside it, whose conversation ends in a handoff to the main chat.
  * The main window's Pi owns the profile. While a Pi outside the app holds it (one in a terminal), the main window says who in
@@ -31,12 +42,16 @@ export type PiRecord = Static<typeof PiRecord>;
  * last one was handed off, as pi-optchat says it: what its Pi said before then belongs to conversations the main chat has.
  * `stopped`: no process (not started yet, closed, or it exited: `error` says why if it failed). `idle` and `running`: whether the
  * agent is in a run. `closed`: a connected window that is gone, pushed once as it leaves the list. `seq` is the number of the last
- * record the window pushed. `cwd` is where its Pi runs, set when the window is first opened. */
+ * record the window pushed. `cwd` is where its Pi runs, set when the window is first opened.
+ * `model` is what its agent runs on: its Pi's own word once that runs. Before, it is the model you picked for the window,
+ * which its Pi is given as it starts, or for the main chat the one it was last on, which pi-optchat keeps in the profile and
+ * starts it on. With neither it is absent: the window starts on Pi's default, which `models` tells. */
 export const WindowState = Type.Object({
   id: Type.String(), profile: Type.String(), role: Type.Enum(['main', 'connected']), cwd: Type.String(),
   status: Type.Enum(['stopped', 'starting', 'idle', 'running', 'closed']), seq: id,
   completed: Type.Optional(Type.Boolean()), since: Type.Optional(Type.Number()), error: Type.Optional(Type.String()),
   outside: Type.Optional(Type.Union([Type.Object({ pid: Type.Integer(), host: Type.String(), cwd: Type.String() }), Type.Literal('unknown')])),
+  model: Type.Optional(ModelChoice),
 });
 export type WindowState = Static<typeof WindowState>;
 
@@ -95,8 +110,6 @@ export const Agent = Type.Object({
 });
 export type Agent = Static<typeof Agent>;
 
-/** A model as pi-optchat names one in a profile's settings: Pi's provider and the model's id there, and how hard it thinks. */
-const Model = Type.Object({ provider: Type.String(), model: Type.String(), thinking: Type.Unsafe<ModelChoice['thinking']>(Type.String()) });
 /** One of a profile's settings, as pi-optchat describes it (its `SETTINGS`) and as the profile has it (`value`). A `toggle` is
  * on or off; a `number` is whole, from `min` to `max` where it has them, of a `unit` where it has one; a `percent` is kept as
  * a fraction of 1. `applies` says when a change takes hold. */
@@ -109,7 +122,7 @@ export type Setting = Static<typeof Setting>;
 /** What pi-optchat keeps of a profile for you to change: its `settings`, in pi-optchat's order; the model that writes its
  * summaries (`compactor`, a new profile's being `standard`) and the one its agents run on (`subagent`); and its
  * `instructions`, the profile's AGENTS.md, which its agents are given every turn. */
-export const Config = Type.Object({ settings: Type.Array(Setting), compactor: Model, standard: Model, subagent: Model, instructions: Type.String() });
+export const Config = Type.Object({ settings: Type.Array(Setting), compactor: ModelChoice, standard: ModelChoice, subagent: ModelChoice, instructions: Type.String() });
 export type Config = Static<typeof Config>;
 
 const Image = Type.Object({ type: Type.Literal('image'), data: Type.String(), mimeType: Type.String() });
@@ -200,6 +213,15 @@ export const methods = {
   /** Any other Pi RPC command (`get_state`, `set_model`, `get_messages`, ...), answered with Pi's `data`. Not a message to the
    * agent: that is `prompt`. */
   command: method(Type.Object({ window: Type.String(), command: PiRecord }), Type.Object({ data: Type.Optional(Type.Unknown()) })),
+  /** The models the window's agent can run on: those of the providers Pi is logged in to. The window's Pi is asked; when it
+   * has none yet, a Pi that only answers this is, and `preset` is then what a Pi started now runs on by itself. */
+  models: method(Type.Object({ window: Type.String() }), Type.Object({ models: Type.Array(Offered), preset: Type.Optional(ModelChoice) })),
+  /** Picks the model of the window's agent and how hard it thinks, at once and in the middle of a run too: the request under
+   * way keeps its model and the next is made with the new one. A window with no Pi yet keeps the pick for when it starts.
+   * The main chat's pick is the profile's from then on (pi-optchat keeps it); a connected window's is that window's alone.
+   * Refused for a main chat a Pi outside the app runs, whose model is picked there. The window's `model` then says what it
+   * runs on, which is Pi's word: a level the model has not got becomes the nearest it has. */
+  setModel: method(Type.Object({ window: Type.String(), model: ModelChoice }), none),
   /** Answers a dialog Pi asked for in an `extension_ui_request` (select, confirm, input, editor): Pi's `extension_ui_response`
    * fields, `id` and one of `value`, `confirmed` or `cancelled`. */
   answer: method(Type.Object({ window: Type.String(), id: Type.String(), value: Type.Optional(Type.String()), confirmed: Type.Optional(Type.Boolean()), cancelled: Type.Optional(Type.Boolean()) }), none),
@@ -209,7 +231,7 @@ export const methods = {
   /** Changes one thing of a profile's settings, and answers them as they then are: a setting by its `key`, or the model
    * `compactor` or `subagent`. pi-optchat makes the change (its `updateConfig`) and is its judge: the Pi that has the profile
    * open applies it at once, and with none the profile's file is changed under its lock. Refused in pi-optchat's words. */
-  configure: method(Type.Object({ profile: Type.String(), key: Type.String(), value: Type.Union([Type.Number(), Type.Boolean(), Model]) }), Config),
+  configure: method(Type.Object({ profile: Type.String(), key: Type.String(), value: Type.Union([Type.Number(), Type.Boolean(), ModelChoice]) }), Config),
   /** Keeps a profile's instructions (pi-optchat's `saveInstructions`). Its agents read them again each turn. */
   instruct: method(Type.Object({ profile: Type.String(), text: Type.String() }), none),
 

@@ -90,7 +90,7 @@ function Profile({ state, profile, onSettings }: { state: State; profile: string
               </p>
             </div>
           ) : <Timeline items={items} live={live} running={window.status === 'running'} profile={profile} loading={log?.loading} older={more ? () => void app.older(profile) : undefined} onAgent={own ? undefined : openAgent} />}
-          {window.outside ? <Outside window={window} outside={window.outside} /> : <Composer window={window} live={live} onSend={toChat} />}
+          {window.outside ? <Outside window={window} outside={window.outside} models={state.models[window.id]} /> : <Composer state={state} window={window} live={live} onSend={toChat} />}
           {fresh && !memory && <div className="flex-[1.6]" />}
         </Fragment>
       </main>

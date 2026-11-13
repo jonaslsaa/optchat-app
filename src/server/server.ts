@@ -55,7 +55,7 @@ export async function startServer({ port = 0, origins = [], ui = join(import.met
   let settings = readSettings(app);
   const setup = new Setup({ app, pi, npm, opener, push: setup => push({ push: 'setup', setup }) });
   // A window runs in the folder the settings name, unless that folder is gone since it was kept.
-  const windows = new Windows({ home, grace, push, cwd: () => settings.cwd && isDirectory(settings.cwd) ? settings.cwd : cwd, pi: async () => { const { command, args } = await setup.launch(); return { command, args: [...args, ...flags] }; } });
+  const windows = new Windows({ home, grace, push, cwd: () => settings.cwd && isDirectory(settings.cwd) ? settings.cwd : cwd, pi: async () => { const { command, args } = await setup.launch(); return { command, args: [...args, ...flags] }; }, catalog: () => setup.catalog() });
   const handlers: { [M in Method]: (params: Params<M>) => Result<M> | Promise<Result<M>> } = {
     agents: params => agents.list(params), agent: params => agents.one(params), github: params => github.list(params),
     config: params => profiles.config(params), configure: params => profiles.configure(params), instruct: params => profiles.instruct(params),
@@ -65,7 +65,7 @@ export async function startServer({ port = 0, origins = [], ui = join(import.met
     profiles: () => profiles.list(), createProfile: params => profiles.create(params), history: params => profiles.history(params), view: params => profiles.view(params), zoom: params => profiles.zoom(params), original: params => profiles.original(params),
     windows: () => windows.list(), open: params => windows.open(params), prompt: params => windows.prompt(params), abort: params => windows.abort(params),
     complete: params => windows.complete(params), close: params => windows.close(params), records: params => windows.records(params),
-    command: params => windows.command(params), answer: params => windows.answer(params),
+    command: params => windows.command(params), answer: params => windows.answer(params), models: params => windows.models(params), setModel: params => windows.setModel(params),
     settings: () => settings,
     setSettings: params => { settings = writeSettings(app, settings, params); push({ push: 'settings', settings }); return settings; },
     setup: params => setup.state(params), install: async params => { await setup.install(params); return {}; },

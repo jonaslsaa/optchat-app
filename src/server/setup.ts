@@ -6,7 +6,8 @@ import { stripVTControlCharacters } from 'node:util';
 import { Type } from 'typebox';
 import { Value } from 'typebox/value';
 import { methods, type Params, type Result, type Setup as State } from '../protocol.ts';
-import { killTree, Pi } from './pi.ts';
+import { catalog } from './models.ts';
+import { killTree } from './pi.ts';
 
 /** What a chat needs before it can run, and getting it: Pi, pi-optchat installed in that Pi, and a model provider that is logged
  * in. The shape follows T3 Code's provider checks (its `provider-pi/src/server/status.ts` and `providerMaintenanceRunner.ts`):
@@ -80,7 +81,6 @@ function run({ command, args }: Launch, more: readonly string[], { cwd, timeout,
     child.once('close', code => done(code));
   });
 }
-const Models = Type.Object({ models: Type.Array(Type.Object({ provider: Type.String(), id: Type.String() })) });
 /** What opens a `.command` file in a terminal of its own on this system: macOS's `open`. Elsewhere there is none yet, and the
  * page shows the command to run. */
 export const terminal = (): Launch | undefined => process.platform === 'darwin' ? { command: '/usr/bin/open', args: [] } : undefined;
@@ -242,17 +242,7 @@ export class Setup {
     }
     return { state: 'missing', installable: true, message: 'Not installed in this Pi. Install it here, or in a terminal:', command: shown(named, ['install', OPTCHAT]) };
   }
-  /** The models Pi can use: it lists only those of the providers it has credentials for. Asked of a Pi that opens no session,
-   * loads no extension and goes nowhere on the network. */
-  private async models(launch: Launch) {
-    const { signal } = this.closing;
-    if (signal.aborted) return undefined;
-    const pi = new Pi({ ...launch, args: [...launch.args, '--no-session', '--offline', '--no-extensions'], cwd: homedir(), env: process.env }, () => {}, () => {});
-    const end = () => void pi.stop(0), late = setTimeout(end, 30_000);
-    signal.addEventListener('abort', end);
-    try {
-      const answer = await pi.request({ type: 'get_available_models' });
-      return Value.Check(Models, answer) ? answer.models : undefined;
-    } catch { return undefined; } finally { clearTimeout(late); signal.removeEventListener('abort', end); await pi.stop(2000); }
-  }
+  /** The models Pi can use and what it runs on by itself, asked of a Pi started for the question (`catalog`). */
+  async catalog() { return catalog(await this.launch(), this.closing.signal); }
+  private models(launch: Launch) { return catalog(launch, this.closing.signal).then(({ models }) => models, () => undefined); }
 }

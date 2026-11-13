@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from 'react';
 import { connect, type Client } from '../client.ts';
-import type { Config, Line, Message, Method, Params, Push, Result, Settings, Setup, WindowState } from '../protocol.ts';
+import type { Config, Line, Message, Method, ModelChoice, Params, Push, Result, Settings, Setup, WindowState } from '../protocol.ts';
 import { current } from '../window.ts';
 import { calling, key, NO_TREE, read, toggled, type Tree } from './memory.ts';
 import { apply, idle, isMessage, isObject, merged, replay, stopped, without, words, type Live, type PiMessage } from './transcript.ts';
@@ -28,6 +28,8 @@ export interface State {
   agents: Record<string, Result<'agents'>>;
   /** Each profile's issues and pull requests, as last read. */
   github: Record<string, Result<'github'>>;
+  /** The models each window's agent can run on, as last read, with what Pi starts on by itself where the window had no Pi. */
+  models: Record<string, Result<'models'>>;
   chats: Record<string, { total: number; messages: PiMessage[]; report?: string; ended?: number; queued?: string[] }>;
   /** Each profile's memory view, once it was looked at, with the lines that were opened in it. */
   memory: Record<string, Tree>;
@@ -54,7 +56,7 @@ export function title(window: WindowState, state: State) {
 }
 
 export class App {
-  state: State = { connection: 'connecting', profiles: [], tabs: [], windows: [], selected: {}, logs: {}, live: {}, sessions: {}, agents: {}, github: {}, chats: {}, memory: {}, config: {} };
+  state: State = { connection: 'connecting', profiles: [], tabs: [], windows: [], selected: {}, logs: {}, live: {}, sessions: {}, agents: {}, github: {}, models: {}, chats: {}, memory: {}, config: {} };
   private client?: Client;
   private retrying?: ReturnType<typeof setTimeout>;
   private closed = false;
@@ -307,6 +309,17 @@ export class App {
   async readGitHub(profile: string, limit?: number, fresh?: boolean) {
     const github = await this.ask('github', { profile, limit, fresh });
     if (github && JSON.stringify(github) !== JSON.stringify(this.state.github[profile])) this.set({ github: { ...this.state.github, [profile]: github } });
+  }
+  /** The models a window's agent can run on. Asked quietly, and none where Pi cannot be asked: the page already says what
+   * is missing then. */
+  async readModels(window: string) {
+    const models = await this.client?.request('models', { window }).catch(() => ({ models: [] }));
+    if (models) this.set({ models: { ...this.state.models, [window]: models } });
+  }
+  /** Picks the model of a window's agent, or says why not: that is said in the list it was picked from. The window then
+   * says what it runs on. */
+  async setModel(window: string, model: ModelChoice) {
+    try { await this.request('setModel', { window, model }); } catch (error) { return error instanceof Error ? error.message : String(error); }
   }
   /** An agent's chat: what was written of it since it was last read. */
   async readAgent(profile: string, id: string) {

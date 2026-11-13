@@ -70,6 +70,17 @@ test('a real Pi turn on a throwaway profile, end to end through the WebSocket', 
   assert.ok(view.total === 2 && view.size > 0 && view.size < view.budget);
   assert.deepEqual((await client.request('original', { profile: 'live', id: 1 })).messages, [messages[1]]);
 
+  // The model the chat runs on is Pi's word, and so is the list it is picked from. A pick goes to Pi, which takes the nearest
+  // level the model has, and pi-optchat keeps it in the profile; Pi's own settings are no business of it.
+  const model = () => pushes.findLast(push => push.push === 'window')?.window.model;
+  assert.deepEqual(model(), { provider: 'anthropic', model: 'claude-haiku-5-5', thinking: 'off' });
+  const { models, preset } = await client.request('models', { window: window.id });
+  assert.equal(preset, undefined);
+  assert.deepEqual(models.find(model => model.provider === 'anthropic' && model.id === 'claude-haiku-5-5'), { provider: 'anthropic', id: 'claude-haiku-5-5', name: 'Claude Haiku 5.5', levels: ['off', 'low', 'medium', 'high', 'xhigh', 'max'] });
+  await client.request('setModel', { window: window.id, model: { provider: 'anthropic', model: 'claude-haiku-5-5', thinking: 'minimal' } });
+  assert.deepEqual(model(), { provider: 'anthropic', model: 'claude-haiku-5-5', thinking: 'low' });
+  assert.deepEqual(JSON.parse(readFileSync(join(profile, 'config.json'), 'utf8')).main, model());
+
   // A second client finds the window and its run; closing the server lets Pi release the profile.
   const second = await connect(server.url);
   assert.partialDeepStrictEqual((await second.request('windows', {})).windows, [{ id: 'live/main', status: 'idle' }]);

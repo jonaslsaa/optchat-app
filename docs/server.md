@@ -49,6 +49,8 @@ The client sends `{ id, method, params }` and gets `{ id, result }` or `{ id, er
 | `close { window }` | Stops the window's Pi cleanly. A connected window leaves the list. |
 | `records { window, after? }` | For a client that connects late: the records the window still keeps after number `after`, the number of its last record (`seq`), and what Pi shows now (`ui`). |
 | `command { window, command }` | Any other Pi RPC command (`get_state`, `set_model`, `get_messages`, ...). A message to the agent is not one of them: that is `prompt`. |
+| `models { window }` | The models the window's agent can run on, each with its `provider`, `id`, `name` and the `levels` it can think at: what Pi lists for the providers it is logged in to. The window's own Pi is asked; when it has none, a Pi started for the question is, and `preset` is then what a Pi started now runs on by itself. |
+| `setModel { window, model }` | Picks the window's model and thinking level (`{ provider, model, thinking }`), in the middle of a run too. With no Pi yet the pick is kept and given to the window's Pi as it starts. The window's `model` then says what it runs on ([The model](#the-model)). |
 | `answer { window, id, ... }` | Answers a dialog Pi asked for (an `extension_ui_request` with method `select`, `confirm`, `input` or `editor`). |
 | `config { profile }` | A profile's settings as pi-optchat keeps them: every setting it has, as it describes it (its `SETTINGS`: a toggle, a whole number or a percent, with its label, what it does, its default, its range and when a change applies) with the profile's `value`; the models that write its summaries (`compactor`, and `standard`, a new profile's) and that its agents run on (`subagent`); and its `instructions` (its AGENTS.md). See [A profile's settings](#a-profiles-settings). |
 | `configure { profile, key, value }` | Changes one of them, a setting by its `key` or the model `compactor` or `subagent`, and answers them all as they then are. Refused in pi-optchat's words. |
@@ -60,7 +62,7 @@ The client sends `{ id, method, params }` and gets `{ id, result }` or `{ id, er
 
 The server pushes four things to every client:
 
-- `{ push: 'window', window }` when a window changes: its `status` (`stopped`, `starting`, `idle`, `running`, or `closed`), `error` if its Pi failed, and `completed` once a connected window's conversation is handed off.
+- `{ push: 'window', window }` when a window changes: its `status` (`stopped`, `starting`, `idle`, `running`, or `closed`), `error` if its Pi failed, `completed` once a connected window's conversation is handed off, and the `model` it runs on.
 - `{ push: 'record', window, seq, record }` for every record Pi writes: its session events and extension UI requests, passed through as they are (Pi's `docs/json.md` and `docs/rpc-extension-ui.md`).
 - `{ push: 'settings', settings }` when the settings are changed, and `{ push: 'setup', setup }` as an install runs and when it ends.
 
@@ -92,6 +94,18 @@ The server hands it to every Pi it starts for a window with Pi's own `--append-s
 
 It reaches the agent of a window the app started and nobody else: not the agents that agent starts (pi-optchat builds their prompt itself), and not the main agent of a chat that runs in a terminal, which the app did not start.
 
+### The model
+
+What a window runs on is Pi's to say, and the server only passes a pick on (`models` and `setModel` in `src/server/windows.ts`, `src/server/models.ts`, `test/models.test.ts`).
+
+- **A window's `model` is Pi's word** once its Pi runs: `get_state`, read when it has started and after each pick. A pick is Pi's `set_model` and then `set_thinking_level`, since `set_model` chooses a level of its own; a level the model has not got comes back as the nearest it has.
+- **Before a Pi runs**, the main window's `model` is what pi-optchat keeps in the profile (`main` in its `config.json`, read with `loadConfig`), which is what pi-optchat starts the main chat on. It is read again whenever the server looks at who holds the profile, so a pick made in a terminal shows when the page looks. A connected window has none until it starts: it begins on Pi's default.
+- **A pick with no Pi yet** is kept in the server and given to the Pi as it starts, before the first message. A Pi that cannot take it does not start, and says why; the pick stays until a Pi has taken it or another is made, so a message never goes to a model that was not picked. While a terminal has the profile the pick waits, and the window says the model the profile keeps.
+- **One pick at a time** for a window. Pi takes its next command while it still sets a model, so two picks at once could leave it on the model of one with the level of the other.
+- **Where a pick is kept is pi-optchat's doing.** The main chat's goes into the profile; a connected window's stays in that window's Pi. Neither changes Pi's own default: `set_model` over RPC does not save it. Checked against Pi 1.5.2 with pi-optchat 0.11.12 (`npm run test:live`).
+- **A main chat a Pi outside the app runs** takes no pick from the app.
+- **The list** comes from the window's own Pi, which also knows the providers its extensions add. With no Pi it comes from one started for the question, with no session, no extension and no network (`catalog`), the same one the setup asks which providers are logged in. The levels a model can think at follow pi-ai's own rule (`levels` in `src/models.ts`).
+
 ## A profile's settings
 
 They are pi-optchat's, and so is every rule about them (`config`, `configure` and `instruct` in `src/server/profiles.ts`, `test/config.test.ts`).
@@ -99,7 +113,7 @@ They are pi-optchat's, and so is every rule about them (`config`, `configure` an
 - **What there is to change is asked of pi-optchat**, not written down here: `config` lists its `SETTINGS` as they are, so a setting pi-optchat gains is in the app once the app has that pi-optchat, with no change to the app.
 - **pi-optchat makes the change**, with its `updateConfig`. While a Pi has the profile open, the app's or one in a terminal, that Pi is told over the profile's socket and applies it to the chat that is running, where it holds from when the setting's `applies` says. With no Pi on the profile, pi-optchat takes the profile's lock, changes `config.json` and lets go; what the file has that this pi-optchat does not know stays in it.
 - **pi-optchat is the judge.** The server checks only that a value is a number, a truth value or a model, and passes it on. What pi-optchat refuses, it refuses in its own words, which the page shows as they are: a number out of its range, a model the running Pi does not offer, a Pi that takes no changes (one that is still starting, or runs headless).
-- **The main model is not among them.** It follows what is picked in Pi (`set_model`), and pi-optchat refuses it here.
+- **The main model is not among them.** It follows what is picked in Pi (`set_model`, which is what the app's `setModel` sends: [The model](#the-model)), and pi-optchat refuses it here.
 - **Instructions** are written with pi-optchat's `saveInstructions`. Pi reads them again each turn, so no Pi has to be told.
 - **The models to choose from** are in the setup (`login.models`, each `provider/id`): what Pi lists for the providers it is logged in to, asked once of a Pi without extensions when the server looks at what a chat needs, so they are there with no chat running. A model a Pi extension adds is not in that list; it can be typed.
 

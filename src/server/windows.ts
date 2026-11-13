@@ -34,6 +34,11 @@ interface Opened {
   /** Its conversation is being handed off: Complete has not answered yet. */
   completing?: boolean;
 }
+/** What the app asks of an agent it starts, on top of what pi-optchat tells it: handed to Pi with its own
+ * `--append-system-prompt`, which puts it in the prompt as an `<addendum>`, and pi-optchat leaves that section alone. It
+ * reaches the agent of a window the app started, not the agents those start, and not a chat that runs in a terminal.
+ * The GitHub list finds an issue or pull request by its address, and an agent left to itself writes "#12". */
+export const PROMPT = 'When you first mention a GitHub pull request or issue, give its full link.';
 /** What pi-optchat says a Pi in RPC mode is to its profile: JSON in a `setStatus` with this key (its docs/connected-windows.md),
  * sent as the session starts, so before Pi's first answer; a Pi that has not sent it by then has no profile open. This is the
  * one place that reads it, and it reads only these fields. */
@@ -188,7 +193,7 @@ export class Windows {
     state.status = 'starting'; delete state.error; this.changed(opened);
     // pi-optchat's --optchat-connect: a connected window only ever joins the profile's owner, and the main window only ever is
     // the owner. Should a Pi outside the app take the profile just now, it fails with who that is, and never joins it unasked.
-    const pi: Pi = new Pi({ command, args: [...args, '--optchat-profile', state.profile, '--optchat-connect', joins ? 'join' : 'off'], cwd: state.cwd, env: { ...process.env, OPTCHAT_HOME: home } },
+    const pi: Pi = new Pi({ command, args: [...args, '--append-system-prompt', PROMPT, '--optchat-profile', state.profile, '--optchat-connect', joins ? 'join' : 'off'], cwd: state.cwd, env: { ...process.env, OPTCHAT_HOME: home } },
       record => this.record(opened, record), error => this.exited(opened, pi, error));
     opened.pi = pi;
     try {

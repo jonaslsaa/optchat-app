@@ -40,6 +40,17 @@ export const WindowState = Type.Object({
 });
 export type WindowState = Static<typeof WindowState>;
 
+/** An issue or pull request the chat named: `repo` is `owner/name`, `at` the last message that names it, `url` its address,
+ * made from those parts. `kind` is what the address says until GitHub has said. The rest is
+ * GitHub's, and absent until it has answered, or when it does not show the item to this login: `state` (a `draft` is an open pull
+ * request that is one), and for an open pull request how its `checks` stand and what its `review` came to. */
+export const GitHubItem = Type.Object({
+  repo: Type.String(), number: Type.Integer({ minimum: 1 }), url: Type.String(), kind: Type.Enum(['pull', 'issue']), at: id,
+  title: Type.Optional(Type.String()), state: Type.Optional(Type.Enum(['open', 'draft', 'merged', 'closed'])),
+  checks: Type.Optional(Type.Enum(['passing', 'failing', 'pending'])), review: Type.Optional(Type.Enum(['approved', 'changes_requested', 'review_required'])),
+});
+export type GitHubItem = Static<typeof GitHubItem>;
+
 /** The app's own settings, kept in its own folder (never in pi-optchat's). `cwd`: where new windows run; your home directory
  * when it is not set. `theme`: the page's colours, the system's by default. */
 const Theme = Type.Enum(['system', 'light', 'dark']);
@@ -119,6 +130,16 @@ export const methods = {
    * `report` is what it reported, whole, and `ended` when it ended. An agent there is no record of has no messages. */
   agent: method(Type.Object({ profile: Type.String(), id: Type.String(), after: Type.Optional(id) }),
     Type.Object({ total: id, messages: Type.Array(Type.Unknown()), report: Type.Optional(Type.String()), ended: Type.Optional(Type.Number()) })),
+
+  /** The issues and pull requests the profile's main chat named by their address on github.com, with what GitHub says of
+   * them: the open ones first, then the latest named, `limit` of them (30 unless said), and `more` for how many that leaves
+   * out. They are found in the log each time, so nothing of them is kept. What GitHub says is asked through the GitHub CLI
+   * (`gh`) with the login it has, after the answer: `pending` is how many items it is being asked about, which a look a
+   * moment later has the news of. `gh` says how the last asking went: `missing` (no `gh`), `signed_out`, or `failed`
+   * (`message` has why). The list is there either way, without the status. A `gh` that could not ask is tried again by a look
+   * a few seconds later, or at once by one that is `fresh`, and such a look waits for it. */
+  github: method(Type.Object({ profile: Type.String(), limit: Type.Optional(Type.Integer({ minimum: 0 })), fresh: Type.Optional(Type.Boolean()) }),
+    Type.Object({ items: Type.Array(GitHubItem), more: id, pending: id, gh: Type.Enum(['ok', 'missing', 'signed_out', 'failed']), message: Type.Optional(Type.String()) })),
 
   /** Every window the server knows. */
   windows: method(none, Type.Object({ windows: Type.Array(WindowState) })),

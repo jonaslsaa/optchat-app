@@ -8,6 +8,7 @@ import { Value } from 'typebox/value';
 import { WebSocket, WebSocketServer } from 'ws';
 import { Envelope, methods, type Method, type Params, type Push, type Result, type ServerMessage } from '../protocol.ts';
 import { Agents } from './agents.ts';
+import { GitHub } from './github.ts';
 import { reason } from './pi.ts';
 import { Profiles } from './profiles.ts';
 import { appHome, isDirectory, readSettings, writeSettings } from './settings.ts';
@@ -25,6 +26,8 @@ export interface ServerOptions extends Partial<Pick<WindowsOptions, 'home' | 'gr
   /** More arguments for a window's Pi, such as the cheap model the live tests name. Only a window's: after them, a word like
    * `list` would be a message to the agent, so nothing that asks Pi about itself gets them. */
   flags?: readonly string[];
+  /** The GitHub CLI that says how issues and pull requests stand: `gh` on the PATH unless said. */
+  gh?: Launch;
   /** The npm that installs Pi into the app's folder. */
   npm?: Launch;
   /** What opens a file in a terminal of its own, for Pi's sign-in. Without it the server opens none. */
@@ -41,11 +44,11 @@ const loopback = (url: string) => { try { return LOOPBACK.includes(new URL(url).
 
 /** Starts the app's server on this machine only: the protocol of `protocol.ts` on a WebSocket at `/ws`, a profile's images at
  * `/images/<profile>/<name>`, and the UI's page everywhere else. `close` stops every Pi it started and waits for them. */
-export async function startServer({ port = 0, origins = [], ui = join(import.meta.dirname, '../../dist/ui'), home = dataHome(), app = appHome(), cwd = homedir(), pi, flags = [], npm, opener, grace = 15_000 }: ServerOptions = {}) {
+export async function startServer({ port = 0, origins = [], ui = join(import.meta.dirname, '../../dist/ui'), home = dataHome(), app = appHome(), cwd = homedir(), pi, flags = [], npm, gh, opener, grace = 15_000 }: ServerOptions = {}) {
   ui = resolve(ui);
   home = resolve(home); // Pi runs in each window's directory, and has to find the same profiles from there.
   app = resolve(app); // And npm runs in the app's folder, where a path that is not whole would be another folder.
-  const profiles = new Profiles(home), agents = new Agents(home), sockets = new WebSocketServer({ noServer: true });
+  const profiles = new Profiles(home), agents = new Agents(home), github = new GitHub(profiles, gh), sockets = new WebSocketServer({ noServer: true });
   let closing = false;
   const send = (socket: WebSocket, message: ServerMessage) => { if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify(message)); };
   const push = (push: Push) => { for (const socket of sockets.clients) send(socket, push); };
@@ -54,7 +57,7 @@ export async function startServer({ port = 0, origins = [], ui = join(import.met
   // A window runs in the folder the settings name, unless that folder is gone since it was kept.
   const windows = new Windows({ home, grace, push, cwd: () => settings.cwd && isDirectory(settings.cwd) ? settings.cwd : cwd, pi: async () => { const { command, args } = await setup.launch(); return { command, args: [...args, ...flags] }; } });
   const handlers: { [M in Method]: (params: Params<M>) => Result<M> | Promise<Result<M>> } = {
-    agents: params => agents.list(params), agent: params => agents.one(params),
+    agents: params => agents.list(params), agent: params => agents.one(params), github: params => github.list(params),
     profiles: () => profiles.list(), createProfile: params => profiles.create(params), history: params => profiles.history(params), view: params => profiles.view(params), zoom: params => profiles.zoom(params), original: params => profiles.original(params),
     windows: () => windows.list(), open: params => windows.open(params), prompt: params => windows.prompt(params), abort: params => windows.abort(params),
     complete: params => windows.complete(params), close: params => windows.close(params), records: params => windows.records(params),

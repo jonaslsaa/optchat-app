@@ -26,6 +26,8 @@ export interface State {
   /** Each profile's agents as last read from its files, and the chats of those that were opened, by profile and agent
    * (`work/1a2b3c4d`): the messages read so far, of the `total` the server counted them from. */
   agents: Record<string, Result<'agents'>>;
+  /** Each profile's issues and pull requests, as last read. */
+  github: Record<string, Result<'github'>>;
   chats: Record<string, { total: number; messages: PiMessage[]; report?: string; ended?: number }>;
   /** Each profile's memory view, once it was looked at, with the lines that were opened in it. */
   memory: Record<string, Tree>;
@@ -50,7 +52,7 @@ export function title(window: WindowState, state: State) {
 }
 
 export class App {
-  state: State = { connection: 'connecting', profiles: [], tabs: [], windows: [], selected: {}, logs: {}, live: {}, sessions: {}, agents: {}, chats: {}, memory: {} };
+  state: State = { connection: 'connecting', profiles: [], tabs: [], windows: [], selected: {}, logs: {}, live: {}, sessions: {}, agents: {}, github: {}, chats: {}, memory: {} };
   private client?: Client;
   private retrying?: ReturnType<typeof setTimeout>;
   private closed = false;
@@ -276,6 +278,11 @@ export class App {
     const agents = await this.ask('agents', { profile, limit });
     // It is asked for every two seconds while an agent works: the page is drawn again only when something changed.
     if (agents && JSON.stringify(agents) !== JSON.stringify(this.state.agents[profile])) this.set({ agents: { ...this.state.agents, [profile]: agents } });
+  }
+  /** The issues and pull requests a profile's main chat named, and what GitHub says of them by now. */
+  async readGitHub(profile: string, limit?: number, fresh?: boolean) {
+    const github = await this.ask('github', { profile, limit, fresh });
+    if (github && JSON.stringify(github) !== JSON.stringify(this.state.github[profile])) this.set({ github: { ...this.state.github, [profile]: github } });
   }
   /** An agent's chat: what was written of it since it was last read. */
   async readAgent(profile: string, id: string) {

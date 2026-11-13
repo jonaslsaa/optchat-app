@@ -1,7 +1,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Script } from '../test/fake-pi.ts';
-import { writeRun } from '../test/support.ts';
+import { issue, pullRequest, writeRun } from '../test/support.ts';
 
 /** A profile's log for the screenshots: a believable chat with everything the UI draws, written as pi-optchat writes one. */
 type Said = [kind: 'user' | 'talk' | 'tool' | 'echo' | 'work' | 'note', text: string];
@@ -68,6 +68,31 @@ export const TEAM: Said[][] = [
     ['talk', 'That matches what we built: numbered records per window, and the profile\'s log as the snapshot. The Windows run is still going.'],
   ],
 ];
+
+/** A chat that names issues and pull requests, for the GitHub list: by link in what was said, in an agent's report and in what
+ * `gh pr create` printed, and one only by its number, which the list cannot know. */
+export const SHIPPING: Said[][] = [
+  [
+    ['user', 'Where does 0.2.0 stand? The Windows failure is https://github.com/acme/optchat-app/issues/38.'],
+    ['talk', 'Two things went in since 0.1.0: the numbered records (https://github.com/acme/optchat-app/pull/36), which closed https://github.com/acme/optchat-app/issues/29, and the first try at the Windows stop, https://github.com/acme/pi-tools/pull/112, which was closed unmerged.\n\nStill open: https://github.com/acme/optchat-app/pull/41 stops a Pi that does not answer, and https://github.com/acme/optchat-app/pull/43 reconnects by sequence number. #40 can wait.'],
+  ],
+  [
+    ['user', 'Open a draft for the release notes, and ask infra whether the runner image changed.'],
+    ['tool', `bash ${JSON.stringify({ command: 'gh pr create --draft --title "Release notes for 0.2.0" --body-file notes.md' })}`],
+    ['echo', 'bash: https://github.com/acme/optchat-app/pull/44'],
+    ['work', '[5d0e6f1b · Ask infra about the runner] The image changed on Monday, in https://github.com/acme/infra/pull/7: it now ships Node 26.\n\nFull chat: zoom("5d0e6f1b")'],
+    ['talk', 'The draft is https://github.com/acme/optchat-app/pull/44. Infra changed the runner image on Monday, which is when the Windows test began to fail.'],
+  ],
+];
+/** What GitHub has of the SHIPPING chat's items, as its GraphQL answers for each: for the fake `gh`. One of them is in a
+ * repository this login is not shown. */
+export const SHIPPED = {
+  'acme/optchat-app#38': issue('The shutdown test fails on Windows', 'OPEN'), 'acme/optchat-app#29': issue('A window forgets its queue when the page reloads', 'CLOSED'),
+  'acme/optchat-app#36': pullRequest('Number each window\'s records', 'MERGED'), 'acme/pi-tools#112': pullRequest('Use taskkill /T on Windows', 'CLOSED'),
+  'acme/optchat-app#41': pullRequest('Stop a Pi that does not answer', 'OPEN', { checks: 'SUCCESS', reviewDecision: 'APPROVED' }),
+  'acme/optchat-app#43': pullRequest('Reconnect with the last sequence number the page saw', 'OPEN', { checks: 'FAILURE', reviewDecision: 'CHANGES_REQUESTED' }),
+  'acme/optchat-app#44': pullRequest('Release notes for 0.2.0', 'OPEN', { checks: 'PENDING', reviewDecision: 'REVIEW_REQUIRED', isDraft: true }),
+};
 
 /** One of an agent's replies: what it says, and the tools it calls with what each printed. A call with nothing printed is
  * still running. */

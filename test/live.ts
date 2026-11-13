@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
-import { existsSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { connect } from '../src/client.ts';
 import type { PiRecord, Push, Result, Setup } from '../src/protocol.ts';
 import { startServer } from '../src/server/server.ts';
+import { PROMPT } from '../src/server/windows.ts';
 import { transcript } from '../src/ui/agents.ts';
 import { apply, chat, idle, isMessage, isObject, logged, parts, words, type Part } from '../src/ui/transcript.ts';
 import { current } from '../src/window.ts';
@@ -79,9 +80,9 @@ test('a real Pi turn on a throwaway profile, end to end through the WebSocket', 
 });
 
 test('a connected window reads the profile\'s memory, and Complete hands its conversation to the main chat', { timeout: 180_000 }, async t => {
-  const home = temporaryHome();
+  const home = temporaryHome(), sent = process.env.OPTCHAT_APP_SENT = join(home, 'sent.jsonl');
   createProfile(home, 'live');
-  const server = await startServer({ home, cwd: mkdtempSync(join(home, 'cwd-')), flags });
+  const server = await startServer({ home, cwd: mkdtempSync(join(home, 'cwd-')), flags: [...flags, '-e', join(import.meta.dirname, 'sent.ts')] });
   t.after(() => server.close());
   const { pushes, record, onPush } = watch(), client = await connect(server.url, onPush);
   const main = (await client.request('open', { profile: 'live' })).window.id;
@@ -95,6 +96,12 @@ test('a connected window reads the profile\'s memory, and Complete hands its con
   await record(window.id, r => r.type === 'agent_settled');
   const [connected] = (await client.request('windows', {})).windows.filter(w => w.id === window.id);
   assert.partialDeepStrictEqual(connected, { role: 'connected', status: 'idle' });
+  // What the app asks of its agents is in the prompt the model was sent, beside pi-optchat's own: in both windows, every time.
+  const requests = readFileSync(sent, 'utf8').trim().split('\n').map((line): { window: boolean; payload: { system?: unknown } } => JSON.parse(line));
+  for (const [inWindow, optchat] of [[false, 'You are OptChat'], [true, 'You are a connected window of OptChat']] as const) {
+    const prompts = requests.filter(request => request.window === inWindow).map(request => JSON.stringify(request.payload.system));
+    assert.ok(prompts.length > 0 && prompts.every(prompt => prompt.includes(optchat) && prompt.includes(`<addendum>\\n${PROMPT}\\n</addendum>`)), `${optchat}: ${prompts[0]?.slice(0, 200)}`);
+  }
 
   // Complete: the window writes its handoff, and the main chat gets it as that agent's report, in its memory.
   await client.request('complete', { window: window.id });

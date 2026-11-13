@@ -22,6 +22,24 @@ function line(memory: Memory, { l, i }: Part): Line {
   return { id, n, text: memory.summary({ l, i }), from: memory.root[first].date, to: memory.root[last].date };
 }
 
+/** The tool call and its result that message `id` is one of, if it is: found by pi-optchat's own rule (its `callOf`). A
+ * message's calls, which stand among its text under its date, are followed by their results in the same order, and a result
+ * starts with its call's tool name. One that does not (an `Agent error`) has no call. */
+export function pair(memory: Memory, id: number): [call: number, result: number] | undefined {
+  const { root } = memory, kind = (at: number) => root[at]?.kind;
+  const calling = (at: number, date: string) => (kind(at) === 'tool' || kind(at) === 'talk') && root[at].date === date;
+  if (kind(id) !== 'tool' && kind(id) !== 'echo') return;
+  // Where the results begin: the run `id` is in, or what follows its message.
+  let results = id;
+  if (kind(id) === 'echo') while (kind(results - 1) === 'echo') results--;
+  else while (calling(results, root[id].date)) results++;
+  const calls: number[] = [];
+  for (let at = results - 1; at >= 0 && calling(at, root[results - 1].date); at--) if (kind(at) === 'tool') calls.unshift(at);
+  const nth = kind(id) === 'echo' ? id - results : calls.indexOf(id), call = calls[nth], result = results + nth;
+  for (let at = results; at <= result; at++) if (kind(at) !== 'echo') return;
+  return call !== undefined && memory.text(result).startsWith(`${memory.text(call).split(' ', 1)[0]}:`) ? [call, result] : undefined;
+}
+
 /** Profiles as they are on disk, read through `pi-optchat/files`, which is all the app knows of pi-optchat's files. No Pi process
  * is needed to read one, and one that is running is not disturbed: it stays the only writer, and the app summarizes nothing, so
  * a node Pi has not built yet stays unbuilt. */
@@ -36,7 +54,7 @@ export class Profiles {
   /** Where the profile's memory is now. */
   private directory(profile: string) { return memoryDirectory(profileDirectory(this.home, profile)); }
   /** The profile's memory as its files are now: read again only when they changed. */
-  private memory(profile: string, directory = this.directory(profile)) {
+  memory(profile: string, directory = this.directory(profile)) {
     // An import moves the profile's memory to another directory, which is a change too.
     const print = `${directory}|${fingerprint(directory)}`, read = this.read.get(profile);
     if (read?.print === print) return read.memory;
@@ -63,24 +81,11 @@ export class Profiles {
     const l = Math.log2(n) - 1, i = 2 * id / n;
     return { lines: [{ l, i }, { l, i: i + 1 }].map(part => line(memory, part)) };
   }
-  /** A call and its result are one row of the chat, so either is answered as both. They are found by pi-optchat's own rule
-   * (its `callOf`): a message's calls, which stand among its text under its date, are followed by their results in the same
-   * order, and a result starts with its call's tool name. One that does not (an `Agent error`) has no call. */
+  /** Message `id` as it was said. A call and its result are one row of the chat, so either is answered as both. */
   async original({ profile, id }: Params<'original'>): Promise<Result<'original'>> {
     const memory = await this.memory(profile), { root } = memory;
     if (!root[id]) throw new Error(`No message ${id}: the log has ${root.length}.`);
-    const said = (at: number) => ({ ...root[at], text: memory.text(at) }), alone = { messages: [said(id)] };
-    const kind = (at: number) => root[at]?.kind, calling = (at: number, date: string) => (kind(at) === 'tool' || kind(at) === 'talk') && root[at].date === date;
-    if (kind(id) !== 'tool' && kind(id) !== 'echo') return alone;
-    // Where the results begin: the run `id` is in, or what follows its message.
-    let results = id;
-    if (kind(id) === 'echo') while (kind(results - 1) === 'echo') results--;
-    else while (calling(results, root[id].date)) results++;
-    const calls: number[] = [];
-    for (let at = results - 1; at >= 0 && calling(at, root[results - 1].date); at--) if (kind(at) === 'tool') calls.unshift(at);
-    const nth = kind(id) === 'echo' ? id - results : calls.indexOf(id), call = calls[nth], result = results + nth;
-    for (let at = results; at <= result; at++) if (kind(at) !== 'echo') return alone;
-    return call !== undefined && memory.text(result).startsWith(`${memory.text(call).split(' ', 1)[0]}:`) ? { messages: [said(call), said(result)] } : alone;
+    return { messages: (pair(memory, id) ?? [id]).map(at => ({ ...root[at], text: memory.text(at) })) };
   }
   /** An image a message names as `[image <name>]`, straight from its file. */
   image(profile: string, name: string) { return readImage(this.directory(profile), name); }

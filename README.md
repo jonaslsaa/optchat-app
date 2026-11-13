@@ -2,7 +2,7 @@
 
 A desktop app for [pi-optchat](https://github.com/jonaslsaa/pi-optchat): one chat per profile that never ends, with the memory tree, connected windows and subagents visible instead of hidden behind a terminal.
 
-Status: the local server ([docs/server.md](docs/server.md)) and a first usable UI ([docs/ui.md](docs/ui.md)) are built: profile tabs, windows, the chat with its history, and the composer. Try it with `npm install && npm start`.
+Status: the local server ([docs/server.md](docs/server.md)) and a first usable UI ([docs/ui.md](docs/ui.md)) are built: profile tabs, windows, the chat with its history, and the composer. Try it with `npm install && npm start`, or as a desktop app with `npm run desktop` ([docs/desktop.md](docs/desktop.md)).
 
 ## Layout
 
@@ -36,7 +36,7 @@ Status: the local server ([docs/server.md](docs/server.md)) and a first usable U
 5. The agents panel. Its first part is done: the main chat's agents, live, and each one's chat to read ([docs/ui.md](docs/ui.md#agents)). Steering, stopping and resuming one from the panel are next.
 6. The clickable memory tree. Its first part is done: the main chat as the agent reads it, every line opening down to its messages ([docs/ui.md](docs/ui.md#memory-view)). Searching it and changing it are next.
 7. The GitHub list. Its first part is done: the issues and pull requests the main chat named by link, with how they stand ([docs/ui.md](docs/ui.md#github)). Tracking them is next.
-8. The Electron shell around the same page.
+8. ~~The Electron shell around the same page.~~ Done for macOS ([docs/desktop.md](docs/desktop.md)): `npm run dist` builds the app and a dmg.
 
 ## Open
 

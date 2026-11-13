@@ -17,7 +17,8 @@
     "src/**/*.ts",
     "test/**/*.ts",
     "scripts/**/*.ts",
-    "vite.config.ts"
+    "vite.config.ts",
+    "vite.desktop.config.ts"
   ],
   "exclude": [
     "src/ui"

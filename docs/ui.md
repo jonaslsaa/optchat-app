@@ -1,6 +1,6 @@
 # The UI
 
-A web page the local server serves: React, Vite and Tailwind, the same stack as T3 Code, with its looks (see `THIRD_PARTY_NOTICES.md`). It needs no Electron; a desktop shell can load the same page later.
+A web page the local server serves: React, Vite and Tailwind, the same stack as T3 Code, with its looks (see `THIRD_PARTY_NOTICES.md`). It needs no Electron; the desktop app is a window around the same page ([desktop.md](desktop.md)).
 
 ## Run it
 

@@ -3,6 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
+  "main": "dist/desktop/main.js",
   "description": "A desktop app for pi-optchat: one chat per profile, with its memory, windows and agents visible.",
   "engines": {
     "node": ">=22.19.0"
@@ -15,7 +16,10 @@
     "check": "tsc --noEmit && tsc --noEmit -p src/ui",
     "test": "node --test --test-timeout=60000 test/*.test.ts",
     "test:live": "node --test test/live.ts",
-    "screenshots": "node scripts/screenshots.ts"
+    "screenshots": "node scripts/screenshots.ts",
+    "build:desktop": "vite build && vite build -c vite.desktop.config.ts",
+    "desktop": "npm run build:desktop && electron .",
+    "dist": "npm run build:desktop && electron-builder --mac"
   },
   "dependencies": {
     "lucide-react": "^1.72.0",
@@ -36,6 +40,8 @@
     "@types/react-dom": "^19.3.0",
     "@types/ws": "^8.18.2",
     "@vitejs/plugin-react": "^6.3.0",
+    "electron": "^45.3.1",
+    "electron-builder": "^26.18.0",
     "playwright-core": "^1.65.0",
     "tailwindcss": "^4.3.5",
     "typescript": "^7.0.2",

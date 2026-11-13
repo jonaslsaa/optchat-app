@@ -15,7 +15,7 @@ import { Sidebar } from './Sidebar.tsx';
 import { app, mainOf, title, UNTITLED, useApp, type State } from './store.ts';
 import { Timeline } from './Timeline.tsx';
 import { chat, idle, logged, spoken } from './transcript.ts';
-import { Button, Choice, cn } from './ui.tsx';
+import { Button, Choice, cn, useMedia } from './ui.tsx';
 
 /** A window that has not run yet. */
 const NOTHING = idle();
@@ -25,6 +25,9 @@ const SHOWS = [['Chat', false], ['Memory', true]] as const;
  * GitHub, when they are opened. */
 function Profile({ state, profile, onSettings }: { state: State; profile: string; onSettings: () => void }) {
   const [sidebar, setSidebar] = useState(() => innerWidth >= 768);
+  // In a narrow window the sidebar lies over the chat. Its top row is then not what the desktop app's window is dragged by:
+  // Electron goes by the order in the page, not by what is on top, and the sidebar's buttons would drag instead of being pressed.
+  const covered = !useMedia('(min-width: 48rem)') && sidebar;
   // What the panel beside the main chat shows, while it is open: `panel.agent` is the agent whose chat is open in it.
   const [panel, setPanel] = useState<Shown>(), openAgent = useCallback((agent?: string) => setPanel({ agent }), []);
   // The main chat as the agent reads its memory, in the chat's place. A message sent from there is answered in the chat.
@@ -59,7 +62,7 @@ function Profile({ state, profile, onSettings }: { state: State; profile: string
       {sidebar && <div className="max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:z-40 max-md:shadow-xl"><Sidebar state={state} profile={profile} selected={window.id} /></div>}
       {sidebar && <button type="button" aria-label="Close the sidebar" onClick={() => setSidebar(false)} className="fixed inset-0 z-30 bg-black/20 md:hidden" />}
       <main className="flex min-w-0 flex-1 flex-col bg-background">
-        <header className="flex h-(--topbar-height) shrink-0 items-center gap-2 px-3 sm:px-5">
+        <header className={cn('flex h-(--topbar-height) shrink-0 items-center gap-2 px-3 sm:px-5', !covered && 'window-bar', sidebar ? 'max-md:window-start' : 'window-start')}>
           <Button variant="ghost-muted" size="icon-sm" aria-label="Toggle the sidebar" aria-pressed={sidebar} onClick={() => setSidebar(!sidebar)}><PanelLeftIcon /></Button>
           {state.tabs.length === 1 && <><ProfileName state={state} profile={profile} /><span aria-hidden="true" className="-ms-1.5 text-muted-foreground/50 text-sm">/</span></>}
           <h1 className={cn('min-w-0 truncate font-medium text-sm', name === UNTITLED && 'text-muted-foreground')}>{name}</h1>
@@ -102,14 +105,15 @@ export function App() {
   return (
     <div className="flex h-dvh flex-col">
       {state.tabs.length > 1 && <Tabs state={state} />}
-      {state.connection === 'lost' && <p role="status" className="shrink-0 bg-warning-surface px-4 py-1.5 text-center text-warning-foreground text-xs">The server is not answering. Trying again…</p>}
+      {/* What the app has to tell you (`notice`). The desktop app has them at the foot: its window's buttons are in the top row. */}
+      {state.connection === 'lost' && <p role="status" className="notice shrink-0 bg-warning-surface px-4 py-1.5 text-center text-warning-foreground text-xs">The server is not answering. Trying again…</p>}
       {state.error && (
-        <p role="alert" className="flex shrink-0 items-center justify-center gap-2 bg-error-surface px-4 py-1.5 text-error-foreground text-xs">
+        <p role="alert" className="notice flex shrink-0 items-center justify-center gap-2 bg-error-surface px-4 py-1.5 text-error-foreground text-xs">
           <span className="min-w-0 truncate">{state.error}</span><button type="button" aria-label="Dismiss" onClick={() => app.dismiss()} className="rounded-sm p-0.5 hover:bg-foreground/10"><XIcon className="size-3" /></button>
         </p>
       )}
       {needs && !settings && state.profile && (
-        <p role="status" className="flex shrink-0 items-center justify-center gap-2 bg-warning-surface px-4 py-1.5 text-warning-foreground text-xs">
+        <p role="status" className="notice flex shrink-0 items-center justify-center gap-2 bg-warning-surface px-4 py-1.5 text-warning-foreground text-xs">
           {needs}.<button type="button" onClick={() => setSettings(true)} className="rounded-sm font-medium underline underline-offset-2">Set up</button>
         </p>
       )}

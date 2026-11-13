@@ -271,4 +271,11 @@ async function pictures(browser: Browser, control: Client) {
   await links.getByRole('button', { name: 'Agents and GitHub' }).click();
   await links.getByText('Release notes for 0.2.0').waitFor();
   await shot(links, '38-github-only');
+
+  // The desktop app: its shell marks the page, whose top row is then the window's title bar and leaves the window's three
+  // buttons their room (they are the window's, so not in these pictures). With two profiles that row is the tabs.
+  const desk = await open(['long']), desks = await open(['long', 'work'], { width: 420, height: 800 });
+  for (const page of [desk, desks]) await page.evaluate(() => { document.documentElement.dataset.shell = 'windowed'; });
+  await shot(desk, '39-desktop-window');
+  await shot(desks, '40-desktop-window-tabs-narrow');
 }

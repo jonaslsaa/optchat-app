@@ -1,14 +1,17 @@
 import assert from 'node:assert/strict';
 import { createServer } from 'node:net';
-import { existsSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { test, type TestContext } from 'node:test';
 import type { Push, WindowState } from '../src/protocol.ts';
 import { startServer } from '../src/server/server.ts';
 import { transcript } from '../src/ui/agents.ts';
+import { building, polled } from '../src/ui/memory.ts';
 import { App, type State } from '../src/ui/store.ts';
-import { createProfile, temporaryHome, writeRun } from './support.ts';
+// pi-optchat's own lock, which only Pi takes: here it stands for a Pi in a terminal.
+import { describeOwner, lockProfile } from '../node_modules/pi-optchat/dist/profiles.js';
+import { createProfile, temporaryHome, writeMemory, writeRun } from './support.ts';
 
 const pi = { command: process.execPath, args: [join(import.meta.dirname, 'fake-pi.ts')] };
 /** The page's store, without a page: what it would keep in the browser stays in `saved`. */
@@ -198,4 +201,90 @@ test('an agent\'s chat is read on from where the page has it, and a report that 
   assert.equal(transcript(app.state.chats['team/aaaaaaaa'], true).at(-1)?.date, new Date(4000).toISOString());
   // An agent that answered has said its report already.
   assert.deepEqual(transcript({ ...app.state.chats['team/aaaaaaaa'], report: ' Twelve so far.\n' }, true).length, 3);
+});
+
+test('the memory view opens line by line down to a message, and what is open stays open when it is read again', async t => {
+  const home = temporaryHome(), directory = createProfile(home, 'deep'), log = join(directory, 'main', '2026-01-01.jsonl'), tree = join(directory, 'tree', '2026-01-01.jsonl');
+  const entry = (i: number, kind: string, text: string) => `${JSON.stringify({ i, kind, date: new Date(Date.UTC(2026, 0, 1, 0, 0, i)).toISOString(), text })}\n`;
+  const leaf = (i: number, text: string) => `${JSON.stringify({ l: 0, i, text, size: Buffer.byteLength(text) })}\n`;
+  // Eight messages the agent reads as two lines of four.
+  writeMemory(directory, 8);
+  writeFileSync(join(directory, 'view.json'), JSON.stringify({ parts: [[2, 0], [2, 1]], merging: false }));
+  const server = await startServer({ home, app: mkdtempSync(join(home, 'app-')), cwd: home, pi });
+  t.after(() => server.close());
+  const { app } = page(t);
+  await app.start(server.url);
+  const memory = () => app.state.memory.deep, names = (lines: { id: number; n: number; text?: string }[]) => lines.map(line => [`${line.id}+${line.n}`, line.text]);
+
+  await app.readMemory('deep');
+  assert.deepEqual([memory().view?.total, names(memory().view!.lines)], [8, [['0+4', 'summary of 0+4'], ['4+4', 'summary of 4+4']]]);
+  // A line opens into the two under it, and those in turn, down to a line of one message, which opens into the message.
+  await app.toggleLine('deep', memory().view!.lines[0]);
+  assert.deepEqual(names(memory().under['0+4']), [['0+2', 'summary of 0+2'], ['2+2', 'summary of 2+2']]);
+  await app.toggleLine('deep', memory().under['0+4'][1]);
+  assert.deepEqual(names(memory().under['2+2']), [['2+1', 'user: message 2'], ['3+1', 'talk: message 3']]);
+  await app.toggleLine('deep', memory().under['2+2'][1]);
+  assert.deepEqual(memory().originals[3], [{ i: 3, kind: 'talk', date: '2026-01-01T00:00:03.000Z', text: 'message 3' }]);
+  assert.deepEqual([memory().open, building(memory())], [['0+4', '2+2', '3+1'], false]);
+
+  // The chat goes on: its Pi logs a tool call, whose line it has not written yet, and the call has not printed. The view
+  // has the message without a summary, and the message opens as the call alone.
+  appendFileSync(log, entry(8, 'tool', 'bash {"command":"ls"}'));
+  await app.readMemory('deep');
+  assert.deepEqual([memory().view?.total, names(memory().view!.lines).at(-1), building(memory())], [9, ['8+1', undefined], true]);
+  await app.toggleLine('deep', memory().view!.lines[2]);
+  assert.deepEqual(memory().originals[8].map(message => message.kind), ['tool']);
+  // Then the line is written and the call prints. Read again, the view has both, the call has what it printed, every line
+  // that was open is open still, and what was read under them was not read again.
+  const before = memory().under['2+2'];
+  appendFileSync(tree, leaf(8, 'tool: bash {"command":"ls"}') + leaf(9, 'echo: bash: a.txt'));
+  appendFileSync(log, entry(9, 'echo', 'bash: a.txt'));
+  await app.readMemory('deep');
+  assert.deepEqual([memory().view?.total, names(memory().view!.lines).slice(2), building(memory())], [10, [['8+1', 'tool: bash {"command":"ls"}'], ['9+1', 'echo: bash: a.txt']], false]);
+  assert.deepEqual(memory().originals[8].map(message => [message.kind, message.text]), [['tool', 'bash {"command":"ls"}'], ['echo', 'bash: a.txt']]);
+  assert.deepEqual(memory().open, ['0+4', '2+2', '3+1', '8+1']);
+  assert.equal(memory().under['2+2'], before);
+
+  // Closed and opened again, a line shows what was open under it as it was.
+  await app.toggleLine('deep', memory().view!.lines[0]);
+  assert.deepEqual(memory().open, ['2+2', '3+1', '8+1']);
+  await app.toggleLine('deep', memory().view!.lines[0]);
+  assert.deepEqual(memory().open, ['2+2', '3+1', '8+1', '0+4']);
+  assert.equal(memory().under['2+2'], before);
+
+  // An import moves the profile to another memory, here a longer one. Its lines are other lines: nothing read holds.
+  const imported = 'memories/0f8fad5b-d9cb-469f-a165-70867728950e';
+  writeMemory(join(directory, imported), 12);
+  writeFileSync(join(directory, 'active-memory.json'), JSON.stringify(imported));
+  await app.readMemory('deep');
+  assert.deepEqual([memory().view?.total, memory().open, memory().under, memory().originals], [12, [], {}, {}]);
+});
+
+test('the memory view is looked at again by the clock while the chat says too little: its Pi runs, or a Pi outside the app has it', async t => {
+  const home = temporaryHome(), directory = createProfile(home, 'held');
+  writeMemory(directory, 2);
+  const server = await startServer({ home, app: mkdtempSync(join(home, 'app-')), cwd: home, pi });
+  t.after(() => server.close());
+  const unlock = await lockProfile(directory, describeOwner({ profile: 'held', pid: 4242, host: 'a-terminal', cwd: '/somewhere' }));
+  t.after(() => unlock().catch(() => {}));
+  const { app } = page(t);
+  await app.start(server.url);
+  await app.openProfile('held');
+  await app.readMemory('held');
+  const window = () => app.state.windows.find(window => window.id === 'held/main')!, memory = () => app.state.memory.held;
+  assert.equal(window().outside !== undefined && window().status, 'stopped');
+
+  // The Pi in the terminal logs a message. Nothing tells the app: the chat's window does not change, so the clock has to.
+  const still = JSON.stringify(window());
+  appendFileSync(join(directory, 'main', '2026-01-01.jsonl'), `${JSON.stringify({ i: 2, kind: 'user', date: '2026-01-01T00:00:02.000Z', text: 'from the terminal' })}\n`);
+  assert.equal(JSON.stringify(window()), still);
+  assert.equal(polled(memory(), window()), true);
+  await app.readMemory('held');
+  assert.equal(memory().view?.total, 3);
+  // So it does while that message's line is not written, whoever has the chat. After that, a chat left to itself says
+  // when it changed; a run does not, until it ends.
+  assert.deepEqual([polled(memory(), { status: 'idle' }), polled(memory(), { status: 'stopped' })], [true, true]);
+  appendFileSync(join(directory, 'tree', '2026-01-01.jsonl'), `${JSON.stringify({ l: 0, i: 2, text: 'user: from the terminal', size: 23 })}\n`);
+  await app.readMemory('held');
+  assert.deepEqual([polled(memory(), { status: 'idle' }), polled(memory(), { status: 'stopped' }), polled(memory(), { status: 'running' }), polled(memory(), { status: 'stopped', outside: 'unknown' })], [false, false, true, true]);
 });

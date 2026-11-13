@@ -13,9 +13,9 @@ const id = Type.Integer({ minimum: 0 });
 export const Message = Type.Unsafe<Entry>({});
 export type Message = Entry;
 
-/** A line of the summary tree, in pi-optchat's own notation: the `n` messages from `id` on. No `text` means its summary is not
- * built yet. */
-export const Line = Type.Object({ id, n: Type.Integer({ minimum: 1 }), text: Type.Optional(Type.String()) });
+/** A line of the summary tree, in pi-optchat's own notation: the `n` messages from `id` on, summarized in `text` as pi-optchat
+ * keeps it. No `text` means its summary is not built yet. `from` and `to` are the dates of its earliest and latest message. */
+export const Line = Type.Object({ id, n: Type.Integer({ minimum: 1 }), text: Type.Optional(Type.String()), from: Type.String(), to: Type.String() });
 export type Line = Static<typeof Line>;
 
 /** A record Pi wrote in RPC mode, passed through as it is: a session event (`agent_start`, `message_update`, `tool_execution_end`,
@@ -100,10 +100,16 @@ export const methods = {
    * oldest first. `total` is how many messages the log has. */
   history: method(Type.Object({ profile: Type.String(), before: Type.Optional(id), limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 500 })) }),
     Type.Object({ total: id, messages: Type.Array(Message) })),
-  /** The view: the lines the agent sees this turn, oldest first, tiling the whole log. */
-  view: method(Type.Object({ profile: Type.String() }), Type.Object({ total: id, lines: Type.Array(Line) })),
-  /** Opens line `id`+`n` into the two lines of `n`/2 under it (`n` at least 2; a single message is a `history` page of one). */
+  /** The memory view: the lines the agent reads its memory as, oldest first, tiling the whole log. `size` is how many bytes
+   * they are as the agent gets them, of the `budget` pi-optchat keeps the view under. It is read from the profile's files, so
+   * it can trail a running chat by what its Pi has not written yet. `memory` names the memory it is of: a line is the same
+   * line only for as long as that stays. */
+  view: method(Type.Object({ profile: Type.String() }), Type.Object({ memory: Type.String(), total: id, lines: Type.Array(Line), size: id, budget: id })),
+  /** Opens line `id`+`n` into the two lines of `n`/2 under it (`n` at least 2; a line of one message opens with `original`). */
   zoom: method(Type.Object({ profile: Type.String(), id, n: Type.Integer({ minimum: 2 }) }), Type.Object({ lines: Type.Array(Line) })),
+  /** Message `id` as it was said, under a line of one message. A tool call comes with what it printed, and what a tool
+   * printed with its call, since the chat draws the two as one row. */
+  original: method(Type.Object({ profile: Type.String(), id }), Type.Object({ messages: Type.Array(Message) })),
 
   /** A profile's subagents, read from disk: those at work, and the newest `limit` of those that have ended (30 unless said);
    * `more` is how many ended ones that leaves out. No Pi is asked, so the list is there whether or not one runs. */

@@ -7,7 +7,7 @@ import { startServer } from '../src/server/server.ts';
 // pi-optchat's own lock, which only Pi takes: here it stands for a Pi in a terminal.
 import { describeOwner, lockProfile } from '../node_modules/pi-optchat/dist/profiles.js';
 import { createProfile } from '../test/support.ts';
-import { agents, demo, seed, TEAM } from './seed.ts';
+import { agents, demo, remember, seed, TEAM } from './seed.ts';
 
 /** `npm run screenshots [directory] [--dark]`: a PNG of every main state of the UI, in /tmp/optchat-app-shots unless a directory
  * is named, and all of them in dark mode with `--dark`. It builds the UI, serves it against throwaway profiles under /tmp with
@@ -31,6 +31,10 @@ const terminal = createProfile(home, 'terminal');
 seed(terminal, 2, NOW);
 seed(createProfile(home, 'work'), 95, NOW); // Ends with the turn that ran the tests.
 seed(createProfile(home, 'notes'), 2, NOW);
+// A chat of ten days with its summaries, for the memory view.
+const long = createProfile(home, 'long');
+seed(long, 95, NOW, undefined, 40 * 60_000);
+remember(long);
 writeFileSync(join(home, 'fake-pi.json'), JSON.stringify(demo(NOW)));
 process.env.FAKE_PI_SCRIPT = join(home, 'fake-pi.json');
 mkdirSync(out, { recursive: true });
@@ -206,4 +210,28 @@ async function pictures(browser: Browser, control: Client) {
     await small.getByText('Draft the release notes').waitFor();
     await shot(small, '27-agents-narrow');
   } finally { await working(); }
+
+  // The memory view: the lines the agent reads, the newest in sight; then the oldest opened twice, and messages as they were said.
+  const memory = await open(['long']), lines = memory.locator('[data-line]');
+  await memory.getByText('Memory', { exact: true }).click();
+  await lines.first().waitFor();
+  await shot(memory, '28-memory');
+  for (const name of ['message 346', 'message 347', 'message 349']) await lines.filter({ hasText: name }).click();
+  await memory.getByText('Ran npm test').waitFor();
+  await shot(memory, '29-memory-messages');
+  await lines.first().click();
+  await lines.nth(1).click();
+  await lines.nth(2).waitFor();
+  await memory.getByRole('heading', { name: 'Mon 2 Nov' }).scrollIntoViewIfNeeded();
+  await shot(memory, '30-memory-opened');
+  const dim = await open(['long'], { dark: true });
+  await dim.keyboard.press('Alt+m');
+  await dim.locator('[data-line]').first().click();
+  await dim.locator('[data-line]').nth(2).waitFor();
+  await dim.getByRole('heading', { name: 'Mon 2 Nov' }).scrollIntoViewIfNeeded();
+  await shot(dim, '31-memory-dark');
+  const slim = await open(['long'], { width: 420, height: 800 });
+  await slim.keyboard.press('Alt+m');
+  await slim.locator('[data-line]').first().waitFor();
+  await shot(slim, '32-memory-narrow');
 }

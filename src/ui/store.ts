@@ -1,7 +1,8 @@
 import { useSyncExternalStore } from 'react';
 import { connect, type Client } from '../client.ts';
-import type { Message, Method, Params, Push, Result, Settings, Setup, WindowState } from '../protocol.ts';
+import type { Line, Message, Method, Params, Push, Result, Settings, Setup, WindowState } from '../protocol.ts';
 import { current } from '../window.ts';
+import { calling, key, NO_TREE, read, toggled, type Tree } from './memory.ts';
 import { apply, idle, isMessage, isObject, merged, replay, stopped, without, words, type Live, type PiMessage } from './transcript.ts';
 
 /** Everything the page knows, kept outside React: the connection to the server, and what it said. Components read it with
@@ -26,6 +27,8 @@ export interface State {
    * (`work/1a2b3c4d`): the messages read so far, of the `total` the server counted them from. */
   agents: Record<string, Result<'agents'>>;
   chats: Record<string, { total: number; messages: PiMessage[]; report?: string; ended?: number }>;
+  /** Each profile's memory view, once it was looked at, with the lines that were opened in it. */
+  memory: Record<string, Tree>;
   /** Why the last thing you asked for failed. */
   error?: string;
   /** The app's settings, and what a chat needs with whether it is there, once the server has said. */
@@ -47,7 +50,7 @@ export function title(window: WindowState, state: State) {
 }
 
 export class App {
-  state: State = { connection: 'connecting', profiles: [], tabs: [], windows: [], selected: {}, logs: {}, live: {}, sessions: {}, agents: {}, chats: {} };
+  state: State = { connection: 'connecting', profiles: [], tabs: [], windows: [], selected: {}, logs: {}, live: {}, sessions: {}, agents: {}, chats: {}, memory: {} };
   private client?: Client;
   private retrying?: ReturnType<typeof setTimeout>;
   private closed = false;
@@ -282,6 +285,34 @@ export class App {
     // one with nothing new changes nothing.
     if (!read || read.total < total || (had && read.total === total && read.report === had.report)) return;
     this.set({ chats: { ...this.state.chats, [key]: { total: read.total, messages: [...had?.messages ?? [], ...read.messages.slice(total - after).filter(isMessage)], report: read.report, ended: read.ended } } });
+  }
+  private tree(profile: string, change: (tree: Tree) => Tree) { this.set({ memory: { ...this.state.memory, [profile]: change(this.state.memory[profile] ?? NO_TREE) } }); }
+  /** A profile's memory view as its files have it now. The lines that are open stay open, unless it is another memory by
+   * now (the profile was moved to one, or its log is shorter): then nothing read of the old one holds. */
+  async readMemory(profile: string) {
+    const view = await this.ask('view', { profile }), before = this.state.memory[profile]?.view;
+    // It is read again whenever the chat moves: the page is drawn again only when the view did.
+    if (!view || JSON.stringify(view) === JSON.stringify(before)) return;
+    const same = !before || view.memory === before.memory && view.total >= before.total;
+    this.tree(profile, tree => ({ ...same ? tree : NO_TREE, view }));
+    // A tool call read before it had printed may have by now.
+    await Promise.all(calling(this.state.memory[profile] ?? NO_TREE).map(id => this.original(profile, id)));
+  }
+  /** Which memory the page has the view of: an answer about another one, which came too late, is not kept. */
+  private memoryOf(profile: string) { return this.state.memory[profile]?.view?.memory; }
+  private async original(profile: string, id: number) {
+    const of = this.memoryOf(profile), original = await this.ask('original', { profile, id });
+    if (original && of === this.memoryOf(profile)) this.tree(profile, tree => ({ ...tree, originals: { ...tree.originals, [id]: original.messages } }));
+  }
+  /** Opens a line of the memory view into the two lines under it, or a line of one message into that message; or closes it.
+   * What is under a line is read once: it is the same for as long as the memory is. */
+  async toggleLine(profile: string, line: Line) {
+    const before = this.state.memory[profile] ?? NO_TREE;
+    this.tree(profile, tree => toggled(tree, line));
+    if (read(before, line)) return;
+    if (line.n === 1) return this.original(profile, line.id);
+    const of = this.memoryOf(profile), halves = await this.ask('zoom', { profile, id: line.id, n: line.n });
+    if (halves && of === this.memoryOf(profile)) this.tree(profile, tree => ({ ...tree, under: { ...tree.under, [key(line)]: halves.lines } }));
   }
   /** Sends your message. In a run it steers the agent, or with `later` waits until the agent has stopped. */
   async send(window: string, text: string, later = false) {

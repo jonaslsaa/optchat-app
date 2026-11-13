@@ -1,4 +1,4 @@
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Script } from '../test/fake-pi.ts';
 import { writeRun } from '../test/support.ts';
@@ -109,13 +109,35 @@ export function agents(directory: string, end: number) {
   run('b2c4e6f8', undefined, 'Count the lines of TypeScript in src/ and say which file is the longest.\nReport one line.', 'completed', 7200, { ended: ago(7188), report: '4,812 lines; `src/ui/transcript.ts` is the longest at 361.' });
 }
 
-/** Writes `turns` turns of the chat (`from`, over again) to the profile in `directory`, a message a minute, the newest a minute
- * before `end`. */
-export function seed(directory: string, turns: number, end = Date.UTC(2026, 10, 12, 9, 0, 0), from = TURNS) {
+/** Writes `turns` turns of the chat (`from`, over again) to the profile in `directory`, a message a minute (or every `apart`
+ * ms), the newest that long before `end`. */
+export function seed(directory: string, turns: number, end = Date.UTC(2026, 10, 12, 9, 0, 0), from = TURNS, apart = 60_000) {
   const said = [NOTE, ...Array.from({ length: turns }, (_, turn) => from[turn % from.length]).flat()];
-  const entries = said.map(([kind, text], i) => JSON.stringify({ i, kind, date: new Date(end - (said.length - i) * 60_000).toISOString(), text }));
+  const entries = said.map(([kind, text], i) => JSON.stringify({ i, kind, date: new Date(end - (said.length - i) * apart).toISOString(), text }));
   mkdirSync(join(directory, 'main'), { recursive: true });
   writeFileSync(join(directory, 'main', '2026-11-12.jsonl'), `${entries.join('\n')}\n`);
+}
+/** The summaries and the view of a seeded profile, as pi-optchat would have left them: a line for every message, a summary
+ * for every two lines under it (here the first words of what was asked and answered, where pi-optchat has a model write
+ * one), and a view that keeps the last `kept` messages one by one and folds the rest, the oldest the most. */
+export function remember(directory: string, kept = 9) {
+  const entries: { kind: string; text: string }[] = readFileSync(join(directory, 'main', '2026-11-12.jsonl'), 'utf8').trim().split('\n').map(line => JSON.parse(line));
+  const sentence = (text: string) => text.split(/(?<=[.?!:])\s|\n/)[0].replace(/[`*#]/g, '').trim();
+  const nodes = entries.map(({ kind, text }, i) => ({ l: 0, i, text: `${kind}: ${text}`.slice(0, 480) }));
+  for (let l = 1; entries.length >> l > 0; l++) for (let i = 0; i < entries.length >> l; i++) {
+    const among = entries.slice(i * 2 ** l, (i + 1) * 2 ** l), of = (kind: string) => among.filter(entry => entry.kind === kind), calls = of('tool');
+    const lines = [
+      ...of('user').slice(0, 3).map(entry => `user: ${sentence(entry.text)}`),
+      ...of('talk').slice(-2).map(entry => `talk: ${sentence(entry.text)}`),
+      ...calls.length ? [`tool: ${calls.length} ${calls.length === 1 ? 'call' : 'calls'}, the first to ${calls[0].text.split(' ')[0]}`] : [],
+    ];
+    nodes.push({ l, i, text: lines.join('\n') || `${among[0].kind}: ${sentence(among[0].text)}` });
+  }
+  const parts: [l: number, i: number][] = [];
+  for (let l = 20, covered = 0; l >= 0; l--) while (covered + 2 ** l <= entries.length - (l ? kept : 0)) { parts.push([l, covered / 2 ** l]); covered += 2 ** l; }
+  mkdirSync(join(directory, 'tree'), { recursive: true });
+  writeFileSync(join(directory, 'tree', '2026-11-12.jsonl'), `${nodes.map(node => JSON.stringify({ ...node, size: Buffer.byteLength(node.text) })).join('\n')}\n`);
+  writeFileSync(join(directory, 'view.json'), JSON.stringify({ parts, merging: false }));
 }
 
 const ANSWER = `## What I found

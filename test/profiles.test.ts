@@ -35,7 +35,8 @@ test('a long history is paged from disk, and reading a profile writes nothing to
 
 test('the view tiles the whole log, and a line opens into the two under it', async () => {
   writeMemory(createProfile(home, 'tree'), 20_000, i => `message ${i} ${'x'.repeat(200)}`);
-  const { total, lines } = await profiles.view({ profile: 'tree' });
+  const { memory, total, lines, size, budget } = await profiles.view({ profile: 'tree' });
+  assert.equal(memory, 'tree 2026-01-01T00:00:00.000Z', 'which memory it is: the directory it is in, and when it begins');
   let covered = 0;
   for (const line of lines) { assert.equal(line.id, covered); covered += line.n; }
   assert.equal(covered, total);
@@ -43,7 +44,12 @@ test('the view tiles the whole log, and a line opens into the two under it', asy
   assert.ok(n >= 2 && lines.length < total / 4, 'the old end of a long log is folded into summaries');
   assert.equal(lines[0].text, `summary of 0+${n}`);
 
-  assert.deepEqual(await profiles.zoom({ profile: 'tree', id: 0, n }), { lines: [{ id: 0, n: half, text: `summary of 0+${half}` }, { id: half, n: half, text: `summary of ${half}+${half}` }] });
+  // The view is what the agent reads, and as much as it reads: its bytes, of the budget pi-optchat keeps it under.
+  assert.ok(size > 0 && size <= budget && budget === 128_000, `${size} of ${budget}`);
+  // A line says when its messages were said (one a second here), from the first of them to the last.
+  const at = (i: number) => new Date(Date.UTC(2026, 0, 1, 0, 0, i)).toISOString();
+  assert.deepEqual([lines[0].from, lines[0].to], [at(0), at(n - 1)]);
+  assert.deepEqual(await profiles.zoom({ profile: 'tree', id: 0, n }), { lines: [{ id: 0, n: half, text: `summary of 0+${half}`, from: at(0), to: at(half - 1) }, { id: half, n: half, text: `summary of ${half}+${half}`, from: at(half), to: at(n - 1) }] });
   assert.match((await profiles.zoom({ profile: 'tree', id: 6, n: 2 })).lines[1].text ?? '', /^talk: message 7 /);
   await assert.rejects(profiles.zoom({ profile: 'tree', id: 3, n: 2 }), /No line 3\+2/);
 });
@@ -52,7 +58,34 @@ test('a summary the owning Pi has not built yet is a line without text: the app 
   const directory = createProfile(home, 'unbuilt'), long = 'long '.repeat(200);
   mkdirSync(join(directory, 'main'));
   writeFileSync(join(directory, 'main', '2026-01-02.jsonl'), [0, 1, 2, 3].map(i => entry(i, long)).join(''));
-  assert.deepEqual((await profiles.view({ profile: 'unbuilt' })).lines, [0, 1, 2, 3].map(id => ({ id, n: 1, text: undefined })));
+  assert.deepEqual((await profiles.view({ profile: 'unbuilt' })).lines, [0, 1, 2, 3].map(id => ({ id, n: 1, text: undefined, from: '2026-01-02T00:00:00.000Z', to: '2026-01-02T00:00:00.000Z' })));
+});
+
+test('a message is answered as it was said, a tool call with what it printed; and a line of imported history by its earliest and latest message', async () => {
+  const directory = createProfile(home, 'said'), day = (d: number) => `2026-03-0${d}T10:00:00.000Z`;
+  // Two calls and their results, as pi-optchat logs a step: the calls in a run, the results after them in the same order.
+  const said: [kind: string, text: string, date: string][] = [
+    ['user', 'check both', day(5)], ['tool', 'bash {"command":"ls"}', day(5)], ['tool', 'read {"path":"a.txt"}', day(5)], ['echo', 'bash: a.txt', day(5)], ['echo', 'read: hello', day(5)],
+    ['talk', 'Both are there.', day(5)], ['user', 'an old one, imported later', day(2)], ['tool', 'bash {"command":"sleep 9"}', day(7)],
+    // A message that says something between its calls, and a call that ended in an error of the agent's, not in a result.
+    ['tool', 'bash {"command":"pwd"}', day(8)], ['talk', 'and the file', day(8)], ['tool', 'read {"path":"b.txt"}', day(8)], ['echo', 'bash: /tmp', day(8)], ['echo', 'read: world', day(8)],
+    ['tool', 'bash {"command":"make"}', day(9)], ['echo', 'Agent error: 529 overloaded', day(9)],
+  ];
+  mkdirSync(join(directory, 'main')); mkdirSync(join(directory, 'tree'));
+  writeFileSync(join(directory, 'main', '2026-03-05.jsonl'), said.map(([kind, text, date], i) => `${JSON.stringify({ i, kind, date, text })}\n`).join(''));
+  writeFileSync(join(directory, 'tree', '2026-03-05.jsonl'), `${JSON.stringify({ l: 3, i: 0, text: 'all eight', size: 9 })}\n`);
+  writeFileSync(join(directory, 'view.json'), JSON.stringify({ parts: [[3, 0]], merging: false }));
+  assert.deepEqual((await profiles.view({ profile: 'said' })).lines[0], { id: 0, n: 8, text: 'all eight', from: day(2), to: day(7) });
+
+  const original = async (id: number) => (await profiles.original({ profile: 'said', id })).messages.map(message => message.i);
+  assert.deepEqual((await profiles.original({ profile: 'said', id: 0 })).messages, [{ i: 0, kind: 'user', date: day(5), text: 'check both' }]);
+  assert.deepEqual([await original(5), await original(6)], [[5], [6]]);
+  // A call comes with what it printed, and what it printed with the call: the two are one row of the chat.
+  assert.deepEqual([await original(1), await original(3), await original(2), await original(4)], [[1, 3], [1, 3], [2, 4], [2, 4]]);
+  assert.deepEqual(await original(7), [7], 'a call that never printed is there alone');
+  assert.deepEqual([await original(8), await original(11), await original(10), await original(12), await original(9)], [[8, 11], [8, 11], [10, 12], [10, 12], [9]]);
+  assert.deepEqual([await original(13), await original(14)], [[13], [14]], 'an error of the agent\'s is no result of the call before it');
+  await assert.rejects(profiles.original({ profile: 'said', id: 15 }), /No message 15: the log has 15\./);
 });
 
 test('what the owning Pi wrote since the last read is there on the next one', async () => {

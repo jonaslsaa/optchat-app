@@ -1,7 +1,7 @@
 name: Release
 
 # Builds the macOS app (Apple Silicon) and attaches its dmg to a GitHub release. A tag `v<version>` releases; a run started by
-# hand only builds, and keeps the dmg as an artifact of the run. Nothing builds on a push or a pull request: a macOS runner's
+# hand only builds, also when it is started on a tag, and keeps the dmg as an artifact of the run. Nothing builds on a push or a pull request: a macOS runner's
 # minutes count ten times in a private repository.
 on:
   push:
@@ -21,7 +21,7 @@ jobs:
           node-version: 24
           cache: npm
       - name: The tag is the version in package.json
-        if: github.ref_type == 'tag'
+        if: github.event_name == 'push'
         run: |
           version="v$(node -p "require('./package.json').version")"
           if [ "$version" != "$GITHUB_REF_NAME" ]; then
@@ -41,12 +41,12 @@ jobs:
           spctl --assess --type execute -vv /tmp/optchat-dmg/OptChat.app || true
           hdiutil detach /tmp/optchat-dmg
       - name: Release
-        if: github.ref_type == 'tag'
+        if: github.event_name == 'push'
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh release create "$GITHUB_REF_NAME" release/*.dmg --generate-notes --verify-tag
       - uses: actions/upload-artifact@v7
-        if: github.ref_type != 'tag'
+        if: github.event_name != 'push'
         with:
           name: OptChat-dmg
           path: release/*.dmg

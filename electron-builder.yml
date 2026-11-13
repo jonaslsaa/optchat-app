@@ -3,7 +3,7 @@ appId: com.jonaslsaa.optchat
 productName: OptChat
 directories:
   output: release
-# Everything the app runs is in dist: no node_modules go in.
+# Everything the app runs is in dist: no node_modules go in. The icon is build/icon.icns, where it is looked for.
 files:
   - dist/ui
   - dist/desktop
@@ -11,8 +11,6 @@ files:
   - "!node_modules"
 mac:
   category: public.app-category.developer-tools
-  # The dmg has the same icon. Its source is build/icon.svg.
-  icon: build/icon.icns
   target:
     - target: dmg
       arch: arm64

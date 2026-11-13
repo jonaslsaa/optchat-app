@@ -15,17 +15,16 @@ const PORT = 4781;
 // One app at a time: a second one would only find every profile held by the first.
 if (!app.requestSingleInstanceLock()) app.quit();
 else {
-  Object.assign(process.env, await loginEnvironment());
+  // Opened from the Finder, the app has launchd's environment. Run from a terminal it has yours already, and what you typed stays.
+  if (app.isPackaged) Object.assign(process.env, await loginEnvironment());
   const options = { ui: join(import.meta.dirname, '../ui'), opener: terminal() };
   const server = await startServer({ ...options, port: PORT }).catch(() => startServer(options));
   // Electron is ready only once this file has run to its end, so the window is not waited for here.
   void app.whenReady().then(() => {
     // The packaged app has its icon in it; run from the checkout, Electron would show its own.
     if (!app.isPackaged) app.dock?.setIcon(join(import.meta.dirname, '../../build/icon.png'));
-    // `OPTCHAT_APP_BACKGROUND` is for trying the app out while you work: its window opens behind the others and takes no focus.
-    const background = Boolean(process.env.OPTCHAT_APP_BACKGROUND);
     const window = new BrowserWindow({
-      width: 1280, height: 860, minWidth: 380, minHeight: 480, show: false, focusable: !background,
+      width: 1280, height: 860, minWidth: 380, minHeight: 480, show: false,
       // No title bar: the page's top row is the window's, with the window's buttons in it, level with its middle (52px high).
       titleBarStyle: 'hiddenInset', trafficLightPosition: { x: 16, y: 19 },
       webPreferences: { nodeIntegration: false, contextIsolation: true, sandbox: true },
@@ -40,17 +39,19 @@ else {
     window.webContents.on('will-navigate', (event, url) => { if (destination(url, server.page) !== 'here') { event.preventDefault(); browse(url); } });
     window.webContents.setWindowOpenHandler(({ url }) => { browse(url); return { action: 'deny' }; });
     // Shown once the page is there and marked.
-    void window.loadURL(server.page).then(() => { if (background) { window.showInactive(); window.blur(); } else window.show(); });
+    void window.loadURL(server.page).then(() => window.show());
     app.on('second-instance', () => { if (window.isMinimized()) window.restore(); window.focus(); });
   });
   app.on('window-all-closed', () => app.quit());
 
   // Quitting stops every Pi in order, so each saves its memory and frees its profile, and is put off until that is done:
   // also when you quit again meanwhile, as a Cmd+Q held a moment too long does. The server gives a Pi 15 seconds at most.
+  // The window goes at once, as T3 Code's does: its page would only say that the server is not answering.
   let closing: Promise<void> | undefined, closed = false;
   app.on('before-quit', event => {
     if (closed) return;
     event.preventDefault();
+    for (const window of BrowserWindow.getAllWindows()) window.hide();
     closing ??= server.close().then(() => { closed = true; app.quit(); });
   });
   for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP'] as const) process.on(signal, () => app.quit());

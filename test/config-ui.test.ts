@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { percent, THINKING } from 'pi-optchat/files';
+import { THINKING as APP } from '../src/models.ts';
 import type { Setting } from '../src/protocol.ts';
-import { field, model, named, said, typed } from '../src/ui/config.ts';
+import { field, LEVELS, model, named, said, typed } from '../src/ui/config.ts';
 
 const setting = (kind: Setting['kind'], more: Partial<Setting> = {}): Setting => ({ key: 'k', kind, label: 'A setting', description: '', applies: '', value: 1, default: 1, ...more });
 
@@ -20,4 +22,10 @@ test('a model is written provider/id, and its id may have a slash in it', () => 
   assert.deepEqual(model(' openrouter/anthropic/claude-sonnet-5-5 '), { provider: 'openrouter', model: 'anthropic/claude-sonnet-5-5' });
   assert.equal(named({ provider: 'openrouter', model: 'anthropic/claude-sonnet-5-5' }), 'openrouter/anthropic/claude-sonnet-5-5');
   for (const text of ['', 'claude-sonnet-5-5', '/claude', 'anthropic/']) assert.equal(model(text), undefined, text);
+});
+
+test('what the page mirrors of pi-optchat is what pi-optchat has: the page cannot load it, so this fails when they differ', () => {
+  assert.deepEqual([...APP], [...THINKING]);
+  assert.deepEqual(LEVELS, [...THINKING]);
+  for (const share of [0, 0.3, 0.125, 0.333, 0.9]) assert.equal(said(setting('percent'), share), percent(share));
 });

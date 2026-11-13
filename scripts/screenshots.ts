@@ -5,7 +5,7 @@ import { build } from 'vite';
 import { connect, type Client } from '../src/client.ts';
 import { startServer } from '../src/server/server.ts';
 // pi-optchat's own lock, which only Pi takes: here it stands for a Pi in a terminal.
-import { describeOwner, lockProfile } from '../node_modules/pi-optchat/dist/profiles.js';
+import { describeOwner, lockProfile } from 'pi-optchat/files';
 import { createProfile } from '../test/support.ts';
 import { agents, demo, remember, seed, SHIPPED, SHIPPING, TEAM } from './seed.ts';
 
@@ -60,7 +60,7 @@ writeFileSync(pi.command, `#!/bin/sh\nexec "${process.execPath}" "${fake}" "$@"\
 chmodSync(pi.command, 0o755);
 process.env.FAKE_PI_HOME = join(home, 'pi');
 mkdirSync(join(home, 'pi', 'pi-optchat'), { recursive: true });
-writeFileSync(join(home, 'pi', 'pi-optchat', 'package.json'), JSON.stringify({ name: 'pi-optchat', version: '0.11.12' }));
+writeFileSync(join(home, 'pi', 'pi-optchat', 'package.json'), JSON.stringify({ name: 'pi-optchat', version: '0.11.13' }));
 writeFileSync(join(home, 'pi', 'state.json'), JSON.stringify({ version: '1.5.2', providers: ['anthropic', 'openai', 'openai-codex', 'github-copilot', 'lab'], packages: { 'npm:pi-optchat': join(home, 'pi', 'pi-optchat') } }));
 
 await build({ logLevel: 'warn' });

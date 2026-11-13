@@ -4,7 +4,8 @@ import type { Setting } from '../protocol.ts';
 /** The form over a profile's settings, with no DOM: what a field shows of a setting, and what was typed in one as the value
  * pi-optchat keeps. Whether a value will do is pi-optchat's to say, so nothing here checks a range. */
 
-/** How hard a model thinks: pi-optchat's levels, in its order. */
+/** How hard a model thinks: pi-optchat's levels, in its order. They mirror pi-optchat's `THINKING`, which the page cannot load:
+ * `pi-optchat/files` is for Node only (`test/config-ui.test.ts` fails when the two differ). */
 export const THINKING = { off: 'Off', minimal: 'Minimal', low: 'Low', medium: 'Medium', high: 'High', xhigh: 'Extra high', max: 'Max' } satisfies Record<ModelChoice['thinking'], string>;
 export const LEVELS = Object.keys(THINKING) as ModelChoice['thinking'][];
 
@@ -12,7 +13,8 @@ export const LEVELS = Object.keys(THINKING) as ModelChoice['thinking'][];
 export const field = ({ kind }: Setting, value: number) => String(kind === 'percent' ? Math.round(value * 1000) / 10 : value);
 /** What a field's number is of: "%", "KB", or nothing. */
 export const unit = ({ kind, unit }: Setting) => kind === 'percent' ? '%' : unit ?? '';
-/** A value in words, as pi-optchat's own settings page says it: "on", "30%", "16 KB". */
+/** A value in words, as pi-optchat's own settings page says it: "on", "30%", "16 KB". A percent mirrors pi-optchat's `percent`,
+ * which the page cannot load: `pi-optchat/files` is for Node only (`test/config-ui.test.ts` fails when the two differ). */
 export function said(setting: Setting, value: Setting['value']) {
   if (typeof value === 'boolean') return value ? 'on' : 'off';
   return `${field(setting, value)}${setting.kind === 'percent' ? '%' : unit(setting) && ` ${unit(setting)}`}`;

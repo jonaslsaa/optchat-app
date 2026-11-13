@@ -1,7 +1,7 @@
 import { basename } from 'node:path';
 import type { Part } from 'pi-optchat/core';
 import { existsSync } from 'node:fs';
-import { createProfile, defaults, fingerprint, listProfiles, loadConfig, memoryDirectory, profilePath, readImage, readInstructions, readMemory, saveInstructions, SETTINGS, updateConfig, type Memory } from 'pi-optchat/files';
+import { createProfile, defaults, fingerprint, listProfiles, loadConfig, memoryDirectory, profilePath, readImage, readInstructions, readMemory, saveInstructions, SETTING_KEYS, SETTINGS, updateConfig, type Memory } from 'pi-optchat/files';
 import type { Line, Params, Result } from '../protocol.ts';
 
 const PAGE = 50;
@@ -60,7 +60,7 @@ export class Profiles {
    * one it gains is in the app with nothing more than a newer pi-optchat. */
   config({ profile }: Params<'config'>): Result<'config'> {
     const directory = profileDirectory(this.home, profile), config = loadConfig(directory);
-    const settings = (Object.keys(SETTINGS) as (keyof typeof SETTINGS)[]).map(key => ({ key, ...SETTINGS[key], value: config[key] }));
+    const settings = SETTING_KEYS.map(key => ({ key, ...SETTINGS[key], value: config[key] }));
     return { settings, compactor: config.compactor, standard: defaults.compactor, subagent: config.subagent, instructions: readInstructions(directory) };
   }
   /** Changes one thing of them. pi-optchat checks what the page sent (its `checkPatch`) and refuses in its own words; the Pi

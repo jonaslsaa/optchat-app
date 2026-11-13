@@ -2,7 +2,7 @@ import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, write
 import { hostname } from 'node:os';
 import { join } from 'node:path';
 // pi-optchat's own lock, which a Pi holds while it has a profile open.
-import { describeOwner, lockProfile } from '../node_modules/pi-optchat/dist/profiles.js';
+import { describeOwner, lockProfile } from 'pi-optchat/files';
 import { fakeOwner } from './fake-owner.ts';
 import { clamp, levels, type Thinking } from '../src/models.ts';
 
@@ -61,7 +61,7 @@ if ((verb === 'install' || verb === 'update') && folder && kept) {
     const name = source.replace('npm:', ''), path = join(folder, 'npm', 'node_modules', name);
     console.log(`Installing ${source}...\n`);
     mkdirSync(path, { recursive: true });
-    writeFileSync(join(path, 'package.json'), JSON.stringify({ name, version: '0.11.12' }));
+    writeFileSync(join(path, 'package.json'), JSON.stringify({ name, version: '0.11.13' }));
     installed.packages[source] = path;
     console.log(`added 1 package in 409ms\nInstalled ${source}`);
   }

@@ -1,4 +1,5 @@
-/** How hard a model thinks, in Pi's words and from least to most. */
+/** How hard a model thinks, in Pi's words and from least to most. It mirrors pi-optchat's `THINKING`, which the page cannot
+ * load: `pi-optchat/files` is for Node only (`test/config-ui.test.ts` fails when the two differ). */
 export const THINKING = ['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'] as const;
 export type Thinking = typeof THINKING[number];
 

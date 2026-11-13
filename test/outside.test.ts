@@ -5,7 +5,7 @@ import { connect } from '../src/client.ts';
 import type { Push, WindowState } from '../src/protocol.ts';
 import { startServer } from '../src/server/server.ts';
 // pi-optchat's own lock, which only Pi takes: here it stands for a Pi in a terminal.
-import { describeOwner, lockProfile } from '../node_modules/pi-optchat/dist/profiles.js';
+import { describeOwner, lockProfile } from 'pi-optchat/files';
 import { createProfile, temporaryHome } from './support.ts';
 
 const home = temporaryHome();

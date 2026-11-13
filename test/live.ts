@@ -125,6 +125,38 @@ test('a connected window reads the profile\'s memory, and Complete hands its con
   assert.deepEqual(current(after, kept.messages).map(message => [message.role, words(message.content)]), [['user', 'Reply with exactly: here'], ['assistant', 'here']]);
 });
 
+test('a profile\'s settings are changed in its file while no Pi has it, and in the chat that is running once one does', { timeout: 120_000 }, async t => {
+  const home = temporaryHome(), sent = process.env.OPTCHAT_APP_SENT = join(home, 'sent.jsonl'), profile = createProfile(home, 'live');
+  const server = await startServer({ home, cwd: mkdtempSync(join(home, 'cwd-')), flags: [...flags, '-e', join(import.meta.dirname, 'sent.ts')] });
+  t.after(() => server.close());
+  const { record, onPush } = watch(), client = await connect(server.url, onPush);
+  const kept = () => JSON.parse(readFileSync(join(profile, 'config.json'), 'utf8'));
+  /** The tools the model was offered in each request so far. */
+  const offered = () => readFileSync(sent, 'utf8').trim().split('\n').map((line): string[] => JSON.parse(line).payload.tools.map((tool: { name: string }) => tool.name));
+  const nowhere = { provider: 'anthropic', model: 'no-such-model', thinking: 'off' } as const, haiku = { ...nowhere, model: 'claude-haiku-5-5' };
+
+  // No Pi has the profile: pi-optchat writes the file, and a model is kept as it is written, with no Pi there to know it.
+  await client.request('configure', { profile: 'live', key: 'maxAgents', value: 3 });
+  await client.request('configure', { profile: 'live', key: 'compactor', value: nowhere });
+  assert.partialDeepStrictEqual(kept(), { maxAgents: 3, compactor: nowhere });
+  await client.request('configure', { profile: 'live', key: 'compactor', value: haiku });
+
+  const main = (await client.request('open', { profile: 'live' })).window.id;
+  await client.request('prompt', { window: main, text: 'Reply with exactly this word and nothing else: one' });
+  const first = await record(main, r => r.type === 'agent_settled'), before = offered();
+  assert.ok(before.length > 0 && before.every(tools => tools.includes('zoom') && !tools.includes('search')), JSON.stringify(before));
+
+  // The Pi that has the profile is told, and is the judge: it knows which models it has, which the file could not.
+  await assert.rejects(client.request('configure', { profile: 'live', key: 'compactor', value: nowhere }), /^Error: compactor: anthropic\/no-such-model with thinking off is not offered by this Pi/);
+  const changed = await client.request('configure', { profile: 'live', key: 'memorySearch', value: true });
+  assert.equal(changed.settings.find(setting => setting.key === 'memorySearch')?.value, true);
+  assert.partialDeepStrictEqual(kept(), { memorySearch: true, maxAgents: 3, compactor: haiku });
+  // And the chat that is running has it, with no restart: its next turn offers the model the tool the setting turns on.
+  await client.request('prompt', { window: main, text: 'Reply with exactly this word and nothing else: two' });
+  await record(main, r => r.type === 'agent_settled', first.seq);
+  assert.ok(offered().slice(before.length).every(tools => tools.includes('search')) && offered().length > before.length, JSON.stringify(offered()));
+});
+
 test('an agent the main chat starts is listed while it works and once it has reported, with its chat', { timeout: 180_000 }, async t => {
   const home = temporaryHome(), cwd = mkdtempSync(join(home, 'cwd-'));
   createProfile(home, 'live');

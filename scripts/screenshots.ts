@@ -278,4 +278,22 @@ async function pictures(browser: Browser, control: Client) {
   for (const page of [desk, desks]) await page.evaluate(() => { document.documentElement.dataset.shell = 'windowed'; });
   await shot(desk, '39-desktop-window');
   await shot(desks, '40-desktop-window-tabs-narrow');
+
+  // A profile's own settings, as pi-optchat keeps them: one that was changed, and one pi-optchat would not have.
+  const profile = await open(['notes'], { height: 1500 });
+  await profile.getByRole('button', { name: 'Settings' }).click();
+  await profile.getByRole('switch', { name: 'Memory search' }).click(); // It is on once pi-optchat has kept it.
+  await profile.getByText('Saved. Applies from the next turn and to new or resumed subagents.').waitFor();
+  await profile.getByRole('textbox', { name: 'Summaries at once' }).fill('100');
+  await profile.keyboard.press('Enter');
+  await profile.getByRole('alert').waitFor();
+  await shot(profile, '41-settings-profile');
+  const night = await open(['notes'], { dark: true, height: 1500 });
+  await night.getByRole('button', { name: 'Settings' }).click();
+  await night.getByRole('switch', { name: 'Memory search', checked: true }).waitFor();
+  await shot(night, '42-settings-profile-dark');
+  const slender = await open(['notes'], { width: 420, height: 800 });
+  await slender.getByRole('button', { name: 'Settings' }).click();
+  await slender.getByRole('heading', { name: 'Profile: notes' }).scrollIntoViewIfNeeded();
+  await shot(slender, '43-settings-profile-narrow');
 }

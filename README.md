@@ -40,7 +40,7 @@ Open the dmg and drag OptChat to Applications. Downloaded this way it opens like
 1. ~~pi-optchat: let a Pi process in RPC mode join a busy profile as a connected window.~~ Done.
 2. ~~The local server: profiles and history from disk, one `pi --mode rpc` per window, one typed protocol.~~ Done.
 3. ~~The first usable UI, as a web page: profile tabs, windows sidebar, chat, composer, Complete.~~ Done.
-4. ~~Setup: the app's settings, installing Pi and pi-optchat from the app, and a profile a terminal already has open.~~ Done ([docs/setup.md](docs/setup.md)). Logging in to a model from the app is there too (macOS).
+4. ~~Setup: the app's settings, installing Pi and pi-optchat from the app, and a profile a terminal already has open.~~ Done ([docs/setup.md](docs/setup.md)). Logging in to a model from the app is there too (macOS), and so are a profile's own settings: everything pi-optchat's settings page has in a terminal ([docs/ui.md](docs/ui.md#a-profiles-settings)).
 5. The agents panel. Its first part is done: the main chat's agents, live, and each one's chat to read ([docs/ui.md](docs/ui.md#agents)). Steering, stopping and resuming one from the panel are next.
 6. The clickable memory tree. Its first part is done: the main chat as the agent reads it, every line opening down to its messages ([docs/ui.md](docs/ui.md#memory-view)). Searching it and changing it are next.
 7. The GitHub list. Its first part is done: the issues and pull requests the main chat named by link, with how they stand ([docs/ui.md](docs/ui.md#github)). Tracking them is next.

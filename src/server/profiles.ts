@@ -1,7 +1,7 @@
 import { basename } from 'node:path';
 import type { Part } from 'pi-optchat/core';
 import { existsSync } from 'node:fs';
-import { createProfile, fingerprint, listProfiles, memoryDirectory, profilePath, readImage, readMemory, type Memory } from 'pi-optchat/files';
+import { createProfile, defaults, fingerprint, listProfiles, loadConfig, memoryDirectory, profilePath, readImage, readInstructions, readMemory, saveInstructions, SETTINGS, updateConfig, type Memory } from 'pi-optchat/files';
 import type { Line, Params, Result } from '../protocol.ts';
 
 const PAGE = 50;
@@ -41,8 +41,9 @@ export function pair(memory: Memory, id: number): [call: number, result: number]
 }
 
 /** Profiles as they are on disk, read through `pi-optchat/files`, which is all the app knows of pi-optchat's files. No Pi process
- * is needed to read one, and one that is running is not disturbed: it stays the only writer, and the app summarizes nothing, so
- * a node Pi has not built yet stays unbuilt. */
+ * is needed to read one, and one that is running is not disturbed: it stays the only writer of its memory, and the app
+ * summarizes nothing, so a node Pi has not built yet stays unbuilt. A profile's settings and instructions are changed here,
+ * by pi-optchat's own functions and under its rules. */
 export class Profiles {
   private readonly read = new Map<string, { print: string; memory: Promise<Memory> }>();
   readonly home: string;
@@ -51,6 +52,21 @@ export class Profiles {
   list(): Result<'profiles'> { return { profiles: listProfiles(this.home).map(name => ({ name })) }; }
   /** A new, empty profile, made by pi-optchat's own hand: its name is pi-optchat's to judge, and its files pi-optchat's to write. */
   create({ name }: Params<'createProfile'>): Result<'createProfile'> { createProfile(name, this.home); return {}; }
+  /** A profile's settings as pi-optchat describes them and as the profile has them. Every setting pi-optchat has is here, so
+   * one it gains is in the app with nothing more than a newer pi-optchat. */
+  config({ profile }: Params<'config'>): Result<'config'> {
+    const directory = profileDirectory(this.home, profile), config = loadConfig(directory);
+    const settings = (Object.keys(SETTINGS) as (keyof typeof SETTINGS)[]).map(key => ({ key, ...SETTINGS[key], value: config[key] }));
+    return { settings, compactor: config.compactor, standard: defaults.compactor, subagent: config.subagent, instructions: readInstructions(directory) };
+  }
+  /** Changes one thing of them. pi-optchat checks what the page sent (its `checkPatch`) and refuses in its own words; the Pi
+   * that has the profile open applies the change at once, and with none pi-optchat writes the file under the profile's lock. */
+  async configure({ profile, key, value }: Params<'configure'>): Promise<Result<'configure'>> {
+    await updateConfig(profileDirectory(this.home, profile), { [key]: value });
+    return this.config({ profile });
+  }
+  /** Keeps the profile's instructions, as pi-optchat writes them: whole, beside the old file and then in its place. */
+  instruct({ profile, text }: Params<'instruct'>): Result<'instruct'> { saveInstructions(profileDirectory(this.home, profile), text); return {}; }
   /** Where the profile's memory is now. */
   private directory(profile: string) { return memoryDirectory(profileDirectory(this.home, profile)); }
   /** The profile's memory as its files are now: read again only when they changed. */

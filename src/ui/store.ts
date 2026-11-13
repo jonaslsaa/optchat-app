@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from 'react';
 import { connect, type Client } from '../client.ts';
-import type { Line, Message, Method, Params, Push, Result, Settings, Setup, WindowState } from '../protocol.ts';
+import type { Config, Line, Message, Method, Params, Push, Result, Settings, Setup, WindowState } from '../protocol.ts';
 import { current } from '../window.ts';
 import { calling, key, NO_TREE, read, toggled, type Tree } from './memory.ts';
 import { apply, idle, isMessage, isObject, merged, replay, stopped, without, words, type Live, type PiMessage } from './transcript.ts';
@@ -31,6 +31,8 @@ export interface State {
   chats: Record<string, { total: number; messages: PiMessage[]; report?: string; ended?: number }>;
   /** Each profile's memory view, once it was looked at, with the lines that were opened in it. */
   memory: Record<string, Tree>;
+  /** Each profile's settings and instructions as pi-optchat keeps them, once the settings page has shown them. */
+  config: Record<string, Config>;
   /** Why the last thing you asked for failed. */
   error?: string;
   /** The app's settings, and what a chat needs with whether it is there, once the server has said. */
@@ -52,7 +54,7 @@ export function title(window: WindowState, state: State) {
 }
 
 export class App {
-  state: State = { connection: 'connecting', profiles: [], tabs: [], windows: [], selected: {}, logs: {}, live: {}, sessions: {}, agents: {}, github: {}, chats: {}, memory: {} };
+  state: State = { connection: 'connecting', profiles: [], tabs: [], windows: [], selected: {}, logs: {}, live: {}, sessions: {}, agents: {}, github: {}, chats: {}, memory: {}, config: {} };
   private client?: Client;
   private retrying?: ReturnType<typeof setTimeout>;
   private closed = false;
@@ -103,12 +105,13 @@ export class App {
     if (tabs !== before.tabs || profile !== before.profile || selected !== before.selected) this.storage().setItem(SAVED, JSON.stringify({ tabs, profile, selected }));
     for (const listener of this.listeners) listener();
   }
+  private request<M extends Method>(method: M, params: Params<M>) {
+    if (!this.client) throw new Error('Not connected to the server.');
+    return this.client.request(method, params);
+  }
   /** A request to the server; one that fails is shown, not thrown. */
   private async ask<M extends Method>(method: M, params: Params<M>): Promise<Result<M> | undefined> {
-    try {
-      if (!this.client) throw new Error('Not connected to the server.');
-      return await this.client.request(method, params);
-    } catch (error) {
+    try { return await this.request(method, params); } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       // A window that failed to start says so itself, above its composer.
       if (!this.state.windows.some(window => window.error === message)) this.set({ error: message });
@@ -151,6 +154,27 @@ export class App {
   }
   /** Changes the settings it names; every page gets them all as the server kept them. */
   saveSettings(change: Params<'setSettings'>) { return this.ask('setSettings', change); }
+  /** A profile's settings and instructions as its files have them now. */
+  async readConfig(profile: string) {
+    const config = await this.ask('config', { profile });
+    if (config) this.set({ config: { ...this.state.config, [profile]: config } });
+  }
+  /** Changes one of a profile's settings, or one of its models. Why not, when pi-optchat refuses: that is said beside the
+   * field it is about, which keeps what you typed, and not above the page. */
+  async configure(profile: string, key: string, value: Params<'configure'>['value']) {
+    try {
+      const config = await this.request('configure', { profile, key, value });
+      this.set({ config: { ...this.state.config, [profile]: config } });
+    } catch (error) { return error instanceof Error ? error.message : String(error); }
+  }
+  /** Keeps a profile's instructions, or says why not. */
+  async instruct(profile: string, text: string) {
+    try {
+      await this.request('instruct', { profile, text });
+      const config = this.state.config[profile];
+      if (config) this.set({ config: { ...this.state.config, [profile]: { ...config, instructions: text } } });
+    } catch (error) { return error instanceof Error ? error.message : String(error); }
+  }
   /** What a chat needs and whether it is there: as the server last found it, or looked for again now. */
   async checkSetup(fresh = false) {
     const setup = await this.ask('setup', { fresh });

@@ -58,6 +58,7 @@ export async function startServer({ port = 0, origins = [], ui = join(import.met
   const windows = new Windows({ home, grace, push, cwd: () => settings.cwd && isDirectory(settings.cwd) ? settings.cwd : cwd, pi: async () => { const { command, args } = await setup.launch(); return { command, args: [...args, ...flags] }; } });
   const handlers: { [M in Method]: (params: Params<M>) => Result<M> | Promise<Result<M>> } = {
     agents: params => agents.list(params), agent: params => agents.one(params), github: params => github.list(params),
+    config: params => profiles.config(params), configure: params => profiles.configure(params), instruct: params => profiles.instruct(params),
     profiles: () => profiles.list(), createProfile: params => profiles.create(params), history: params => profiles.history(params), view: params => profiles.view(params), zoom: params => profiles.zoom(params), original: params => profiles.original(params),
     windows: () => windows.list(), open: params => windows.open(params), prompt: params => windows.prompt(params), abort: params => windows.abort(params),
     complete: params => windows.complete(params), close: params => windows.close(params), records: params => windows.records(params),

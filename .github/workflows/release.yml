@@ -31,11 +31,16 @@ jobs:
           fi
       - run: npm ci
       - run: npm run dist
-      # Signed ad hoc: there is no Developer ID. This fails the build if the app is not signed at all, which macOS would not start.
-      - name: The app's signature
+      # Signed ad hoc: there is no Developer ID, so the app is not notarized either. What is checked is the app as the dmg
+      # holds it: it has to be signed and whole, or macOS does not start it at all. Gatekeeper's own answer is printed, and
+      # is "rejected" for an app without a Developer ID: that is what "Open Anyway" is for (docs/desktop.md).
+      - name: The app in the dmg is signed
         run: |
-          codesign --verify --deep --strict release/mac-arm64/OptChat.app
-          codesign -dv release/mac-arm64/OptChat.app
+          hdiutil attach -nobrowse -readonly -mountpoint /tmp/optchat-dmg release/*.dmg
+          codesign --verify --deep --strict /tmp/optchat-dmg/OptChat.app
+          codesign -dv /tmp/optchat-dmg/OptChat.app
+          spctl --assess --type execute -vv /tmp/optchat-dmg/OptChat.app || true
+          hdiutil detach /tmp/optchat-dmg
       - name: Release
         if: github.ref_type == 'tag'
         env:

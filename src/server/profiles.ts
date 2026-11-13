@@ -60,9 +60,14 @@ export class Profiles {
     return { settings, compactor: config.compactor, standard: defaults.compactor, subagent: config.subagent, instructions: readInstructions(directory) };
   }
   /** Changes one thing of them. pi-optchat checks what the page sent (its `checkPatch`) and refuses in its own words; the Pi
-   * that has the profile open applies the change at once, and with none pi-optchat writes the file under the profile's lock. */
+   * that has the profile open applies the change at once, and with none pi-optchat writes the file under the profile's lock.
+   * A Pi whose pi-optchat is from before 0.11.12 does not know the request and hangs up on it, which pi-optchat can only call
+   * a lost connection: what to do about it is said with it. */
   async configure({ profile, key, value }: Params<'configure'>): Promise<Result<'configure'>> {
-    await updateConfig(profileDirectory(this.home, profile), { [key]: value });
+    await updateConfig(profileDirectory(this.home, profile), { [key]: value }).catch((error: unknown) => {
+      if (error instanceof Error && error.message === 'Connection to the original Pi window was lost') throw new Error(`${error.message}. If the Pi that has this profile open runs a pi-optchat older than 0.11.12, update it there (pi update npm:pi-optchat) and start that Pi again.`, { cause: error });
+      throw error;
+    });
     return this.config({ profile });
   }
   /** Keeps the profile's instructions, as pi-optchat writes them: whole, beside the old file and then in its place. */

@@ -1,4 +1,4 @@
-import { chmodSync, mkdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { chromium, type Browser, type Page } from 'playwright-core';
 import { build } from 'vite';
@@ -29,6 +29,12 @@ seed(team, TEAM.length, NOW, TEAM);
 agents(team, NOW + 42_000);
 const terminal = createProfile(home, 'terminal');
 seed(terminal, 2, NOW);
+// The models a profile keeps, as pi-optchat does: its main chat's, and its agents'.
+const keeps = (profile: string, main: object, subagent?: object) => writeFileSync(join(profile, 'config.json'), JSON.stringify({ ...JSON.parse(readFileSync(join(profile, 'config.json'), 'utf8')), main, ...subagent && { subagent } }));
+keeps(terminal, { provider: 'anthropic', model: 'claude-fable-5', thinking: 'xhigh' });
+const picks = createProfile(home, 'picks');
+seed(picks, 4, NOW);
+keeps(picks, { provider: 'anthropic', model: 'claude-opus-5-5', thinking: 'high' }, { provider: 'openai', model: 'gpt-6-sol', thinking: 'medium' });
 seed(createProfile(home, 'work'), 95, NOW); // Ends with the turn that ran the tests.
 seed(createProfile(home, 'notes'), 2, NOW);
 // A chat of ten days with its summaries, for the memory view.
@@ -55,7 +61,7 @@ chmodSync(pi.command, 0o755);
 process.env.FAKE_PI_HOME = join(home, 'pi');
 mkdirSync(join(home, 'pi', 'pi-optchat'), { recursive: true });
 writeFileSync(join(home, 'pi', 'pi-optchat', 'package.json'), JSON.stringify({ name: 'pi-optchat', version: '0.11.12' }));
-writeFileSync(join(home, 'pi', 'state.json'), JSON.stringify({ version: '1.5.2', providers: ['anthropic', 'openai'], packages: { 'npm:pi-optchat': join(home, 'pi', 'pi-optchat') } }));
+writeFileSync(join(home, 'pi', 'state.json'), JSON.stringify({ version: '1.5.2', providers: ['anthropic', 'openai', 'openai-codex', 'github-copilot', 'lab'], packages: { 'npm:pi-optchat': join(home, 'pi', 'pi-optchat') } }));
 
 await build({ logLevel: 'warn' });
 const server = await startServer({ home, app: join(home, 'app'), cwd: home, pi, gh });
@@ -88,7 +94,7 @@ async function pictures(browser: Browser, control: Client) {
   }
   // A code block gets its colours once Shiki's chunks are fetched: the picture waits for the page to have nothing left to fetch,
   // and then for what moves (a row that opens, 200 ms) to have come to rest.
-  const shot = async (page: Page, name: string) => { await page.mouse.move(0, 0); await page.waitForLoadState('networkidle'); await page.waitForTimeout(300); await page.screenshot({ path: join(out, `${name}.png`) }); console.log(join(out, `${name}.png`)); };
+  const shot = async (page: Page, name: string) => { await page.mouse.move(0, 0); await page.waitForLoadState('networkidle'); await page.waitForFunction(() => !document.querySelector('[aria-busy=true]')); await page.waitForTimeout(300); await page.screenshot({ path: join(out, `${name}.png`) }); console.log(join(out, `${name}.png`)); };
   const say = async (page: Page, text: string, key = 'Enter') => { await page.getByRole('textbox', { name: 'Message' }).fill(text); await page.keyboard.press(key); };
 
   const empty = await open(['empty']);
@@ -151,7 +157,7 @@ async function pictures(browser: Browser, control: Client) {
   // The settings, and the same page in the dark theme chosen there (and put back, so the pictures before stay as they were).
   const settings = await open(['work']);
   await settings.getByRole('button', { name: 'Settings' }).click();
-  await settings.getByText('logged in: anthropic, openai').waitFor();
+  await settings.getByText('logged in: anthropic').waitFor();
   await shot(settings, '15-settings');
   await settings.getByText('Dark', { exact: true }).click(); // Its label: the choice is made when the server has kept it.
   await settings.locator('html.dark').waitFor();
@@ -337,4 +343,38 @@ async function pictures(browser: Browser, control: Client) {
   await tell(crew, 'Try again, the API is back.');
   await crew.getByRole('alert').waitFor();
   await shot(crew, '50-agent-refused');
+
+  // The model a chat runs on, picked in its composer: the list, a search, the model of the profile's agents, dark and narrow.
+  const pick = await open(['picks']);
+  await pick.getByRole('button', { name: 'Model' }).click();
+  await pick.getByRole('radio', { name: 'High', exact: true, checked: true }).waitFor();
+  await shot(pick, '51-model');
+  await pick.getByRole('combobox', { name: 'Search models' }).fill('gpt 6');
+  await shot(pick, '52-model-search');
+  await pick.getByRole('combobox', { name: 'Search models' }).fill('');
+  await pick.getByText('Subagents').click();
+  await pick.getByRole('radio', { name: 'Medium', checked: true }).waitFor();
+  await shot(pick, '53-model-subagents');
+  const dimmed = await open(['picks'], { dark: true });
+  await dimmed.getByRole('button', { name: 'Model' }).click();
+  await dimmed.getByRole('radio', { name: 'High', exact: true, checked: true }).waitFor();
+  await shot(dimmed, '54-model-dark');
+  const lean = await open(['picks'], { width: 420, height: 800 });
+  await lean.getByRole('button', { name: 'Model' }).click();
+  await lean.getByRole('radio', { name: 'High', exact: true, checked: true }).waitFor();
+  await shot(lean, '55-model-narrow');
+  // Not a picture: Esc closes the list and the run goes on, wherever the focus is. A click on a row once left the key to the
+  // shortcut that stops the agent.
+  await pick.getByText('Main chat', { exact: true }).last().click();
+  await pick.keyboard.press('Escape');
+  await pick.getByRole('textbox', { name: 'Message' }).fill('wait');
+  await pick.keyboard.press('Enter');
+  await pick.getByRole('button', { name: 'Stop the agent' }).waitFor();
+  await pick.getByRole('button', { name: 'Model' }).click();
+  await pick.getByRole('option', { name: 'Claude Sonnet 5.5' }).click();
+  await pick.getByRole('button', { name: 'Model' }).getByText('Claude Sonnet 5.5').waitFor();
+  await pick.keyboard.press('Escape');
+  await pick.getByRole('dialog', { name: 'Model' }).waitFor({ state: 'detached' });
+  await pick.waitForTimeout(300);
+  if (!await pick.getByRole('button', { name: 'Stop the agent' }).isVisible()) throw new Error('Esc in the model list stopped the run.');
 }

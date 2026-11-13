@@ -2,7 +2,8 @@ import { CircleAlertIcon, CornerUpRightIcon, ListPlusIcon } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import type { PiRecord, WindowState } from '../protocol.ts';
 import { label, useShortcuts } from './keys.ts';
-import { app } from './store.ts';
+import { Model } from './Model.tsx';
+import { app, type State } from './store.ts';
 import { failure, news, type Live } from './transcript.ts';
 import { Button, cn, Kbd, Spinner } from './ui.tsx';
 
@@ -78,8 +79,9 @@ export function SendButton({ steer, ...props }: { steer: boolean; disabled: bool
 }
 /** Where you type. You can always type: while the agent runs, Enter steers it and ⌘Enter queues your message for when it has
  * stopped, and Esc stops it. The line under it says only what is news: how to steer a run, that Pi is starting, agents at
- * work. The look is T3 Code's composer (MIT, see THIRD_PARTY_NOTICES.md), over a plain textarea. */
-export function Composer({ window, live, onSend }: { window: WindowState; live: Live; onSend?: () => void }) {
+ * work. Beside the button that sends is the model the agent runs on, which is picked there. The look is T3 Code's composer
+ * (MIT, see THIRD_PARTY_NOTICES.md), over a plain textarea. */
+export function Composer({ state, window, live, onSend }: { state: State; window: WindowState; live: Live; onSend?: () => void }) {
   const [text, setText] = useState(drafts.get(window.id) ?? ''), [sending, setSending] = useState(false);
   const area = useRef<HTMLTextAreaElement>(null);
   const running = window.status === 'running', queued = [...live.queued.steering, ...live.queued.followUp];
@@ -125,6 +127,7 @@ export function Composer({ window, live, onSend }: { window: WindowState; live: 
                 : window.status === 'stopped' ? null
                 : news(live.status.optchat).join(' · ')}
             </p>
+            <Model state={state} window={window} />
             {running && !text.trim() ? (
               <button type="button" aria-label="Stop the agent" title="Stop (Esc)" onClick={() => void stop()} className="flex size-8 shrink-0 items-center justify-center rounded-full bg-destructive/90 text-white shadow-destructive/24 shadow-xs inset-shadow-control-highlight transition-colors duration-150 hover:bg-destructive active:shadow-none">
                 <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor" aria-hidden="true"><rect x="2" y="2" width="8" height="8" rx="1.5" /></svg>

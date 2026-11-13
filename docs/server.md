@@ -47,6 +47,9 @@ The client sends `{ id, method, params }` and gets `{ id, result }` or `{ id, er
 | `records { window, after? }` | For a client that connects late: the records the window still keeps after number `after`, the number of its last record (`seq`), and what Pi shows now (`ui`). |
 | `command { window, command }` | Any other Pi RPC command (`get_state`, `set_model`, `get_messages`, ...). A message to the agent is not one of them: that is `prompt`. |
 | `answer { window, id, ... }` | Answers a dialog Pi asked for (an `extension_ui_request` with method `select`, `confirm`, `input` or `editor`). |
+| `config { profile }` | A profile's settings as pi-optchat keeps them: every setting it has, as it describes it (its `SETTINGS`: a toggle, a whole number or a percent, with its label, what it does, its default, its range and when a change applies) with the profile's `value`; the models that write its summaries (`compactor`, and `standard`, a new profile's) and that its agents run on (`subagent`); and its `instructions` (its AGENTS.md). See [A profile's settings](#a-profiles-settings). |
+| `configure { profile, key, value }` | Changes one of them, a setting by its `key` or the model `compactor` or `subagent`, and answers them all as they then are. Refused in pi-optchat's words. |
+| `instruct { profile, text }` | Keeps the profile's instructions. |
 | `settings`, `setSettings { theme?, cwd? }` | The app's own settings, and a change to the ones it names ([setup.md](setup.md)). |
 | `setup { fresh? }` | What a chat needs and whether it is there: Pi, pi-optchat in it, a model that is logged in. `fresh` looks again. |
 | `install { what }` | Installs or updates `pi` or `optchat` where the setup says `installable`: only the app's own Pi, and a pi-optchat from npm. Answers once it has started; the rest is pushed. |
@@ -85,6 +88,17 @@ One sentence, for now (`PROMPT` in `src/server/windows.ts`): when it first menti
 The server hands it to every Pi it starts for a window with Pi's own `--append-system-prompt`. Pi puts it in the system prompt as an `<addendum>` section, and pi-optchat, which replaces Pi's preamble and adds the profile's instructions, leaves that section as it is. The live test reads what Pi sends to the model and finds the sentence there, beside pi-optchat's own prompt, in the main window and in a connected one.
 
 It reaches the agent of a window the app started and nobody else: not the agents that agent starts (pi-optchat builds their prompt itself), and not the main agent of a chat that runs in a terminal, which the app did not start.
+
+## A profile's settings
+
+They are pi-optchat's, and so is every rule about them (`config`, `configure` and `instruct` in `src/server/profiles.ts`, `test/config.test.ts`).
+
+- **What there is to change is asked of pi-optchat**, not written down here: `config` lists its `SETTINGS` as they are, so a setting pi-optchat gains is in the app once the app has that pi-optchat, with no change to the app.
+- **pi-optchat makes the change**, with its `updateConfig`. While a Pi has the profile open, the app's or one in a terminal, that Pi is told over the profile's socket and applies it to the chat that is running, where it holds from when the setting's `applies` says. With no Pi on the profile, pi-optchat takes the profile's lock, changes `config.json` and lets go; what the file has that this pi-optchat does not know stays in it.
+- **pi-optchat is the judge.** The server checks only that a value is a number, a truth value or a model, and passes it on. What pi-optchat refuses, it refuses in its own words, which the page shows as they are: a number out of its range, a model the running Pi does not offer, a Pi that takes no changes (one that is still starting, or runs headless).
+- **The main model is not among them.** It follows what is picked in Pi (`set_model`), and pi-optchat refuses it here.
+- **Instructions** are written with pi-optchat's `saveInstructions`. Pi reads them again each turn, so no Pi has to be told.
+- **The models to choose from** are in the setup (`login.models`, each `provider/id`): what Pi lists for the providers it is logged in to, asked once of a Pi without extensions when the server looks at what a chat needs, so they are there with no chat running. A model a Pi extension adds is not in that list; it can be typed.
 
 ## GitHub
 

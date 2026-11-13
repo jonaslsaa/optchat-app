@@ -78,7 +78,7 @@ function run({ command, args }: Launch, more: readonly string[], { cwd, timeout,
     child.once('close', code => done(code));
   });
 }
-const Models = Type.Object({ models: Type.Array(Type.Object({ provider: Type.String() })) });
+const Models = Type.Object({ models: Type.Array(Type.Object({ provider: Type.String(), id: Type.String() })) });
 /** What opens a `.command` file in a terminal of its own on this system: macOS's `open`. Elsewhere there is none yet, and the
  * page shows the command to run. */
 export const terminal = (): Launch | undefined => process.platform === 'darwin' ? { command: '/usr/bin/open', args: [] } : undefined;
@@ -203,7 +203,7 @@ export class Setup {
   }
   private async check(): Promise<Checked> {
     const found = await this.find(), unknown = { state: 'unknown' as const };
-    if (!found) return { state: { pi: { state: 'missing', installable: true, message: 'Not installed. The app can install it into its own folder, where it changes nothing else on this machine.' }, optchat: unknown, login: { ...unknown, providers: [] } } };
+    if (!found) return { state: { pi: { state: 'missing', installable: true, message: 'Not installed. The app can install it into its own folder, where it changes nothing else on this machine.' }, optchat: unknown, login: { ...unknown, providers: [], models: [] } } };
     // In a terminal, a Pi on your PATH goes by its name; the app's own, while it is not on it, by where it is.
     const { path, managed, listed, version } = found, named = { command: listed ? this.options.pi.command : path, args: found.args };
     const pi: State['pi'] = {
@@ -214,10 +214,11 @@ export class Setup {
         : managed ? { state: 'old', installable: true, message: `Older than ${MINIMUM_PI}, which this app is tested with.` }
         : { state: 'old', message: `Older than ${MINIMUM_PI}, which this app is tested with. It is a Pi of yours, so the app leaves it alone: update it in a terminal.`, command: shown(named, ['update', 'self']) },
     };
-    const [optchat, providers] = await Promise.all([this.optchat(found, named), this.providers(found)]), terminal = this.options.opener !== undefined;
-    const login: State['login'] = !providers ? { state: 'unknown', providers: [], message: 'Pi did not say which models it can use.' }
-      : providers.length ? { state: 'ok', providers, terminal }
-      : { state: 'missing', providers, terminal, message: `No model provider is logged in. Log in ${terminal ? 'with your account here, or ' : 'to one '}in a terminal (anthropic, openai-codex, github-copilot or another), then check again:`, command: shown(named, ['auth', 'login', 'anthropic']) };
+    const [optchat, offered] = await Promise.all([this.optchat(found, named), this.models(found)]), terminal = this.options.opener !== undefined;
+    const providers = [...new Set(offered?.map(model => model.provider))].sort(), models = offered?.map(model => `${model.provider}/${model.id}`).sort() ?? [];
+    const login: State['login'] = !offered ? { state: 'unknown', providers, models, message: 'Pi did not say which models it can use.' }
+      : providers.length ? { state: 'ok', providers, models, terminal }
+      : { state: 'missing', providers, models, terminal, message: `No model provider is logged in. Log in ${terminal ? 'with your account here, or ' : 'to one '}in a terminal (anthropic, openai-codex, github-copilot or another), then check again:`, command: shown(named, ['auth', 'login', 'anthropic']) };
     return { found, state: { pi, optchat, login } };
   }
   /** pi-optchat as this Pi has it: `pi list` prints each package's source and under it the folder it is in. A package from npm
@@ -239,9 +240,9 @@ export class Setup {
     }
     return { state: 'missing', installable: true, message: 'Not installed in this Pi. Install it here, or in a terminal:', command: shown(named, ['install', OPTCHAT]) };
   }
-  /** The providers Pi has credentials for: it lists only their models. Asked of a Pi that opens no session, loads no extension
-   * and goes nowhere on the network. */
-  private async providers(launch: Launch): Promise<string[] | undefined> {
+  /** The models Pi can use: it lists only those of the providers it has credentials for. Asked of a Pi that opens no session,
+   * loads no extension and goes nowhere on the network. */
+  private async models(launch: Launch) {
     const { signal } = this.closing;
     if (signal.aborted) return undefined;
     const pi = new Pi({ ...launch, args: [...launch.args, '--no-session', '--offline', '--no-extensions'], cwd: homedir(), env: process.env }, () => {}, () => {});
@@ -249,7 +250,7 @@ export class Setup {
     signal.addEventListener('abort', end);
     try {
       const answer = await pi.request({ type: 'get_available_models' });
-      return Value.Check(Models, answer) ? [...new Set(answer.models.map(model => model.provider))].sort() : undefined;
+      return Value.Check(Models, answer) ? answer.models : undefined;
     } catch { return undefined; } finally { clearTimeout(late); signal.removeEventListener('abort', end); await pi.stop(2000); }
   }
 }

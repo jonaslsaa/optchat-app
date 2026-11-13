@@ -76,7 +76,7 @@ test('setup tells a Pi that is ready from one that lacks pi-optchat, has an old 
   writeFileSync(join(folder, 'state.json'), JSON.stringify({ version: '1.4.0', providers: ['openai', 'anthropic'], packages: { '../checkout': checkout, ...others } }));
   assert.equal((await request('setup', {})).optchat.state, 'missing', 'what was found is kept until it is asked for afresh');
   const old = await request('setup', { fresh: true });
-  assert.partialDeepStrictEqual(old, { pi: { state: 'old', version: '1.4.0' }, optchat: { state: 'old', version: '0.11.9', path: checkout }, login: { state: 'ok', providers: ['anthropic', 'openai'] } });
+  assert.partialDeepStrictEqual(old, { pi: { state: 'old', version: '1.4.0' }, optchat: { state: 'old', version: '0.11.9', path: checkout }, login: { state: 'ok', providers: ['anthropic', 'openai'], models: ['anthropic/a-model', 'openai/a-model'] } });
   assert.equal(old.optchat.installable, undefined);
   await assert.rejects(request('install', { what: 'optchat' }), /a folder of yours/);
   // Nor is a Pi of yours the app's to change, too old or not: it says which command updates it, and runs none.

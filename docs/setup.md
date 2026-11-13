@@ -4,7 +4,7 @@ What stands between a new machine and a chat, and the three places the app deals
 
 ## The app's own folder
 
-The app keeps its files in `~/.optchat-app` (`OPTCHAT_APP_HOME` moves it, which is how tests stay away from yours; `~` in it is your home folder): `settings.json`, and the Pi it installs. It is never pi-optchat's `~/.optchat`, which only Pi writes, but for one thing: a new, empty profile, which pi-optchat's own `createProfile` makes when you name your first one.
+The app keeps its files in `~/.optchat-app` (`OPTCHAT_APP_HOME` moves it, which is how tests stay away from yours; `~` in it is your home folder): `settings.json`, and the Pi it installs. It is never pi-optchat's `~/.optchat`, which only Pi writes, but for what pi-optchat's own functions write there when you ask: a new, empty profile (`createProfile`) when you name your first one, and a profile's settings and instructions when you change them on the settings page ([server.md](server.md#a-profiles-settings)).
 
 Two servers on one machine share that folder. Each reads the settings when it starts and writes them whole, so the one that wrote last wins; give a second server its own `OPTCHAT_APP_HOME` if that matters.
 

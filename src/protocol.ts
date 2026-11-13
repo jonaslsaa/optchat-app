@@ -1,5 +1,5 @@
 import type { Entry } from 'pi-optchat/core';
-import type { RunState } from 'pi-optchat/files';
+import type { ModelChoice, RunState } from 'pi-optchat/files';
 import { Type, type Static, type TSchema } from 'typebox';
 
 /** The protocol between the app's server and its UI: one WebSocket carrying JSON. The client sends requests and gets one response
@@ -73,12 +73,12 @@ const Installed = Type.Enum(['pi', 'optchat']);
 const Account = Type.Enum(['anthropic', 'openai-codex', 'github-copilot']);
 /** What the app needs, and whether it is there: Pi (`shell`: for the Pi the app installed
  * into its own folder, the line that puts it on your PATH), pi-optchat in that Pi, and a model provider that is logged in
- * (`providers`: those that are; `terminal`: the app can open a terminal here for Pi's sign-in, `signIn`). `job` is an install the app is running, or the last one it ran: `line` is the latest line it
+ * (`providers`: those that are; `models`: the models Pi lists for them, each as `provider/id`; `terminal`: the app can open a terminal here for Pi's sign-in, `signIn`). `job` is an install the app is running, or the last one it ran: `line` is the latest line it
  * printed, and `output` the end of everything it printed once it has failed. */
 export const Setup = Type.Object({
   pi: Type.Intersect([Need, Type.Object({ shell: Type.Optional(Type.String()) })]),
   optchat: Need,
-  login: Type.Intersect([Need, Type.Object({ providers: Type.Array(Type.String()), terminal: Type.Optional(Type.Boolean()) })]),
+  login: Type.Intersect([Need, Type.Object({ providers: Type.Array(Type.String()), models: Type.Array(Type.String()), terminal: Type.Optional(Type.Boolean()) })]),
   job: Type.Optional(Type.Object({ what: Installed, state: Type.Enum(['running', 'done', 'failed']), line: Type.String(), output: Type.Optional(Type.String()) })),
 });
 export type Setup = Static<typeof Setup>;
@@ -95,6 +95,23 @@ export const Agent = Type.Object({
 });
 export type Agent = Static<typeof Agent>;
 
+/** A model as pi-optchat names one in a profile's settings: Pi's provider and the model's id there, and how hard it thinks. */
+const Model = Type.Object({ provider: Type.String(), model: Type.String(), thinking: Type.Unsafe<ModelChoice['thinking']>(Type.String()) });
+/** One of a profile's settings, as pi-optchat describes it (its `SETTINGS`) and as the profile has it (`value`). A `toggle` is
+ * on or off; a `number` is whole, from `min` to `max` where it has them, of a `unit` where it has one; a `percent` is kept as
+ * a fraction of 1. `applies` says when a change takes hold. */
+export const Setting = Type.Object({
+  key: Type.String(), kind: Type.Enum(['number', 'toggle', 'percent']), label: Type.String(), description: Type.String(), applies: Type.String(),
+  value: Type.Union([Type.Number(), Type.Boolean()]), default: Type.Union([Type.Number(), Type.Boolean()]),
+  min: Type.Optional(Type.Number()), max: Type.Optional(Type.Number()), unit: Type.Optional(Type.String()),
+});
+export type Setting = Static<typeof Setting>;
+/** What pi-optchat keeps of a profile for you to change: its `settings`, in pi-optchat's order; the model that writes its
+ * summaries (`compactor`, a new profile's being `standard`) and the one its agents run on (`subagent`); and its
+ * `instructions`, the profile's AGENTS.md, which its agents are given every turn. */
+export const Config = Type.Object({ settings: Type.Array(Setting), compactor: Model, standard: Model, subagent: Model, instructions: Type.String() });
+export type Config = Static<typeof Config>;
+
 const Image = Type.Object({ type: Type.Literal('image'), data: Type.String(), mimeType: Type.String() });
 const target = Type.Object({ window: Type.String() });
 const none = Type.Object({});
@@ -105,7 +122,7 @@ export const methods = {
   /** The profiles on disk. */
   profiles: method(none, Type.Object({ profiles: Type.Array(Type.Object({ name: Type.String() })) })),
   /** Makes a new, empty profile, as pi-optchat makes one (its `createProfile`): refused when the name is not one pi-optchat
-   * takes, or is taken. The one thing the app writes among pi-optchat's files; a profile that exists is Pi's alone to write. */
+   * takes, or is taken. Of a profile that exists, the app changes only its settings and its instructions (`configure`, `instruct`), and those by pi-optchat's hand too. */
   createProfile: method(Type.Object({ name: Type.String() }), none),
   /** A page of a profile's log, read from disk: the `limit` messages before message `before` (the newest ones by default),
    * oldest first. `total` is how many messages the log has. */
@@ -174,6 +191,15 @@ export const methods = {
   /** Answers a dialog Pi asked for in an `extension_ui_request` (select, confirm, input, editor): Pi's `extension_ui_response`
    * fields, `id` and one of `value`, `confirmed` or `cancelled`. */
   answer: method(Type.Object({ window: Type.String(), id: Type.String(), value: Type.Optional(Type.String()), confirmed: Type.Optional(Type.Boolean()), cancelled: Type.Optional(Type.Boolean()) }), none),
+
+  /** A profile's settings and instructions as pi-optchat keeps them, read from its files. */
+  config: method(Type.Object({ profile: Type.String() }), Config),
+  /** Changes one thing of a profile's settings, and answers them as they then are: a setting by its `key`, or the model
+   * `compactor` or `subagent`. pi-optchat makes the change (its `updateConfig`) and is its judge: the Pi that has the profile
+   * open applies it at once, and with none the profile's file is changed under its lock. Refused in pi-optchat's words. */
+  configure: method(Type.Object({ profile: Type.String(), key: Type.String(), value: Type.Union([Type.Number(), Type.Boolean(), Model]) }), Config),
+  /** Keeps a profile's instructions (pi-optchat's `saveInstructions`). Its agents read them again each turn. */
+  instruct: method(Type.Object({ profile: Type.String(), text: Type.String() }), none),
 
   /** The app's settings. */
   settings: method(none, Settings),

@@ -292,7 +292,7 @@ test('what a search found stands in the tree\'s place, and a message of it opens
   await app.toggleLine('sought', memory().view!.lines[0]);
 
   await app.search('sought', 'NEEDLE');
-  assert.deepEqual(memory().search, { text: 'NEEDLE', hits: [{ id: 37, kind: 'talk', date: '2026-01-01T00:00:37.000Z', lead: 'The ', match: 'needle', rest: ' is here.' }], more: 0 });
+  assert.deepEqual(memory().search, { text: 'NEEDLE', answer: { of: 'NEEDLE', hits: [{ id: 37, kind: 'talk', date: '2026-01-01T00:00:37.000Z', lead: 'The ', match: 'needle', rest: ' is here.' }], more: 0 } });
   assert.deepEqual([listed(memory()), memory().open], [true, ['0+32']]);
   // Opened, it is in the tree: each line from the view's down to its own is open, with what is under it read.
   const down = ['32+32', '32+16', '32+8', '36+4', '36+2', '37+1'];
@@ -308,15 +308,22 @@ test('what a search found stands in the tree\'s place, and a message of it opens
   assert.deepEqual([memory().search, memory().found, memory().open], [undefined, undefined, ['0+32', ...down]]);
 
   // The older ones are asked for after those that are here, and asked for twice they are still added once.
+  const answer = () => memory().search?.answer;
   await app.search('sought', 'reply');
-  assert.deepEqual([memory().search?.hits?.length, memory().search?.hits?.at(-1)?.id, memory().search?.more], [20, 23, 11]);
-  await Promise.all([app.search('sought', 'reply', 23), app.search('sought', 'reply', 23)]);
-  assert.deepEqual([memory().search?.hits?.map(hit => hit.id), memory().search?.more], [Array.from({ length: 32 }, (_, k) => 63 - 2 * k).filter(id => id !== 37), 0]);
+  assert.deepEqual([answer()?.hits.length, answer()?.hits.at(-1)?.id, answer()?.more], [20, 23, 11]);
+  await Promise.all([app.moreFound('sought'), app.moreFound('sought')]);
+  assert.deepEqual([answer()?.hits.map(hit => hit.id), answer()?.more], [Array.from({ length: 32 }, (_, k) => 63 - 2 * k).filter(id => id !== 37), 0]);
+  // While the answer for other text is on its way the one before stands, and its older ones are not asked for under the new text.
+  const typed = app.search('sought', 'message');
+  await app.moreFound('sought');
+  assert.deepEqual([memory().search?.text, answer()?.of, answer()?.hits.length], ['message', 'reply', 31]);
+  await typed;
+  assert.deepEqual([answer()?.of, answer()?.hits[0].id, answer()?.more], ['message', 62, 12]);
 
   // The log has grown since the view was read. The search finds the new message, and opening it reads the view again.
   appendFileSync(log, `${JSON.stringify({ i: 64, kind: 'user', date: '2026-01-01T00:01:04.000Z', text: 'Another needle.' })}\n`);
   await app.search('sought', 'needle');
-  assert.deepEqual(memory().search?.hits?.map(hit => hit.id), [64, 37]);
+  assert.deepEqual(answer()?.hits.map(hit => hit.id), [64, 37]);
   await app.find('sought', 64);
   assert.deepEqual([memory().view?.total, memory().found, memory().open.at(-1), memory().originals[64]?.[0].text], [65, 64, '64+1', 'Another needle.']);
 });

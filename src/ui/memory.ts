@@ -1,8 +1,9 @@
 import type { Hit, Line, Message, Result, WindowState } from '../protocol.ts';
 
-/** A search of the memory: what is searched for, the messages found so far, newest first (none until the first answer is
- * here), and how many older ones there are to ask for. */
-export interface Search { text: string; hits?: Hit[]; more: number }
+/** A search of the memory: the `text` in its box, and the last answer: the text it was asked for (`of`), the messages found
+ * so far, newest first, and how many older ones there are to ask for (`more`). While the answer for what was just typed is
+ * on its way, the one before it stands. */
+export interface Search { text: string; answer?: { of: string; hits: Hit[]; more: number } }
 /** A profile's memory view as the page has it: the view as the server last read it, the two lines under each line that was
  * opened and the message under a line of one, and which lines are open. A line is the same line for as long as the memory is
  * the same one, so what was read under one stays right, and a line stays open while the view is read again. With a `search`

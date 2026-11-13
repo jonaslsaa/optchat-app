@@ -90,13 +90,12 @@ function Found({ hit, profile }: { hit: Hit; profile: string }) {
   );
 }
 /** What a search found, newest first, in the tree's place. */
-function Results({ search, profile }: { search: Search; profile: string }) {
-  const { hits, more, text } = search;
+function Results({ answer, profile }: { answer: NonNullable<Search['answer']>; profile: string }) {
   return (
     <div role="region" aria-label="Messages found" onKeyDown={keys} className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-y-contain px-3 sm:px-5">
       <div className="mx-auto w-full min-w-0 max-w-(--chat-content-max-width) pt-2 pb-6">
-        {hits?.map(hit => <Found key={hit.id} hit={hit} profile={profile} />)}
-        {hits && more > 0 && <Button variant="ghost-muted" size="xs" className="ms-1.5 mt-2" onClick={() => void app.search(profile, text, hits.at(-1)?.id)}>Show older ones ({more.toLocaleString()} more)</Button>}
+        {answer.hits.map(hit => <Found key={hit.id} hit={hit} profile={profile} />)}
+        {answer.more > 0 && <Button variant="ghost-muted" size="xs" className="ms-1.5 mt-2" onClick={() => void app.moreFound(profile)}>Show older ones ({answer.more.toLocaleString()} more)</Button>}
       </div>
     </div>
   );
@@ -134,7 +133,7 @@ export const MemoryView = memo(function MemoryView({ tree, profile, window, puls
   useShortcuts(() => ({ 'mod+f': () => { box.current?.focus(); box.current?.select(); } }), []);
   // Ending the search leaves the keys in its box: what they were on may be gone.
   const end = () => { void app.search(profile, ''); box.current?.focus(); };
-  const count = (search?.hits?.length ?? 0) + (search?.more ?? 0), matches = `${count.toLocaleString()} ${count === 1 ? 'message' : 'messages'}`;
+  const answer = search?.answer, count = (answer?.hits.length ?? 0) + (answer?.more ?? 0), matches = `${count.toLocaleString()} ${count === 1 ? 'message' : 'messages'}`;
   // Each line stands under the day its first message was said, which is written once, over the first line of that day.
   const first = view && since(view.lines), days = useMemo(() => view?.lines.map(line => day(new Date(line.from))) ?? [], [view]);
   return (
@@ -153,9 +152,9 @@ export const MemoryView = memo(function MemoryView({ tree, profile, window, puls
         </div>
         {search ? (
           <p className="mt-0.5 flex min-h-5 items-center text-muted-foreground text-xs leading-relaxed">
-            {!search.hits ? 'Searching…' : found !== undefined
+            {!answer ? 'Searching…' : found !== undefined
               ? <Button variant="ghost-muted" size="xs" className="-ms-2" onClick={() => { void app.find(profile); box.current?.focus(); }}><ArrowLeftIcon />Back to the {matches} found</Button>
-              : count ? `${matches} ${count === 1 ? 'contains' : 'contain'} “${search.text}”, newest first. Open one to see it where it is in the tree.` : `No message contains “${search.text}”.`}
+              : count ? `${matches} ${count === 1 ? 'contains' : 'contain'} “${answer.of}”, newest first. Open one to see it where it is in the tree.` : `No message contains “${answer.of}”.`}
           </p>
         ) : <p className="mt-0.5 text-muted-foreground text-xs leading-relaxed">
           {!view ? 'Reading the memory…' : !first ? 'No messages yet.'
@@ -164,7 +163,7 @@ export const MemoryView = memo(function MemoryView({ tree, profile, window, puls
         </p>}
       </header>
       {/* The tree stays where it is under what a search found, so that it is as it was when the search ends. */}
-      {search && results && <Results search={search} profile={profile} />}
+      {results && answer && <Results answer={answer} profile={profile} />}
       <div ref={scroller} hidden={results} onKeyDown={keys} className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-y-contain px-3 sm:px-5">
         <div className="mx-auto w-full min-w-0 max-w-(--chat-content-max-width) pt-2 pb-6">
           {view?.lines.map((line, at) => (

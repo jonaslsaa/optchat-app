@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from 'react';
 import { connect, type Client } from '../client.ts';
-import type { Config, Hit, Line, Message, Method, ModelChoice, Params, Push, Result, Settings, Setup, WindowState } from '../protocol.ts';
+import type { Config, Line, Message, Method, ModelChoice, Params, Push, Result, Settings, Setup, WindowState } from '../protocol.ts';
 import { current } from '../window.ts';
 import { calling, key, NO_TREE, path, read, toggled, type Tree } from './memory.ts';
 import { apply, idle, isMessage, isObject, merged, replay, stopped, without, words, type Live, type PiMessage } from './transcript.ts';
@@ -370,17 +370,19 @@ export class App {
     await this.under(profile, line);
   }
   /** Searches the profile's memory for `text`, as its agent would: the messages that say it stand in the tree's place, newest
-   * first. `before` asks for the ones older than that message, after those that are here. No text ends the search, and the
-   * tree is as it was. An answer that comes after another search was begun is not kept. */
-  async search(profile: string, text: string, before?: number) {
-    const asked = () => this.state.memory[profile]?.search?.text === text;
-    if (before === undefined) this.tree(profile, ({ search, found, ...tree }) => text ? { ...tree, search: { text, hits: search?.hits, more: search?.more ?? 0 } } : tree);
-    if (!text) return;
-    const of = this.memoryOf(profile), page = await this.ask('search', { profile, text, before });
-    if (!page || !asked() || of !== this.memoryOf(profile)) return;
-    // Asked for twice, the older ones come twice: only those older than what is here are added.
-    const older = (had: Hit[]) => [...had, ...page.hits.filter(hit => hit.id < (had.at(-1)?.id ?? Infinity))];
-    this.tree(profile, tree => ({ ...tree, search: { text, hits: before === undefined ? page.hits : older(tree.search?.hits ?? []), more: page.more } }));
+   * first. No text ends the search, and the tree is as it was. An answer that comes after other text was typed is not kept. */
+  async search(profile: string, text: string) {
+    this.tree(profile, ({ search, found, ...tree }) => text ? { ...tree, search: { ...search, text } } : tree);
+    const page = text ? await this.ask('search', { profile, text }) : undefined;
+    if (page) this.tree(profile, tree => tree.search?.text === text ? { ...tree, search: { text, answer: { of: text, ...page } } } : tree);
+  }
+  /** Asks for the messages older than those the search has, and adds them. Not while the answer for other text is on its way,
+   * and asked for twice they are added once. */
+  async moreFound(profile: string) {
+    const { text, answer } = this.state.memory[profile]?.search ?? {}, before = answer?.hits.at(-1)?.id;
+    if (text === undefined || answer?.of !== text || before === undefined) return;
+    const page = await this.ask('search', { profile, text, before });
+    if (page) this.tree(profile, tree => tree.search?.answer !== answer ? tree : { ...tree, search: { text, answer: { of: text, hits: [...answer.hits, ...page.hits], more: page.more } } });
   }
   /** Shows message `id` in the tree: every line from the view down to it is opened, and it is the one that was `found`. With
    * no message, what the search found is shown again. */
@@ -392,8 +394,10 @@ export class App {
     const down = reach();
     if (!down.length) return;
     this.tree(profile, tree => ({ ...tree, open: [...new Set([...tree.open, ...down.map(key)])] }));
+    const text = this.state.memory[profile]?.search?.text;
     await Promise.all(down.map(line => this.under(profile, line)));
-    this.tree(profile, tree => ({ ...tree, found: id }));
+    // Unless the search was ended or is for other text by now: then the tree is open down to the message, and that is all.
+    this.tree(profile, tree => tree.search?.text === text ? { ...tree, found: id } : tree);
   }
   /** Sends your message. In a run it steers the agent, or with `later` waits until the agent has stopped. */
   async send(window: string, text: string, later = false) {

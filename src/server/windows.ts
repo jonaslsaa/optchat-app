@@ -6,6 +6,7 @@ import { methods, type Params, type PiRecord, type Push, type Result, type Windo
 import { canComplete } from '../window.ts';
 import { Pi, reason } from './pi.ts';
 import { profileDirectory } from './profiles.ts';
+import { MINIMUM_OPTCHAT } from './setup.ts';
 
 export interface WindowsOptions {
   home: string;
@@ -119,6 +120,13 @@ export class Windows {
     this.get(window).ui.delete(`dialog ${response.id}`);
     return {};
   }
+  /** A Pi has the profile open once this answers: one outside the app, or else the main window's, started if it has none. A
+   * profile's agents live in that Pi, and are reached through it. */
+  async owned(profile: string) {
+    const main = this.window(profile);
+    await this.look(main);
+    if (!main.state.outside) await this.started(main);
+  }
   /** Stops every Pi and starts no more. Connected windows go first: each hands its conversation to the profile's owner as it
    * leaves, so the owner has to be there still. */
   async shutdown() {
@@ -200,7 +208,7 @@ export class Windows {
       // Pi answers once its extensions have started the session, so by now pi-optchat has the profile or has said why not.
       // Without its profile it takes every prompt and answers nothing, so such a Pi is stopped, not left looking idle.
       await pi.request({ type: 'get_state' });
-      if (!opens(opened)) throw new Error(opened.fault ?? 'pi-optchat did not open the profile. Is pi-optchat 0.11.10 or newer installed in this Pi? (pi install npm:pi-optchat)');
+      if (!opens(opened)) throw new Error(opened.fault ?? `pi-optchat did not open the profile. Is pi-optchat ${MINIMUM_OPTCHAT} or newer installed in this Pi? (pi install npm:pi-optchat)`);
     } catch (error) {
       opened.fault = reason(error);
       await pi.stop(grace);

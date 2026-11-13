@@ -45,6 +45,21 @@ export function doing({ state, doing: [call, ...more], headline: said }: Agent):
     case 'completed': return headline ?? 'Done';
   }
 }
+/** How an agent stands, in a word or a few, and whether that is said in colour: only at work, done and failed are. */
+export function stood({ state }: Pick<Agent, 'state'>): { word: string; tone?: 'working' | 'done' | 'failed' } {
+  if (working({ state })) return { word: state === 'running' ? 'Working' : state === 'waiting' ? 'Waiting for its agents' : state === 'paused' ? 'Paused' : 'Stopping', tone: 'working' };
+  return { word: `${state[0].toUpperCase()}${state.slice(1)}`, ...state === 'completed' ? { tone: 'done' } : state === 'failed' && { tone: 'failed' } };
+}
+/** What you can do to an agent from its chat, by how it stands, so that nothing is offered that pi-optchat would refuse
+ * outright. `message`: it takes one, which reaches it at `work` or starts it again once it has `ended` (the server picks
+ * which; this only says what to expect). `interrupt` and `stop`: while there is a step to cut, and an agent to end. One that
+ * is on its way out takes nothing. An agent that has ended is resumed by the agent that started it, and you speak for the
+ * main agent alone: another agent's agent takes no message then, and `owner` is the agent whose it is to resume. */
+export function controls({ state, parent }: Pick<Agent, 'state' | 'parent'>): { message?: 'work' | 'ended'; interrupt: boolean; stop: boolean; owner?: string } {
+  if (state === 'stopping') return { interrupt: false, stop: false };
+  if (working({ state })) return { message: 'work', interrupt: state !== 'paused', stop: true };
+  return { interrupt: false, stop: false, ...parent === undefined ? { message: 'ended' } : { owner: parent } };
+}
 /** An agent's chat as the chat's items: its task, what it did, and its answer. What it reported is its last answer, unless it
  * ended without one (it failed, or was stopped): then the report says how, and is the last item, dated when the agent ended.
  * `over` says the agent is not at work: one that was told to go on still has the report of its last time. */

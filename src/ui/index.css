@@ -49,6 +49,7 @@
   --color-error-foreground: var(--error-foreground);
   --color-error-surface: var(--error-surface);
   --color-success-foreground: var(--success-foreground);
+  --color-info-foreground: var(--info-foreground);
   --color-tool-error-icon: var(--tool-error-icon);
   --color-zinc-25: oklch(99.2% 0 0);
 

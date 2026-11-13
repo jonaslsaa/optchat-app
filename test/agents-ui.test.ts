@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import type { Agent } from '../src/protocol.ts';
-import { busy, doing, listed, named, polled } from '../src/ui/agents.ts';
+import { busy, controls, doing, listed, named, polled, stood } from '../src/ui/agents.ts';
 
 const agent = (id: string, state: Agent['state'], started: number, more: Partial<Agent> = {}): Agent => ({ id, task: `Task of ${id}\nand more`, model: 'm', state, started, doing: [], ...more });
 
@@ -36,4 +36,19 @@ test('the agents\' button has its dot by the Pi\'s own count, and the open panel
   assert.deepEqual([busy(undefined, working), busy(undefined, ended), busy(undefined)], [true, false, false]);
   // That Pi sends the app nothing, so an agent it starts later is found only by looking.
   assert.deepEqual([polled(ended, false), polled(working, false), polled(ended, true), polled([], true)], [false, true, true, true]);
+});
+
+test('an agent\'s chat offers what its state allows: a message while it works or once it ended, and no dead button', () => {
+  const of = (state: Agent['state'], parent?: string) => controls(agent('a', state, 0, { parent }));
+  assert.deepEqual(of('running'), { message: 'work', interrupt: true, stop: true });
+  // Interrupted with nothing to go on with, it waits for a message: there is no step to cut.
+  assert.deepEqual(of('paused'), { message: 'work', interrupt: false, stop: true });
+  assert.deepEqual(of('stopping'), { interrupt: false, stop: false });
+  for (const state of ['completed', 'failed', 'stopped', 'interrupted'] as const) assert.deepEqual(of(state), { message: 'ended', interrupt: false, stop: false });
+  // An agent's own agent is told and stopped like any other while it works; once it has ended only its parent resumes it.
+  assert.deepEqual(of('waiting', 'b'), { message: 'work', interrupt: true, stop: true });
+  assert.deepEqual(of('completed', 'b'), { interrupt: false, stop: false, owner: 'b' });
+  // Colour is for three things: at work, done, failed.
+  assert.deepEqual(['running', 'waiting', 'paused', 'completed', 'failed', 'stopped', 'interrupted'].map(state => stood({ state: state as Agent['state'] })),
+    [{ word: 'Working', tone: 'working' }, { word: 'Waiting for its agents', tone: 'working' }, { word: 'Paused', tone: 'working' }, { word: 'Completed', tone: 'done' }, { word: 'Failed', tone: 'failed' }, { word: 'Stopped' }, { word: 'Interrupted' }]);
 });

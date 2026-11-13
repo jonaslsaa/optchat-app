@@ -54,7 +54,7 @@ writeFileSync(pi.command, `#!/bin/sh\nexec "${process.execPath}" "${fake}" "$@"\
 chmodSync(pi.command, 0o755);
 process.env.FAKE_PI_HOME = join(home, 'pi');
 mkdirSync(join(home, 'pi', 'pi-optchat'), { recursive: true });
-writeFileSync(join(home, 'pi', 'pi-optchat', 'package.json'), JSON.stringify({ name: 'pi-optchat', version: '0.11.10' }));
+writeFileSync(join(home, 'pi', 'pi-optchat', 'package.json'), JSON.stringify({ name: 'pi-optchat', version: '0.11.12' }));
 writeFileSync(join(home, 'pi', 'state.json'), JSON.stringify({ version: '1.5.2', providers: ['anthropic', 'openai'], packages: { 'npm:pi-optchat': join(home, 'pi', 'pi-optchat') } }));
 
 await build({ logLevel: 'warn' });
@@ -209,7 +209,7 @@ async function pictures(browser: Browser, control: Client) {
     await panel.getByText('Draft the release notes').waitFor();
     await shot(panel, '24-agents');
     await panel.getByText('Run the shutdown test on Windows').last().click();
-    await panel.getByText('Runs on its own').waitFor();
+    await panel.getByRole('textbox', { name: 'Tell the agent' }).waitFor();
     await shot(panel, '25-agent-working');
     // A report in the chat opens the agent it is from.
     await panel.getByRole('button', { name: 'Report: How T3 Code reconnects' }).click();
@@ -296,4 +296,45 @@ async function pictures(browser: Browser, control: Client) {
   await slender.getByRole('button', { name: 'Settings' }).click();
   await slender.getByRole('heading', { name: 'Profile: notes' }).scrollIntoViewIfNeeded();
   await shot(slender, '43-settings-profile-narrow');
+
+  // Talking to an agent, under its chat. A message is worth a Pi: the app's own is started on the chat for the first one, and
+  // its agents are at work with it. One at work keeps the message until it reads it.
+  const crew = await open(['team']), dusk = await open(['team'], { dark: true }), sheet = await open(['team'], { width: 420, height: 800 });
+  const agent = async (page: Page, title: string) => {
+    if (await page.getByRole('button', { name: 'Back to the lists' }).isVisible()) await page.getByRole('button', { name: 'Back to the lists' }).click();
+    else await page.getByRole('button', { name: 'Agents and GitHub' }).click();
+    await page.getByRole('complementary').getByText(title).click();
+  };
+  const tell = async (page: Page, text: string) => { await page.getByRole('textbox', { name: 'Tell the agent' }).fill(text); await page.keyboard.press('Enter'); };
+  await agent(crew, 'Run the shutdown test on Windows');
+  await tell(crew, 'Skip the macOS run: only Windows matters here.');
+  await crew.getByText('waiting to be read').waitFor();
+  await crew.getByRole('button', { name: 'Interrupt' }).waitFor();
+  await shot(crew, '44-agent-told');
+  await agent(dusk, 'Run the shutdown test on Windows');
+  await dusk.getByText('waiting to be read').waitFor();
+  await shot(dusk, '45-agent-told-dark');
+  await agent(sheet, 'Run the shutdown test on Windows');
+  await sheet.getByText('waiting to be read').waitFor();
+  await shot(sheet, '46-agent-told-narrow');
+  // Interrupted with nothing it could go on with, it waits for a message: there is no step left to cut.
+  await agent(crew, 'Draft the release notes');
+  await crew.getByRole('button', { name: 'Interrupt' }).click();
+  await crew.getByText('Paused ·').waitFor();
+  await crew.getByText('Working for').waitFor({ state: 'detached' });
+  await shot(crew, '47-agent-paused');
+  // An agent that has ended is started again by a message, in the same box.
+  await agent(crew, 'How T3 Code reconnects');
+  await tell(crew, 'And what does the client do when the server started again?');
+  await crew.getByText('Working ·').waitFor();
+  await shot(crew, '48-agent-resumed');
+  // An agent's own agent that has ended is its parent's to resume: no box, and a line for whose it is.
+  await agent(crew, 'Find the failing CI run');
+  await crew.getByText('so only it can resume it').waitFor();
+  await shot(crew, '49-agent-of-an-agent-ended');
+  // What pi-optchat refuses is said as it says it, and the message is still in the box.
+  await agent(crew, 'Benchmark the log reader');
+  await tell(crew, 'Try again, the API is back.');
+  await crew.getByRole('alert').waitFor();
+  await shot(crew, '50-agent-refused');
 }

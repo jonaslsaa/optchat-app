@@ -3,7 +3,7 @@ import { existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { connect } from '../src/client.ts';
-import type { PiRecord, Push, Result, Setup } from '../src/protocol.ts';
+import type { Agent, PiRecord, Push, Result, Setup } from '../src/protocol.ts';
 import { startServer } from '../src/server/server.ts';
 import { PROMPT } from '../src/server/windows.ts';
 import { transcript } from '../src/ui/agents.ts';
@@ -198,6 +198,59 @@ test('an agent the main chat starts is listed while it works and once it has rep
     reports = parts(logged((await client.request('history', { profile: 'live' })).messages)).filter(part => part.type === 'work');
   }
   assert.partialDeepStrictEqual(reports, [{ agent: id, title: 'Read the notes', body: report }]);
+});
+
+test('an agent is told, interrupted, resumed and stopped from the app, and an agent\'s own agent too while it works', { timeout: 300_000 }, async t => {
+  const home = temporaryHome(), cwd = mkdtempSync(join(home, 'cwd-')), directory = createProfile(home, 'live'), config = join(directory, 'config.json');
+  writeFileSync(config, JSON.stringify({ ...JSON.parse(readFileSync(config, 'utf8')), subagentLevels: 2 })); // An agent may start agents here.
+  const server = await startServer({ home, cwd, flags });
+  t.after(() => server.close());
+  const client = await connect(server.url);
+  const { window } = await client.request('open', { profile: 'live' });
+  /** The agent of this title once it stands so, read from the profile's files as the page reads it. */
+  const stands = async (title: string, so: (agent: Agent) => boolean) => {
+    for (;;) {
+      const found = (await client.request('agents', { profile: 'live' })).agents.find(agent => agent.title === title);
+      if (found && so(found)) return found;
+      await new Promise(resolve => setTimeout(resolve, 250));
+    }
+  };
+  const runs = (command: string) => (agent: Agent) => agent.doing.some(call => call.name === 'bash' && call.args.command === command);
+  const spawn = (title: string, task: string) => client.request('prompt', { window: window.id, text: `Use spawn to start ONE subagent titled "${title}" with exactly the task between the tags: <task>${task}</task> Then say only: started.` });
+
+  // Told while it works: the message waits until it reads it. Interrupted: its step is cut, and it goes on with the message at once.
+  await spawn('Word', 'Run `sleep 30` with bash. If it is cut short, do not run it again. Then report only the word you were told while you worked, or the word nothing if you were told none.');
+  const word = { profile: 'live', id: (await stands('Word', runs('sleep 30'))).id };
+  assert.deepEqual(await client.request('tellAgent', { ...word, text: 'The word is kiwi.' }), { resumed: false });
+  assert.deepEqual((await client.request('agent', word)).queued, ['The word is kiwi.']);
+  assert.deepEqual(await client.request('interruptAgent', word), {});
+  const cut = await stands('Word', agent => agent.state === 'completed');
+  assert.match(cut.headline ?? '', /kiwi/i);
+  assert.ok(cut.ended! - cut.started < 30_000, 'the sleep did not run to its end');
+  const read = await client.request('agent', word);
+  assert.ok(read.queued === undefined && read.messages.filter(isMessage).some(message => message.role === 'user' && words(message.content).includes('The word is kiwi.')));
+
+  // Ended, it is resumed with the next message, in the conversation it had: you do not choose between the two.
+  assert.deepEqual(await client.request('tellAgent', { ...word, text: 'Now report exactly this word: mango' }), { resumed: true });
+  assert.match((await stands('Word', agent => agent.state === 'completed' && /mango/i.test(agent.headline ?? ''))).headline ?? '', /mango/i);
+  // Stopped, an agent ends, and its report says who stopped it.
+  await spawn('Sleeper', 'Run `sleep 30` with bash, then report: slept.');
+  const sleeper = { profile: 'live', id: (await stands('Sleeper', runs('sleep 30'))).id };
+  assert.deepEqual(await client.request('stopAgent', sleeper), {});
+  await stands('Sleeper', agent => agent.state === 'stopped');
+  assert.match((await client.request('agent', sleeper)).report ?? '', /^Stopped by the user\./);
+
+  // An agent's own agent is told and stopped the same way while it works. It does what it was told, so the message reached it.
+  await spawn('Outer', 'Use spawn to start ONE subagent titled "Inner" with exactly this task: "Run `sleep 30` with bash, then report: slept." Then wait for its report, and report what it said.');
+  const found = await stands('Inner', runs('sleep 30')), inner = { profile: 'live', id: found.id };
+  assert.equal(found.parent, (await stands('Outer', () => true)).id);
+  assert.deepEqual(await client.request('tellAgent', { ...inner, text: 'Change of plan: run `sleep 21` with bash now, then report: slept.' }), { resumed: false });
+  assert.deepEqual(await client.request('interruptAgent', inner), {});
+  await stands('Inner', runs('sleep 21'));
+  assert.deepEqual(await client.request('stopAgent', inner), {});
+  await stands('Inner', agent => agent.state === 'stopped');
+  // Ended, it is its parent's to resume, and pi-optchat says so.
+  await assert.rejects(client.request('tellAgent', { ...inner, text: 'Go on.' }), new RegExp(`Only ${inner.id}'s parent ${found.parent} can resume it`));
 });
 
 test('the app installs Pi into its own folder, that Pi runs a chat, and it installs pi-optchat with Pi\'s own installer', { timeout: 240_000 }, async t => {

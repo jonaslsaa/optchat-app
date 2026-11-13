@@ -130,7 +130,7 @@ export function agents(directory: string, end: number) {
     { say: 'The client sends the last sequence number it saw. Now the server side.', calls: [['read', { path: 'apps/server/src/orchestration/replay.ts' }, 'export function replay(thread: Thread, after: number) {\n  if (after < thread.log.first) return snapshot(thread);\n  return thread.log.since(after);\n}']] },
     { say: RECONNECTS },
   ]);
-  run('3f6c88e1', 'Benchmark the log reader', 'Time reading a 20,000-message log, page by page.', 'failed', 1560, { ended: ago(1556), report: 'Task error: 529 {"type":"error","error":{"type":"overloaded_error","message":"Overloaded"}}' });
+  run('3f6c88e1', 'Benchmark the log reader', 'Time reading a 20,000-message log, page by page.', 'failed', 1560, { sessionFile: undefined, ended: ago(1556), report: 'Task error: 529 {"type":"error","error":{"type":"overloaded_error","message":"Overloaded"}}' });
   run('0d93b7aa', 'Audit the WebSocket origin check', 'Read src/server/server.ts and say whether a page on another origin can connect.', 'stopped', 3600, { ended: ago(3570), report: 'Stopped by the main agent.' });
   run('b2c4e6f8', undefined, 'Count the lines of TypeScript in src/ and say which file is the longest.\nReport one line.', 'completed', 7200, { ended: ago(7188), report: '4,812 lines; `src/ui/transcript.ts` is the longest at 361.' });
 }

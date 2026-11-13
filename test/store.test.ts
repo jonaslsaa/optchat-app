@@ -10,7 +10,7 @@ import { transcript } from '../src/ui/agents.ts';
 import { building, listed, path, polled } from '../src/ui/memory.ts';
 import { App, type State } from '../src/ui/store.ts';
 // pi-optchat's own lock, which only Pi takes: here it stands for a Pi in a terminal.
-import { describeOwner, lockProfile } from '../node_modules/pi-optchat/dist/profiles.js';
+import { describeOwner, lockProfile } from 'pi-optchat/files';
 import { createProfile, temporaryHome, writeMemory, writeRun } from './support.ts';
 
 const pi = { command: process.execPath, args: [join(import.meta.dirname, 'fake-pi.ts')] };

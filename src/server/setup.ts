@@ -15,8 +15,8 @@ import { killTree } from './pi.ts';
 
 /** The Pi and pi-optchat this app is tested with; older ones are told to update. pi-optchat's Pi has to take what the app asks
  * of it through the profile's socket: a word to an agent (0.11.11) and a change of settings (0.11.12). An older one drops the
- * connection instead. */
-export const MINIMUM_PI = '1.5.2', MINIMUM_OPTCHAT = '0.11.12';
+ * connection instead. 0.11.13 does nothing new: it is the one the app itself reads and changes profiles with. */
+export const MINIMUM_PI = '1.5.2', MINIMUM_OPTCHAT = '0.11.13';
 const PI_PACKAGE = '@earendil-works/pi-coding-agent', OPTCHAT = 'npm:pi-optchat';
 /** A command, and the arguments that are part of it (a script's path, for a Pi that is run through Node). */
 export interface Launch { command: string; args: readonly string[] }

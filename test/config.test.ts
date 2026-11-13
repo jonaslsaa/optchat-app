@@ -2,12 +2,11 @@ import assert from 'node:assert/strict';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
-import { SETTINGS } from 'pi-optchat/files';
 import { connect } from '../src/client.ts';
 import { startServer } from '../src/server/server.ts';
 import { App } from '../src/ui/store.ts';
 // pi-optchat's own lock, which only Pi takes: here it stands for a Pi that has the profile open and takes no changes.
-import { describeOwner, lockProfile } from '../node_modules/pi-optchat/dist/profiles.js';
+import { describeOwner, lockProfile, SETTING_KEYS, SETTINGS } from 'pi-optchat/files';
 import { createProfile, temporaryHome } from './support.ts';
 
 const home = temporaryHome();
@@ -23,7 +22,7 @@ test('a profile\'s settings are pi-optchat\'s to list, to judge and to write', {
 
   // Every setting pi-optchat has, as it describes it, with what the profile has: here its defaults, since the file names none.
   const config = await client.request('config', { profile: 'work' });
-  assert.deepEqual(config.settings.map(setting => setting.key), Object.keys(SETTINGS));
+  assert.deepEqual(config.settings.map(setting => setting.key), SETTING_KEYS);
   assert.deepEqual(config.settings.find(setting => setting.key === 'jobs'), { key: 'jobs', ...SETTINGS.jobs, value: 8 });
   assert.partialDeepStrictEqual(config.settings.find(setting => setting.key === 'refreshAt'), { kind: 'percent', value: 0.3 });
   assert.partialDeepStrictEqual(config, { compactor: haiku, subagent: haiku, standard: { provider: 'anthropic', thinking: 'medium' }, instructions: '# work\n\nA test profile. Answer in one short sentence.\n' });

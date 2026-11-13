@@ -1,11 +1,10 @@
 import { writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { join } from 'node:path';
-import type { RunInfo } from 'pi-optchat/files';
 // pi-optchat's own socket and its wire, which the app reaches an agent through (`attachAgent`).
-import { checkPatch, patchConfigFile, profileSocket, removeStaleSocket } from '../node_modules/pi-optchat/dist/profiles.js';
-import { readRun } from '../node_modules/pi-optchat/dist/run-record.js';
-import { wire } from '../node_modules/pi-optchat/dist/window-client.js';
+import { profileSocket, readRuns, removeStaleSocket, wire, type RunInfo } from 'pi-optchat/files';
+// How pi-optchat's Pi checks and writes a change of settings: not among its exports yet, so from where it is built.
+import { checkPatch, patchConfigFile } from '../node_modules/pi-optchat/dist/profiles.js';
 import { working } from '../src/agent.ts';
 
 /** A Pi that owns a profile, as far as the app asks it things: pi-optchat's socket in the profile's folder, answering `attach`,
@@ -13,6 +12,7 @@ import { working } from '../src/agent.ts';
  * refusing in pi-optchat's words, and `configure` by changing the profile's settings. No agent runs. It is the fake Pi's (`fake-pi.ts`), and lasts as long as its process. */
 export async function fakeOwner(directory: string, clock: () => number) {
   const path = profileSocket(directory, 'windows');
+  const run = (id: string) => readRuns(directory).find(run => run.id === id);
   const save = (run: RunInfo) => writeFileSync(join(directory, 'runs', `${run.id}.optchat.json`), JSON.stringify(run));
   const told = (run: RunInfo, text: string): RunInfo => ({ ...run, guidance: [...run.guidance, { text, date: clock(), state: 'queued', from: 'user' }] });
   const acts: Record<string, (run: RunInfo, text: string) => RunInfo> = {
@@ -39,8 +39,8 @@ export async function fakeOwner(directory: string, clock: () => number) {
       try {
         // A change of settings from the app: its Pi has the profile, so it is that Pi's to check and to write.
         if (action === 'configure') { const patch: unknown = JSON.parse(text); checkPatch(patch); patchConfigFile(directory, patch); }
-        else if (action === 'attach') { try { readRun(directory, id = text); } catch { throw new Error(`No subagent ${text} in this profile`); } }
-        else if (id && acts[action]) save(acts[action](readRun(directory, id), text));
+        else if (action === 'attach') { if (!run(id = text)) throw new Error(`No subagent ${text} in this profile`); }
+        else if (id && acts[action]) { const agent = run(id); if (!agent) throw new Error(`No subagent ${id} in this profile`); save(acts[action](agent, text)); }
         else throw new Error(`The fake owner knows no ${action}.`);
         send({ kind: 'reply', id: frame.id });
       } catch (error) { send({ kind: 'reply', id: frame.id, error: error instanceof Error ? error.message : String(error) }); }

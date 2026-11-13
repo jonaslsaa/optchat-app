@@ -5,7 +5,7 @@ import { test } from 'node:test';
 import { connect } from '../src/client.ts';
 import { startServer } from '../src/server/server.ts';
 // pi-optchat's own lock, which only Pi takes: here it stands for a Pi that has the profile open.
-import { describeOwner, lockProfile } from '../node_modules/pi-optchat/dist/profiles.js';
+import { describeOwner, lockProfile } from 'pi-optchat/files';
 import { createProfile, temporaryHome, writeRun } from './support.ts';
 
 const home = temporaryHome();

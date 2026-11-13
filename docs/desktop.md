@@ -26,8 +26,9 @@ npm run dist      # the same build as OptChat.app and a dmg, in release/ (macOS,
 - `electron-builder.yml` packs `dist/` and `package.json` into `OptChat.app` and a dmg, for arm64 only.
 - **Signed ad hoc.** There is no Apple Developer ID, so the app is not notarized, and it does not update itself. An arm64 app that is not signed at all does not start, so it is signed with no identity (`codesign -dv` says `Signature=adhoc`).
 
+The icon is `build/icon.icns`, where electron-builder looks for it; it is cut from `build/icon.svg`, and `build/icon.png` is the page's icon and the Dock's when the app runs from the checkout.
+
 ## Not there yet
 
-- An icon: the app has Electron's.
 - Windows and Linux: nothing here is tried on them, and the title bar is written for macOS.
 - A window in the Dock while the app has none: closing the window quits.

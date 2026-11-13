@@ -20,6 +20,8 @@ else {
   const server = await startServer({ ...options, port: PORT }).catch(() => startServer(options));
   // Electron is ready only once this file has run to its end, so the window is not waited for here.
   void app.whenReady().then(() => {
+    // The packaged app has its icon in it; run from the checkout, Electron would show its own.
+    if (!app.isPackaged) app.dock?.setIcon(join(import.meta.dirname, '../../build/icon.png'));
     // `OPTCHAT_APP_BACKGROUND` is for trying the app out while you work: its window opens behind the others and takes no focus.
     const background = Boolean(process.env.OPTCHAT_APP_BACKGROUND);
     const window = new BrowserWindow({

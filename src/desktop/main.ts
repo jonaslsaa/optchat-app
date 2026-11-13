@@ -32,10 +32,11 @@ else {
     const mark = () => { if (!window.isDestroyed()) void window.webContents.executeJavaScript(`document.documentElement.dataset.shell = '${window.isFullScreen() ? 'fullscreen' : 'windowed'}'`); };
     window.webContents.on('dom-ready', mark);
     window.on('enter-full-screen', mark).on('leave-full-screen', mark);
-    // The window never leaves the app's page: a link goes to your browser, and anything else goes nowhere.
-    const leave = (url: string) => { if (destination(url, server.page) === 'browser') void shell.openExternal(url); };
-    window.webContents.on('will-navigate', (event, url) => { if (destination(url, server.page) !== 'here') { event.preventDefault(); leave(url); } });
-    window.webContents.setWindowOpenHandler(({ url }) => { leave(url); return { action: 'deny' }; });
+    // The window never leaves the app's page, and there is no second window. A link opens in your browser, one to the app's
+    // own server too (a picture, which a link opens in a tab of its own); anything that is not a web page goes nowhere.
+    const browse = (url: string) => { if (destination(url, server.page) !== 'nowhere') void shell.openExternal(url); };
+    window.webContents.on('will-navigate', (event, url) => { if (destination(url, server.page) !== 'here') { event.preventDefault(); browse(url); } });
+    window.webContents.setWindowOpenHandler(({ url }) => { browse(url); return { action: 'deny' }; });
     // Shown once the page is there and marked.
     void window.loadURL(server.page).then(() => { if (background) { window.showInactive(); window.blur(); } else window.show(); });
     app.on('second-instance', () => { if (window.isMinimized()) window.restore(); window.focus(); });

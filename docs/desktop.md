@@ -28,6 +28,25 @@ npm run dist      # the same build as OptChat.app and a dmg, in release/ (macOS,
 
 The icon is `build/icon.icns`, where electron-builder looks for it; it is cut from `build/icon.svg`, and `build/icon.png` is the page's icon and the Dock's when the app runs from the checkout.
 
+## Releasing
+
+`.github/workflows/release.yml` builds the dmg on a macOS runner (Apple Silicon) and attaches it to a GitHub release with generated notes. To cut one:
+
+1. Set `version` in `package.json` (and `package-lock.json`: `npm version <x.y.z> --no-git-tag-version`), and merge that.
+2. Tag that commit `v<x.y.z>` and push the tag. The build fails if the tag and `package.json` disagree.
+
+Started by hand (Actions → Release → Run workflow), the same build makes no release and keeps the dmg as an artifact of the run for a week. Nothing builds on a push or a pull request: a macOS runner's minutes count ten times in a private repository. The build prints the app's signature (`Signature=adhoc`) and Gatekeeper's answer to it, which is `rejected` for an app without a Developer ID.
+
+## The first open
+
+The app is signed ad hoc and not notarized, so what macOS does at the first open depends on how the dmg got to the Mac (tried on macOS 27.2):
+
+- **Downloaded with `gh`** (or `curl`): the file is not marked as downloaded (no `com.apple.quarantine`), and the app opens like any other.
+- **Downloaded with a browser**: macOS marks the dmg and the app copied out of it, and the first open ends with "“OptChat” Not Opened. Apple could not verify “OptChat” is free of malware that may harm your Mac or compromise your privacy.", with **Move to Trash** and **Done**. Press Done, then allow it once under System Settings → Privacy & Security → **Open Anyway**. Taking the mark off does the same (`xattr -dr com.apple.quarantine /Applications/OptChat.app`).
+- **On a company Mac** with endpoint security, an unsigned app from the internet may be flagged or stopped whatever you allow yourself.
+
+macOS asks once whether OptChat may read your Documents folder (or Desktop, Downloads) when an agent first works there. An ad hoc signature is a new identity with every build, so it asks again after each update.
+
 ## Not there yet
 
 - Windows and Linux: nothing here is tried on them, and the title bar is written for macOS.

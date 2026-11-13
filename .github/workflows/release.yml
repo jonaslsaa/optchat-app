@@ -6,7 +6,6 @@ name: Release
 on:
   push:
     tags: ['v*']
-    branches: [feature/release-dmg] # Only to try the workflow before it is on main: taken out again before this merges.
   workflow_dispatch:
 
 permissions:

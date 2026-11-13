@@ -4,6 +4,14 @@ A desktop app for [pi-optchat](https://github.com/jonaslsaa/pi-optchat): one cha
 
 Status: the local server ([docs/server.md](docs/server.md)) and a first usable UI ([docs/ui.md](docs/ui.md)) are built: profile tabs, windows, the chat with its history, and the composer. Try it with `npm install && npm start`, or as a desktop app with `npm run desktop` ([docs/desktop.md](docs/desktop.md)).
 
+## Install (macOS, Apple Silicon)
+
+```sh
+gh release download --repo jonaslsaa/optchat-app --pattern '*.dmg' --dir ~/Downloads
+```
+
+Open the dmg and drag OptChat to Applications. Downloaded this way it opens like any other app. Downloaded with a browser, macOS stops the first open ("OptChat Not Opened"): press Done, then System Settings → Privacy & Security → **Open Anyway**. The app is not notarized (there is no Apple Developer ID), so a company Mac with endpoint security may flag it. More in [docs/desktop.md](docs/desktop.md#the-first-open).
+
 ## Layout
 
 - **Top: profile tabs.** A profile is the thing you pick once and then stop thinking about. The tab bar is hidden while only one profile is open; opening a second profile shows two tabs.

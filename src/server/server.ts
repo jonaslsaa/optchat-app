@@ -153,10 +153,13 @@ export async function startServer({ port = 0, origins = [], ui = join(import.met
     } catch { response.writeHead(404).end(); }
   });
   server.on('upgrade', (request, socket, head) => {
-    const { pathname, searchParams } = new URL(request.url ?? '/', 'http://localhost');
-    if (closing || pathname !== '/ws' || !allowed(request)) { socket.destroy(); return; }
+    const url = URL.parse(request.url ?? '/', 'http://localhost');
+    if (closing || url?.pathname !== '/ws' || !allowed(request)) { socket.destroy(); return; }
     // Without the token, the socket is closed before it is read, with a code that tells a page from before a restart to stop.
-    sockets.handleUpgrade(request, socket, head, client => { if (searchParams.get('token') === token) sockets.emit('connection', client, request); else client.close(REFUSED); });
+    sockets.handleUpgrade(request, socket, head, client => {
+      if (url.searchParams.get('token') === token) sockets.emit('connection', client, request);
+      else client.on('error', () => client.terminate()).close(REFUSED);
+    });
   });
   await new Promise<void>((resolve, reject) => { server.once('error', reject); server.listen(port, '127.0.0.1', resolve); });
   const address = server.address() as AddressInfo;

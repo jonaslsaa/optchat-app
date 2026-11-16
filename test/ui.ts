@@ -31,6 +31,10 @@ seed(createProfile(home, 'diffs'), CHANGES.length, Date.now(), CHANGES);
 writeMemory(createProfile(home, 'thinks'), 4);
 seed(createProfile(home, 'formulas'), 1, Date.now(), FORMULAS);
 createProfile(home, 'paced');
+// A chat to find in: a word in two cases, a line of code longer than the page is wide, and a long message of yours, which is
+// shown cut short, with a word at its end. And one with more messages than the chat reads at first.
+writeMemory(createProfile(home, 'finds'), 40, i => i === 3 ? 'Blåbær and BLÅBÆR' : i === 5 ? `\`\`\`\n${'x'.repeat(400)} farword\n\`\`\`` : i === 20 ? `${Array.from({ length: 40 }, (_, line) => `line ${line}`).join('\n')}\nthe needle` : `message ${i}`);
+writeMemory(createProfile(home, 'paged'), 260);
 // A chat that names files, and those files in the folder its windows run in.
 seed(createProfile(home, 'files'), 1, Date.now(), NAMED);
 seed(createProfile(home, 'linked'), 1, Date.now(), [[['user', 'Show me.'], ['talk', '[![the preview](/images/linked/0123456789abcdef)](test/pi.test.ts)']]]);
@@ -490,7 +494,129 @@ test('the windows over a narrow chat are open for one pick: a window picked, a n
   await beside.waitFor({ timeout: 3000 }).catch(() => assert.fail('The windows did not come back beside the chat in a wide window.'));
 });
 
-test('↑ in an empty composer brings back what you said, and ⌘F in the chat searches the memory', async () => {
+test('⌘F finds in the chat: what is typed is marked wherever it is written and followed as the chat grows, Enter goes from one to the next, Esc closes it and the run goes on, and the same text is searched in the memory from there', async () => {
+  const page = await open('finds'), bar = page.getByRole('search', { name: 'Find in chat' }), count = bar.locator('[aria-live]'), control = await connect(server.url);
+  const counts = (said: string) => count.getByText(said, { exact: true }).waitFor({ timeout: 3000 }).catch(async () => assert.fail(`The bar says ${await count.textContent().catch(() => 'nothing')}, not ${said}.`));
+  /** How many places are marked beside the one it is at, and whether that one is in sight: its middle is where its text is,
+   * and not under what it is scrolled out of. */
+  const marked = () => page.evaluate(() => {
+    const [at] = CSS.highlights.get('find-at') ?? [], range = new Range();
+    if (!at) return [CSS.highlights.get('find')?.size ?? 0, false] as const;
+    range.setStart(at.startContainer, at.startOffset); range.setEnd(at.endContainer, at.endOffset);
+    const match = range.getBoundingClientRect(), there = document.elementFromPoint(match.left + match.width / 2, match.top + match.height / 2);
+    return [CSS.highlights.get('find')?.size ?? 0, at.startContainer.parentElement!.contains(there)] as const;
+  });
+  try {
+    // The agent at work, on a reply that is held with half of it written, and again with all of it written and not yet ended.
+    await page.getByRole('textbox', { name: 'Message' }).fill('wait slowly');
+    await page.keyboard.press('Enter');
+    await stop(page).waitFor();
+    await page.keyboard.press('ControlOrMeta+f');
+    assert.equal(await focused(page), 'Find in chat');
+    // Eleven messages say it, all above what the chat shows at its end: it is at the nearest, which is the last, and brings it
+    // into sight. ⇧Enter is the one before, and Enter the next, round the end to the first.
+    await page.keyboard.type('MESSAGE 1');
+    await counts('11/11');
+    assert.deepEqual(await marked(), [10, true]);
+    // A key an input method takes for itself, to pick or to drop what it offers, is no Enter or Esc of the bar's or the chat's.
+    await bar.getByRole('searchbox').evaluate(box => { for (const key of ['Enter', 'Escape']) box.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true, isComposing: true })); });
+    await page.waitForTimeout(300);
+    assert.deepEqual([await count.textContent(), await bar.count(), await stop(page).isVisible()], ['11/11', 1, true]);
+    await page.keyboard.press('Shift+Enter');
+    await counts('10/11');
+    assert.deepEqual(await marked(), [10, true]);
+    await page.keyboard.press('Enter');
+    await page.keyboard.press('Enter');
+    await counts('1/11');
+    assert.deepEqual(await marked(), [10, true]);
+    // Any case is found, in letters English does not have too, and a text that is nowhere says so.
+    await page.keyboard.press('ControlOrMeta+a');
+    await page.keyboard.type('blÅbær');
+    await counts('1/2');
+    assert.deepEqual(await marked(), [1, true]);
+    await page.keyboard.press('Enter');
+    await page.keyboard.press('Enter');
+    await counts('1/2');
+    // The page's own words are not the chat's: the line that says the agent is working, and what a button says.
+    for (const text of ['working for', 'full message']) {
+      await page.keyboard.press('ControlOrMeta+a');
+      await page.keyboard.type(text);
+      await counts('0/0');
+    }
+    // A text that is nowhere leaves the chat where it was before it was typed, though half of it was found further up.
+    const end = () => page.evaluate(() => { const chat = document.querySelector('main .overflow-y-auto')!; return chat.scrollHeight - chat.scrollTop - chat.clientHeight; });
+    await page.getByRole('button', { name: 'Scroll to end' }).click();
+    await page.waitForFunction(() => { const chat = document.querySelector('main .overflow-y-auto')!; return chat.scrollHeight - chat.scrollTop - chat.clientHeight < 1; });
+    await bar.getByRole('searchbox').focus();
+    await page.keyboard.press('ControlOrMeta+a');
+    await page.keyboard.type('blåbærx');
+    await counts('0/0');
+    assert.ok(await end() < 1, 'the chat is not back at its end');
+    // A long message is cut short over its end: found there, it opens.
+    await page.keyboard.press('ControlOrMeta+a');
+    await page.keyboard.type('the needle');
+    await counts('1/1');
+    await page.getByRole('button', { name: 'Show less' }).waitFor({ timeout: 3000 }).catch(() => assert.fail('The message that is cut short did not open at what was found in it.'));
+    assert.deepEqual(await marked(), [0, true]);
+    // The end of a line of code that is longer than the page is wide is scrolled to, sideways.
+    await page.keyboard.press('ControlOrMeta+a');
+    await page.keyboard.type('farword');
+    await counts('1/1');
+    assert.deepEqual(await marked(), [0, true]);
+    // What the agent is writing is found as it comes, with no key pressed.
+    await page.keyboard.press('ControlOrMeta+a');
+    await page.keyboard.type('reply');
+    await counts('0/0');
+    // Esc in the bar closes it and nothing else: the marks are gone, the keys are in the composer again, and the run goes on.
+    await goesOn(page, 'in the find bar');
+    assert.deepEqual([await bar.count(), await focused(page), await page.evaluate(() => CSS.highlights.size)], [0, 'Message', 0]);
+    await page.keyboard.press('ControlOrMeta+f');
+    await page.keyboard.type('reply');
+    await counts('0/0');
+    // The rest of the reply comes into the text that is there, and is found while the agent is still writing it.
+    await control.request('command', { window: 'finds/main', command: { type: 'release' } });
+    await counts('1/1');
+    assert.ok(await stop(page).isVisible(), 'the reply had ended');
+    await control.request('command', { window: 'finds/main', command: { type: 'release' } });
+    await stop(page).waitFor({ state: 'detached' });
+    await counts('1/1');
+    // The chat has its newest messages only. The memory has them all, and is searched for the same text from the bar.
+    await bar.getByRole('button', { name: 'Search memory for “reply”' }).click();
+    await page.getByRole('region', { name: 'Messages found' }).waitFor();
+    assert.deepEqual([await page.getByRole('searchbox', { name: 'Search the memory' }).inputValue(), await focused(page)], ['reply', 'Search the memory']);
+    // A connected window's chat is found in too, and ⇧⌘F in its bar takes what was typed to the memory, which is the main chat's.
+    await page.getByRole('button', { name: 'New window' }).click();
+    await page.getByRole('heading', { name: 'New connected window' }).waitFor();
+    await page.getByRole('textbox', { name: 'Message' }).fill('hello there');
+    await page.keyboard.press('Enter');
+    await page.getByRole('button', { name: 'Copy reply' }).waitFor();
+    await page.keyboard.press('ControlOrMeta+f');
+    await page.keyboard.type('HELLO');
+    await counts('1/1');
+    await page.keyboard.press('ControlOrMeta+Shift+f');
+    await page.getByRole('heading', { name: 'Memory view' }).waitFor();
+    assert.equal(await page.getByRole('searchbox', { name: 'Search the memory' }).inputValue(), 'HELLO');
+    // Find looks in what the chat has: going to what its first message says reads no page above it, as reading back to the top does.
+    const paged = await open('paged'), earlier = paged.getByRole('button', { name: 'Load earlier messages' });
+    await paged.keyboard.press('ControlOrMeta+f');
+    await paged.keyboard.type('message 60');
+    await paged.getByRole('search', { name: 'Find in chat' }).getByText('1/1', { exact: true }).waitFor();
+    await paged.waitForTimeout(500);
+    assert.deepEqual([await earlier.isVisible(), await paged.getByText('message 59', { exact: true }).count()], [true, 0], 'find read an older page');
+    // The match it is at stays the one it is at when the page above is read, which has one more before it.
+    const said = paged.getByRole('search', { name: 'Find in chat' }).locator('[aria-live]'), at = () => paged.evaluate(() => [...CSS.highlights.get('find-at') ?? []][0]?.startContainer.textContent);
+    await paged.keyboard.press('ControlOrMeta+a');
+    await paged.keyboard.type('message 7');
+    await paged.keyboard.press('Shift+Enter');
+    await said.getByText('9/10', { exact: true }).waitFor();
+    assert.equal(await at(), 'message 78');
+    await paged.evaluate(() => { const chat = document.querySelector('main .overflow-y-auto')!; chat.scrollTop = chat.scrollTop ? 0 : 1; });
+    await said.getByText('10/11', { exact: true }).waitFor({ timeout: 3000 }).catch(async () => assert.fail(`Reading back to the top read no older page, or the match it was at is another: the bar says ${await said.textContent()}.`));
+    assert.equal(await at(), 'message 78');
+  } finally { control.close(); }
+});
+
+test('↑ in an empty composer brings back what you said, and ⇧⌘F in the chat searches the memory', async () => {
   const page = await open('keys'), box = page.getByRole('textbox', { name: 'Message' });
   const press = async (key: string) => { await page.keyboard.press(key); return box.inputValue(); };
   assert.deepEqual([await press('ArrowUp'), await press('ArrowUp'), await press('ArrowDown'), await press('ArrowDown'), await press('ArrowDown')], ['message 14', 'message 12', 'message 14', '', '']);
@@ -503,16 +629,17 @@ test('↑ in an empty composer brings back what you said, and ⌘F in the chat s
   await page.getByRole('main').getByText('said just now').waitFor();
   assert.deepEqual([await press('ArrowUp'), await press('ArrowUp'), await press('ArrowUp'), await press('ArrowDown'), await press('ArrowDown')],
     ['said just now,\nin two lines', 'said just now,\nin two lines', 'message 14', 'said just now,\nin two lines', '']);
-  // ⌘F is not the panel's key: from there the chat stays as it is.
+  // ⌘F and ⇧⌘F are not the panel's keys: from there the chat stays as it is.
   await page.getByRole('button', { name: 'Agents and GitHub' }).click();
   await page.getByRole('button', { name: 'Close the panel' }).focus();
   await page.keyboard.press('ControlOrMeta+f');
+  await page.keyboard.press('ControlOrMeta+Shift+f');
   await page.waitForTimeout(300);
-  assert.equal(await page.getByRole('heading', { name: 'Memory view' }).count(), 0);
+  assert.equal(await page.getByRole('heading', { name: 'Memory view' }).count() + await page.getByRole('search', { name: 'Find in chat' }).count(), 0);
   await page.getByRole('button', { name: 'Close the panel' }).click();
   await box.focus();
-  // From the chat it shows the memory view with the keys in its search box, and they stay there once the view has been read.
-  await page.keyboard.press('ControlOrMeta+f');
+  // From the chat ⇧⌘F shows the memory view with the keys in its search box, and they stay there once the view has been read.
+  await page.keyboard.press('ControlOrMeta+Shift+f');
   await page.getByRole('heading', { name: 'Memory view' }).waitFor();
   await page.locator('[data-line]').first().waitFor();
   assert.equal(await focused(page), 'Search the memory');
@@ -522,7 +649,7 @@ test('↑ in an empty composer brings back what you said, and ⌘F in the chat s
   const narrow = await open('keys', NARROW);
   await narrow.getByRole('button', { name: 'Agents and GitHub' }).click();
   await narrow.locator('dialog[open]').waitFor();
-  await narrow.keyboard.press('ControlOrMeta+f');
+  await narrow.keyboard.press('ControlOrMeta+Shift+f');
   await narrow.waitForTimeout(300);
   assert.equal(await narrow.getByRole('heading', { name: 'Memory view' }).count(), 0);
 });
@@ -818,6 +945,12 @@ test('a file the chat names opens in your editor when it is in the window\'s fol
   control.close();
   const page = await open('files');
   const pi = page.getByRole('button', { name: 'src/server/pi.ts:74' });
+  // A file's name is the chat's text though it is a button: find finds it, and what runs from it into the words after it.
+  await page.getByRole('button', { name: 'the shutdown test' }).waitFor();
+  await page.keyboard.press('ControlOrMeta+f');
+  await page.keyboard.type('pi.test.ts covers it');
+  await page.getByRole('search', { name: 'Find in chat' }).getByText('1/1', { exact: true }).waitFor({ timeout: 3000 }).catch(() => assert.fail('A file\'s name in a reply was not found.'));
+  await page.keyboard.press('Escape');
   await pi.click();
   // A click on the code a link holds is one click on the link: the code is no button of its own, in a link to a file or not.
   await page.getByRole('button', { name: 'the shutdown test' }).locator('code').click();
@@ -884,11 +1017,17 @@ test('the desktop app\'s menu bar asks the page for what its keys run: each is d
     await once('Chat or Memory in the menu', async () => !await memory.isVisible());
     await page.getByRole('button', { name: 'New window' }).click();
     await page.getByRole('heading', { name: 'New connected window' }).waitFor();
-    await page.keyboard.press('ControlOrMeta+f');
+    await page.keyboard.press('ControlOrMeta+Shift+f');
     await memory.waitFor();
     assert.equal(await focused(page), 'Search the memory');
     await page.keyboard.press('Alt+m');
     await once('⌥M in the memory view', async () => !await memory.isVisible());
+    // Find in Chat is the chat's bar, by the menu and by the key alike, and once for the two.
+    await ask(page, 'find');
+    await once('Find in Chat in the menu', async () => await focused(page) === 'Find in chat');
+    await page.keyboard.press('ControlOrMeta+f');
+    await once('⌘F with the bar open', async () => await page.getByRole('search', { name: 'Find in chat' }).count() === 1 && await focused(page) === 'Find in chat');
+    await page.keyboard.press('Escape');
     await page.keyboard.press('Alt+2');
     await page.getByText('Connected window', { exact: true }).waitFor();
     await page.keyboard.press('Alt+m');
@@ -903,7 +1042,7 @@ test('the desktop app\'s menu bar asks the page for what its keys run: each is d
     await page.keyboard.press('ControlOrMeta+b');
     await once('⌘B', () => beside.isVisible());
 
-    // The panel as a sheet lies over the chat and has the keys: ⌘F does nothing there, and the menu closes it to search.
+    // The panel as a sheet lies over the chat and has the keys: ⇧⌘F does nothing there, and the menu closes it to search.
     const narrow = await open('bar', NARROW);
     await narrow.getByRole('button', { name: 'Agents and GitHub' }).click();
     await narrow.locator('dialog[open]').waitFor();

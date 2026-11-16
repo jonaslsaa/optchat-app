@@ -114,7 +114,7 @@ export const MemoryView = memo(function MemoryView({ tree, profile, window, puls
     const timer = setInterval(() => void app.readMemory(profile), EVERY);
     return () => clearInterval(timer);
   }, [profile, active]);
-  // It opens at the newest line, as the chat does, and with the keys on it, unless it was opened to search (⌘F, which is the
+  // It opens at the newest line, as the chat does, and with the keys on it, unless it was opened to search (⇧⌘F, which is the
   // page's: `box` is the search box) and they are there; after that it stays where you are.
   useLayoutEffect(() => {
     if (!view || shown.current || !scroller.current) return;
@@ -148,7 +148,7 @@ export const MemoryView = memo(function MemoryView({ tree, profile, window, puls
           <h2 className="shrink-0 font-medium text-sm">Memory view</h2>
           <label className="ms-auto flex h-7 w-64 min-w-0 items-center gap-1.5 rounded-[var(--control-radius)] border border-input bg-background px-2 text-muted-foreground shadow-xs/5 focus-within:text-foreground focus-within:ring-2 focus-within:ring-ring dark:bg-input/32">
             <SearchIcon className="size-3.5 shrink-0" />
-            <input ref={box} type="search" aria-label="Search the memory" title={`Search the messages (${label('mod+f')})`} placeholder="Search messages" value={search?.text ?? ''} spellCheck={false} autoCapitalize="off" autoCorrect="off"
+            <input ref={box} type="search" aria-label="Search the memory" title={`Search the messages (${label('mod+shift+f')})`} placeholder="Search messages" value={search?.text ?? ''} spellCheck={false} autoCapitalize="off" autoCorrect="off"
               onChange={event => void app.search(profile, event.target.value)}
               onKeyDown={event => { if (event.key === 'ArrowDown' && results) { event.preventDefault(); event.currentTarget.closest('section')?.querySelector<HTMLElement>('[data-line]')?.focus(); } }}
               className="min-w-0 flex-1 bg-transparent text-foreground text-sm outline-none placeholder:text-muted-foreground [&::-webkit-search-cancel-button]:hidden" />

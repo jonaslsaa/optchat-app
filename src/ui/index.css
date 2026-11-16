@@ -204,6 +204,12 @@
   ::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: 3px; }
 }
 
+/* What find marks in the chat (find.ts), and stronger the match it is at: T3 Code's colours for it. They are painted over the
+   text and are no part of the page. */
+::highlight(find) { color: oklch(0.216 0.028 77.4); background-color: oklch(0.915 0.11 85); }
+:is(.dark, .dark *)::highlight(find) { color: oklch(0.97 0 0); background-color: oklch(0.55 0.1 85); }
+::highlight(find-at) { color: oklch(0.216 0.028 77.4); background-color: oklch(0.774 0.152 74.3); }
+
 @utility surface-glass {
   background: color-mix(in srgb, var(--background) var(--glass-opacity), transparent);
   -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));

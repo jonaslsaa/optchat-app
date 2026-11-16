@@ -53,13 +53,16 @@ function Profile({ state, profile, onSettings, onUsage, onNewProfile, ref }: { s
   const before = useMemo(() => own ? spoken(current({ since }, session ?? [])) : logged(log?.entries ?? []), [own, since, session, log?.entries]);
   const items = useMemo(() => chat(before, { ...live, messages: run }), [before, run, live.streaming, live.sent]);
   const name = window && title(window, state), composer = useRef<ComponentRef<typeof Composer>>(null);
-  // ⌘F searches the memory from the chat too: the view is on the page before the keys go to its search box. Not from the panel,
-  // whose keys are its own: as a sheet it lies over the view, and the box under it cannot take them.
-  // The memory is the main chat's: asked for from a connected window, it is shown there.
+  // ⇧⌘F searches the memory, from the chat too: the view is on the page before the keys go to its search box, with `text` in it
+  // when the chat's find hands on what it looked for. Not from the panel, whose keys are its own: as a sheet it lies over the
+  // view, and the box under it cannot take them. The memory is the main chat's: asked for from a connected window, it is shown there.
   const main = () => { if (own) app.select(mainOf(profile)); };
-  const box = useRef<HTMLInputElement>(null), search = () => { setOver(false); flushSync(() => { main(); setMemory(true); }); box.current?.focus(); box.current?.select(); };
+  const box = useRef<HTMLInputElement>(null), timeline = useRef<ComponentRef<typeof Timeline>>(null);
+  const search = (text?: string) => { setOver(false); flushSync(() => { main(); setMemory(true); }); if (text) void app.search(profile, text); box.current?.focus(); box.current?.select(); };
+  // ⌘F finds in what is shown: in the chat (`Find`), and in the memory view with its search. A chat with nothing said has nothing to find in.
+  const find = () => { if (memory) return search(); setOver(false); timeline.current?.find(); };
   const newWindow = () => { setOver(false); void app.newWindow(profile); }, remember = () => { main(); setMemory(shown => own || !shown); };
-  useShortcuts(() => ({ 'mod+f': search }), [profile, own], 'chat', 'memory');
+  useShortcuts(() => ({ 'mod+f': find, 'mod+shift+f': () => search() }), [profile, own, memory], 'chat', 'memory');
   useShortcuts(() => ({
     'mod+shift+o': newWindow,
     'mod+b': toggle,
@@ -68,7 +71,7 @@ function Profile({ state, profile, onSettings, onUsage, onNewProfile, ref }: { s
   }), [profile, ids, own, wide]);
   // The menu bar runs the same, from wherever the focus is. The panel as a sheet lies over all of it, and is closed first.
   const sheet = !useMedia(BESIDE), under = (run: () => void) => () => { if (sheet) setPanel(undefined); run(); };
-  useImperativeHandle(ref, () => ({ newWindow: under(newWindow), sidebar: under(toggle), memory: under(remember), search: under(search) }));
+  useImperativeHandle(ref, () => ({ newWindow: under(newWindow), sidebar: under(toggle), memory: under(remember), find: under(find), search: under(search) }));
   // What of the main chat says its agents changed: its Pi started or stopped, an agent was started or ended, a report came.
   const pulse = [window?.status, live.status.optchat, live.messages.length, log?.total].join(' ');
   // What says a turn of it began or ended, for what reads the whole log: that is too much to do at every message.
@@ -118,7 +121,7 @@ function Profile({ state, profile, onSettings, onUsage, onNewProfile, ref }: { s
                 {!own ? 'One chat that remembers everything.' : window.completed ? 'The main chat has this conversation. Your next message starts a new one.' : 'Its own conversation, with this profile\'s memory. Complete hands it to the main chat.'}
               </p>
             </div>
-          ) : <Timeline items={items} live={live} running={window.status === 'running'} starting={window.status === 'starting'} profile={profile} loading={log?.loading} older={more ? () => void app.older(profile) : undefined} onAgent={own ? undefined : openAgent} onQuote={window.outside ? undefined : said => composer.current?.quote(said)} />}
+          ) : <Timeline ref={timeline} items={items} live={live} running={window.status === 'running'} starting={window.status === 'starting'} profile={profile} loading={log?.loading} older={more ? () => void app.older(profile) : undefined} onAgent={own ? undefined : openAgent} onQuote={window.outside ? undefined : said => composer.current?.quote(said)} onMemory={search} />}
           {window.outside ? <Outside window={window} outside={window.outside} models={state.models[window.id]} /> : <Composer ref={composer} state={state} window={window} live={live} chat={items} onSend={toChat} />}
           {fresh && !memory && <div className="flex-[1.6]" />}
         </Fragment>

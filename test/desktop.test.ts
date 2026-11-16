@@ -226,7 +226,7 @@ test('the menu bar names the app, asks the page for what the page does, and leav
   // Electron's own entries would name the app by its package: every one that names it is written out.
   assert.deepEqual(shown('OptChat'), ['About OptChat', 'Check for Updates…', '-', 'Settings… [Cmd+,]', '-', 'services', '-', 'Hide OptChat', 'hideOthers', 'unhide', '-', 'Quit OptChat']);
   assert.deepEqual(shown('File'), ['New Connected Window [Shift+Cmd+O]', 'New Profile…', '-', 'close']);
-  assert.deepEqual(shown('View').slice(0, 5), ['Search Memory [Cmd+F]', 'Chat or Memory', 'Usage', 'Show or Hide Sidebar [Cmd+B]', '-']);
+  assert.deepEqual(shown('View').slice(0, 6), ['Find in Chat [Cmd+F]', 'Search Memory [Shift+Cmd+F]', 'Chat or Memory', 'Usage', 'Show or Hide Sidebar [Cmd+B]', '-']);
   assert.deepEqual(shown('help'), ['Report a Problem', 'OptChat on GitHub']);
   // A key without ⌘ would go to the menu before the page, and be taken from it: no entry has one.
   assert.deepEqual(menu.flatMap(under).flatMap(item => item.accelerator && !item.accelerator.includes('Cmd') ? [item.label] : []), []);
@@ -236,9 +236,9 @@ test('the menu bar names the app, asks the page for what the page does, and leav
   const items = menu.flatMap(under), entry = (label: string) => items.find(item => item.label === label);
   const click = (label: string, triggeredByAccelerator = false) => entry(label)?.click?.(undefined as never, undefined, { triggeredByAccelerator });
   // A click asks the page, wherever the focus is.
-  for (const label of ['Settings…', 'New Connected Window', 'New Profile…', 'Search Memory', 'Chat or Memory', 'Usage', 'Show or Hide Sidebar']) click(label);
-  assert.deepEqual(did.splice(0), ['settings', 'newWindow', 'newProfile', 'search', 'memory', 'usage', 'sidebar']);
-  // A key the page had first and left, as it leaves ⌘F in the panel beside the chat, is not run behind its back, and a key it
+  for (const label of ['Settings…', 'New Connected Window', 'New Profile…', 'Find in Chat', 'Search Memory', 'Chat or Memory', 'Usage', 'Show or Hide Sidebar']) click(label);
+  assert.deepEqual(did.splice(0), ['settings', 'newWindow', 'newProfile', 'find', 'search', 'memory', 'usage', 'sidebar']);
+  // A key the page had first and left, as it leaves ⇧⌘F in the panel beside the chat, is not run behind its back, and a key it
   // took never gets here: nothing runs twice. With no window, or the focus outside the page, the menu is all that hears it.
   click('Settings…', true); click('Search Memory', true);
   assert.deepEqual(did, []);

@@ -474,6 +474,15 @@ async function pictures(browser: Browser, control: Client) {
   await quoting.getByText('The snapshot is the fallback, not the default').click({ clickCount: 3 });
   await quoting.getByRole('button', { name: 'Quote' }).waitFor();
   await shot(quoting, '72-quote-selection');
+  // Find in the chat: what is typed is marked wherever the chat shows it, with the match it is at marked stronger, and under the
+  // box the way on to the memory, which is all there is to press for a text the chat does not have.
+  for (const [name, options, text] of [['146-find-in-chat', {}, 'snapshot'], ['147-find-in-chat-dark', { dark: true }, 'snapshot'], ['148-find-in-chat-narrow', { width: 420 }, 'snapshot'], ['149-find-nothing', {}, 'heartbeat']] as const) {
+    const page = await open(['team'], options);
+    await page.keyboard.press('ControlOrMeta+f');
+    await page.keyboard.type(text);
+    await page.getByRole('search', { name: 'Find in chat' }).locator('[aria-live]').waitFor();
+    await shot(page, name);
+  }
   // Formulas in a reply, a price beside them as written, and a table with its copy buttons.
   for (const [name, options] of [['91-formulas-and-table', {}], ['92-formulas-and-table-dark', { dark: true }], ['93-formulas-and-table-narrow', { width: 420 }]] as const) {
     const page = await open(['formulas'], options);

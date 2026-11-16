@@ -146,8 +146,8 @@ const held = () => new Promise<{ aborted: boolean; answer?: string }>(resolve =>
 
 /** Streams a reply block by block, in the records real Pi writes in RPC mode (test/pi-turn.jsonl is a capture): a start, deltas
  * and the whole block at its end, each naming the block by `contentIndex` and none carrying the reply so far. `pause` holds it
- * before each block `at` is finished. */
-async function reply(content: Content[], stopReason: string, pause?: { at: number[] }) {
+ * before each block `at` is finished, and `again` once all of that block has come, before it ends. */
+async function reply(content: Content[], stopReason: string, pause?: { at: number[]; again?: boolean }) {
   const message: Said = { role: 'assistant', content: [], timestamp: now(), stopReason: 'pending' };
   write({ type: 'message_start', message });
   const update = (assistantMessageEvent: object) => write({ type: 'message_update', assistantMessageEvent });
@@ -161,6 +161,10 @@ async function reply(content: Content[], stopReason: string, pause?: { at: numbe
       return true;
     }
     update({ type: `${kind}_delta`, contentIndex, delta: text.slice(half) });
+    if (pause?.again && pause.at.includes(contentIndex) && (await held()).aborted) {
+      ended({ ...message, content: content.slice(0, contentIndex), stopReason: 'aborted' });
+      return true;
+    }
     update(block.type === 'toolCall' ? { type: 'toolcall_end', contentIndex, toolCall: block } : { type: `${kind}_end`, contentIndex, content: text });
   }
   ended({ ...message, content, stopReason });
@@ -191,9 +195,9 @@ async function run(text: string, images?: Image[]) {
     await reply(content, 'toolUse');
     content.filter(block => block.type === 'toolCall').forEach((call, at) => tool(call, results[at]));
   }
-  // Asked to think, it thinks first, as a model does that Pi lets think, and a "wait" then holds it in the middle of its thought, and once it is released, in the middle of its answer.
+  // Asked to think, it thinks first, as a model does that Pi lets think, and a "wait" then holds it in the middle of its thought, and once it is released, in the middle of its answer ("slowly": and again with all of it out).
   const thought: Content[] = text.includes('think') ? [{ type: 'thinking', thinking: THOUGHT }] : [];
-  if (!aborted) aborted = await reply([...thought, { type: 'text', text: scripted?.answer ?? answer }], 'stop', text.includes('wait') ? { at: thought.length ? [0, 1] : [0] } : undefined);
+  if (!aborted) aborted = await reply([...thought, { type: 'text', text: scripted?.answer ?? answer }], 'stop', text.includes('wait') ? { at: thought.length ? [0, 1] : [0], again: text.includes('slowly') } : undefined);
   write({ type: 'agent_end', messages: [] });
   const next = aborted ? undefined : steering.shift() ?? followUp.shift();
   if (next !== undefined) { write({ type: 'queue_update', steering, followUp }); return run(next); }

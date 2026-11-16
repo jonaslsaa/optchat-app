@@ -976,6 +976,14 @@ test('the update button says what the updater is doing in each of its states, a 
     await narrow.getByRole('button', { name: 'Toggle the sidebar' }).click();
     await narrow.getByRole('navigation', { name: 'Windows' }).getByRole('button', { name: 'OptChat 1.1.0 is ready. Restart to install it' }).waitFor();
     assert.equal(await narrow.locator('[data-update]').count(), 1);
+    // The narrow page's top row is full: a download is not shown there, only in the sidebar. A look that failed is.
+    await narrow.keyboard.press('Escape');
+    own.updating({ state: 'downloading', version: '1.1.0', percent: 40 });
+    await narrow.locator('header [data-update="downloading"]').waitFor({ state: 'attached' });
+    assert.equal(await narrow.locator('header [data-update]').isVisible(), false);
+    own.updating({ state: 'failed', error: 'GitHub answered 403.' });
+    await narrow.locator('header [data-update="failed"]').waitFor();
+    own.updating({ state: 'ready', version: '1.1.0' });
     await narrow.context().close();
 
     // The icon turns while the app looks, finishes its turn once the look is over, and stands still for whoever asked for less motion.

@@ -119,8 +119,13 @@ export interface UpdaterOptions {
   /** What it is doing changed (`state`): for whatever shows it. */
   changed?: (state: Updating) => void;
 }
-/** Why something failed, in its own words: what `fetch` says of no network is in the error's cause. */
-const words = (error: unknown) => error instanceof Error ? error.cause instanceof Error && error.message === 'fetch failed' ? error.cause.message : error.message : String(error);
+/** Why something failed, in its own words. What `fetch` says of no network is in the error's cause, and where it tried more
+ * than one address, in the first of the cause's errors; "fetch failed" is said only where neither says more. */
+const words = (error: unknown): string => {
+  if (!(error instanceof Error)) return String(error);
+  const { message, cause } = error;
+  return message === 'fetch failed' && cause !== undefined && words(cause instanceof AggregateError ? cause.errors[0] : cause) || message;
+};
 /** Looks for updates and installs them. `look` asks for the latest release and, if it is newer, makes it ready and says so
  * once (`ready`), or says that you have to get it yourself (`manual`): where the app cannot be replaced, or the same version
  * could not be installed before. A look you `asked` for says again what was said before, and every look answers what it

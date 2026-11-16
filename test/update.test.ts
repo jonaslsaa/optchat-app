@@ -234,5 +234,10 @@ test('what the updater is doing is said as it changes: looking, each part of the
     await assert.rejects(same.look());
     const failed = same.state();
     assert.ok(failed.state === 'failed' && /ECONNREFUSED/.test(failed.error), JSON.stringify(failed));
+    // A name with two addresses, and nobody at either: the reason is the first one's, and is never empty.
+    const twice = updater({ bundle: app, version: '0.2.0', feed: github.latest.replace('127.0.0.1', 'localhost'), failed: join(home, 'none'), ready: () => {}, manual: () => {} });
+    await assert.rejects(twice.look());
+    const both = twice.state();
+    assert.ok(both.state === 'failed' && /ECONNREFUSED/.test(both.error), JSON.stringify(both));
   } finally { await github.close(); }
 });

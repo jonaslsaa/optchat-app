@@ -87,17 +87,26 @@ test('a dialog goes when its time is up, when its answer has arrived, and with i
   assert.deepEqual([app.state.windows, app.state.live], [[], {}]);
 });
 
-test('what is typed and not sent is there when the page is opened again, until it is sent or its window is closed', t => {
+test('what is typed and not sent is there when the page is opened again, until it is sent or its window is closed', async t => {
   const { app, saved } = page(t);
   app.keep('work/main', 'half a thought');
   app.keep('work/1', 'for the other window');
   // The page opened again: another store over what the browser kept.
-  const again = page(t, undefined, undefined, saved).app;
+  const { app: again, until } = page(t, undefined, undefined, saved);
   assert.deepEqual([again.draft('work/main'), again.draft('work/1'), again.draft('work/2')], ['half a thought', 'for the other window', '']);
   // Sent, the box is empty, and nothing of it is kept.
   again.keep('work/main', '');
   again.receive({ push: 'window', window: { id: 'work/1', profile: 'work', role: 'connected', cwd: '/tmp', status: 'closed', seq: 0 } });
   assert.deepEqual([...saved.keys()].filter(key => key.includes('draft')), []);
+  // A server that started again numbers its windows from one, so a new window can have the number of one that is gone,
+  // whose draft was never sent. It starts with nothing typed in it.
+  again.keep('work/1', 'typed before the server started again');
+  const server = await startServer({ home: directory, cwd: directory, pi });
+  t.after(() => server.close());
+  await again.start(server.url);
+  await until(state => state.windows.length > 0);
+  await again.newWindow('work');
+  assert.deepEqual([again.state.selected.work, again.draft('work/1')], ['work/1', '']);
 });
 
 test('records the page missed are read again from the server, so it shows what a page that saw them all shows', async t => {

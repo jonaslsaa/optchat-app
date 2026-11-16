@@ -297,6 +297,9 @@ export class App {
   async newWindow(profile: string) {
     const opened = await this.ask('open', { profile, role: 'connected' });
     if (!opened) return;
+    // A server that started again numbers its windows from one: what was typed in the window that had this number is not
+    // this window's.
+    this.keep(opened.window.id, '');
     this.put(opened.window);
     this.set({ selected: { ...this.state.selected, [profile]: opened.window.id } });
   }

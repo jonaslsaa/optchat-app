@@ -85,7 +85,7 @@ export function Composer({ state, window, live, onSend }: { state: State; window
   const area = useRef<HTMLTextAreaElement>(null);
   const running = window.status === 'running', queued = [...live.queued.steering, ...live.queued.followUp];
   // What is typed is kept as it is typed (`app.draft`): while you look at another window, and when the page is opened again.
-  const change = (value: string) => { app.keep(window.id, value); setText(value); };
+  const change = (value: string) => { setText(value); app.keep(window.id, value); };
   useEffect(() => area.current?.focus(), [window.id]);
 
   const send = async (later: boolean) => {

@@ -260,6 +260,9 @@ test('↑ in the composer goes back through what you said and ↓ forward again,
   assert.deepEqual(['', 'deploy it', 'and the docs?'].map(box => recalled(said, box, true)), ['deploy it', 'and the docs?', undefined]);
   assert.deepEqual(['and the docs?', 'deploy it', ''].map(box => recalled(said, box, false)), ['deploy it', '', undefined]);
   assert.deepEqual([recalled(said, 'deploy it to stage', true), recalled(said, 'deploy it ', false)], [undefined, undefined]);
+  // Only what you said: not a report, and of a message with a picture its words, as the log names the picture too.
+  const mixed = logged([entry(0, 'user', 1, 'see this [image 0123456789abcdef]'), entry(1, 'work', 2, '[a1b2c3d4 · Tests] All pass. [image]'), entry(2, 'user', 3, '[image 0123456789abcdef]')]);
+  assert.deepEqual([recalled(mixed, '', true), recalled(mixed, 'see this', true)], ['see this', undefined]);
 });
 
 test('a message says what pi-optchat would log, with an image named as one and a tool call by its id', () => {

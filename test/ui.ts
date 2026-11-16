@@ -145,6 +145,9 @@ test('a message pi-optchat does not take is back in the box with what it said ab
   await page.keyboard.press('Escape');
   await said.waitFor({ state: 'detached', timeout: 5000 });
   assert.equal(await box.inputValue(), 'Summarise the release notes');
+  // It was never said in the chat, so ↑ does not take it for one of the messages it goes through.
+  await page.keyboard.press('ArrowUp');
+  assert.equal(await box.inputValue(), 'Summarise the release notes');
   // Sent again it is said again, once; its button takes it away and leaves the focus where you type.
   await page.keyboard.press('Enter');
   await said.waitFor();
@@ -364,6 +367,13 @@ test('↑ in an empty composer brings back what you said, and ⌘F in the chat s
   assert.equal(await focused(page), 'Search the memory');
   await page.keyboard.type('message 1');
   await page.getByRole('region', { name: 'Messages found' }).waitFor();
+  // Nor from the panel as a sheet over a narrow page: the chat under it stays the chat.
+  const narrow = await open('keys', NARROW);
+  await narrow.getByRole('button', { name: 'Agents and GitHub' }).click();
+  await narrow.locator('dialog[open]').waitFor();
+  await narrow.keyboard.press('ControlOrMeta+f');
+  await narrow.waitForTimeout(300);
+  assert.equal(await narrow.getByRole('heading', { name: 'Memory view' }).count(), 0);
 });
 
 test('a field keeps the focus when Enter saves it, and when what was typed is refused', async () => {

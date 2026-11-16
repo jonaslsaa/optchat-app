@@ -1,5 +1,7 @@
 # OptChat app
 
+This codebase is yours: what it's for and how it's built are your call, and you'll keep building on it.
+
 The app for pi-optchat. `README.md` has the design, `docs/server.md` the server and its protocol, `docs/ui.md` the UI.
 
 - **Layout:** `src/protocol.ts` is the one schema between server and UI (typebox; types are inferred from it, and it imports nothing from Node). `src/client.ts` is the typed client. `src/server/` is the Node server. `src/desktop/` is the Electron shell around the two (`docs/desktop.md`): it starts the server and opens a window on the page, and nothing else. `src/ui/` is the page (React, Vite, Tailwind), which the server serves once built; it has its own `tsconfig.json`, and its logic lives in `transcript.ts` (no DOM, tested) and `store.ts`, not in components.

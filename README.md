@@ -83,8 +83,6 @@ gh release download --repo jonaslsaa/optchat-app --pattern '*.dmg' --dir ~/Downl
 
 The first run sets up the rest: Pi, pi-optchat and your model login. It needs Node.js 22.19 or newer. After that OptChat keeps itself up to date: a new version downloads in the background, and it asks before it restarts.
 
-A company Mac with endpoint security may flag an app that is not signed this way ([more](docs/desktop.md#the-first-open)).
-
 ## Under the hood
 
 Built on [Pi](https://pi.dev) and [pi-optchat](https://github.com/jonaslsaa/pi-optchat), which implements [Victor Taelin's OptChat recipe](https://gist.github.com/VictorTaelin/91837951a5ce5b38f341ec1ba1df6449). Parts of the UI come from [T3 Code](https://github.com/pingdotgg/t3code).

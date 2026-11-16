@@ -76,7 +76,7 @@ function Compactor({ profile, kept, standard, models }: { profile: string; kept:
   };
   return (
     <Row label="Compactor model" description={`Writes summaries, imports and fallback handoffs. Default: ${named(standard)} · ${standard.thinking}.`} applies="Applies to the next summary." outcome={outcome}>
-      <Typed key={fresh} label="Compactor model" kept={named(kept)} field={field} list={list} placeholder="provider/model" className="w-56 font-mono text-xs" onSame={() => setOutcome(undefined)} onKeep={text => ask(text, kept.thinking)} />
+      <Typed key={fresh} label="Compactor model" kept={named(kept)} field={field} list={list} placeholder="provider/model" className="w-60 font-mono text-xs" onSame={() => setOutcome(undefined)} onKeep={text => ask(text, kept.thinking)} />
       <datalist id={list}>{models.map(({ provider, id }) => named({ provider, model: id })).map(name => <option key={name} value={name} />)}</datalist>
       <select aria-label="Compactor thinking" value={kept.thinking} className={cn(FIELD, 'px-1.5')}
         onChange={event => {

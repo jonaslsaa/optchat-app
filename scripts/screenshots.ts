@@ -5,7 +5,7 @@ import { build } from 'vite';
 import { connect, type Client } from '../src/client.ts';
 import { startServer } from '../src/server/server.ts';
 // pi-optchat's own lock, which only Pi takes: here it stands for a Pi in a terminal.
-import { describeOwner, lockProfile } from 'pi-optchat/files';
+import { defaults, describeOwner, lockProfile } from 'pi-optchat/files';
 import { createProfile, give, png } from '../test/support.ts';
 import { agents, CHANGES, demo, FILES, FORMULAS, limited, NAMED, remember, seed, SHIPPED, SHIPPING, spend, TEAM } from './seed.ts';
 
@@ -27,6 +27,8 @@ process.on('exit', () => rmSync(home, { recursive: true, force: true }));
 for (const signal of ['SIGINT', 'SIGTERM'] as const) process.once(signal, () => process.exit(1));
 createProfile(home, 'empty');
 const team = createProfile(home, 'team');
+// Its compactor is pi-optchat's default, as a new profile's is: its settings show no test model.
+writeFileSync(join(team, 'config.json'), JSON.stringify({ ...JSON.parse(readFileSync(join(team, 'config.json'), 'utf8')), compactor: defaults.compactor }));
 seed(team, TEAM.length, NOW, TEAM);
 seed(createProfile(home, 'changes'), CHANGES.length, NOW, CHANGES);
 agents(team, NOW + 42_000);
@@ -38,9 +40,7 @@ keeps(terminal, { provider: 'anthropic', model: 'claude-fable-5', thinking: 'xhi
 const picks = createProfile(home, 'picks');
 seed(picks, 4, NOW);
 keeps(picks, { provider: 'anthropic', model: 'claude-opus-5-5', thinking: 'high' }, { provider: 'openai', model: 'gpt-6-sol', thinking: 'medium' });
-const work = createProfile(home, 'work');
-writeFileSync(join(work, 'config.json'), '{}'); // pi-optchat's defaults, as a new profile has them: its settings show no test model.
-seed(work, 95, NOW); // Ends with the turn that ran the tests.
+seed(createProfile(home, 'work'), 95, NOW); // Ends with the turn that ran the tests.
 seed(createProfile(home, 'notes'), 2, NOW);
 seed(createProfile(home, 'importing'), 2, NOW); // Its import was paused: pi-optchat takes no message for it.
 // A chat of ten days with its summaries, for the memory view.
@@ -355,10 +355,10 @@ async function pictures(browser: Browser, control: Client) {
   await profile.getByRole('alert').waitFor();
   await shot(profile, '41-settings-profile');
   // One as pi-optchat made it, untouched: its compactor is the default it names.
-  for (const [page, name] of [[await open(['work'], { dark: true, height: 1500 }), '42-settings-profile-dark'], [await open(['work'], { width: 420, height: 800 }), '43-settings-profile-narrow']] as const) {
+  for (const [page, name] of [[await open(['team'], { dark: true, height: 1500 }), '42-settings-profile-dark'], [await open(['team'], { width: 420, height: 800 }), '43-settings-profile-narrow']] as const) {
     await page.getByRole('button', { name: 'Settings' }).click();
     await page.getByRole('tab', { name: 'Profile' }).click();
-    await page.locator('datalist option').first().waitFor({ state: 'attached' });
+    await page.locator('input[aria-label="Compactor model"][value="anthropic/claude-sonnet-5-5"]').waitFor();
     await shot(page, name);
   }
 

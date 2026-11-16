@@ -87,8 +87,9 @@ A company Mac with endpoint security may flag an app that is not signed this way
 
 ## Under the hood
 
-Built on [Pi](https://pi.dev) and [pi-optchat](https://github.com/jonaslsaa/pi-optchat), which implements [Victor Taelin's OptChat recipe](https://gist.github.com/VictorTaelin/91837951a5ce5b38f341ec1ba1df6449). Parts of the UI come from [T3 Code](https://github.com/pingdotgg/t3code) (MIT, see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)).
+Built on [Pi](https://pi.dev) and [pi-optchat](https://github.com/jonaslsaa/pi-optchat), which implements [Victor Taelin's OptChat recipe](https://gist.github.com/VictorTaelin/91837951a5ce5b38f341ec1ba1df6449). Parts of the UI come from [T3 Code](https://github.com/pingdotgg/t3code).
 
 For the internals, start at [docs/design.md](docs/design.md). To run it from a checkout: `npm install && npm run desktop`.
 
-[MIT](LICENSE)
+
+[MIT](LICENSE) & [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)

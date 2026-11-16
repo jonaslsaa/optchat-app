@@ -47,7 +47,7 @@ function Profile({ state, profile, onSettings, onUsage }: { state: State; profil
   const own = window?.role === 'connected', memory = remembering && !own;
   const since = window?.since, run = useMemo(() => current({ since }, live.messages), [since, live.messages]);
   const before = useMemo(() => own ? spoken(current({ since }, session ?? [])) : logged(log?.entries ?? []), [own, since, session, log?.entries]);
-  const items = useMemo(() => chat(before, { ...live, messages: run }), [before, run, live.streaming]);
+  const items = useMemo(() => chat(before, { ...live, messages: run }), [before, run, live.streaming, live.sent]);
   const name = window && title(window, state), composer = useRef<ComponentRef<typeof Composer>>(null);
   // ⌘F searches the memory from the chat too: the view is on the page before the keys go to its search box. Not from the panel,
   // whose keys are its own: as a sheet it lies over the view, and the box under it cannot take them.
@@ -105,7 +105,7 @@ function Profile({ state, profile, onSettings, onUsage }: { state: State; profil
                 {!own ? 'One chat that remembers everything.' : window.completed ? 'The main chat has this conversation. Your next message starts a new one.' : 'Its own conversation, with this profile\'s memory. Complete hands it to the main chat.'}
               </p>
             </div>
-          ) : <Timeline items={items} live={live} running={window.status === 'running'} profile={profile} loading={log?.loading} older={more ? () => void app.older(profile) : undefined} onAgent={own ? undefined : openAgent} onQuote={window.outside ? undefined : said => composer.current?.quote(said)} />}
+          ) : <Timeline items={items} live={live} running={window.status === 'running'} starting={window.status === 'starting'} profile={profile} loading={log?.loading} older={more ? () => void app.older(profile) : undefined} onAgent={own ? undefined : openAgent} onQuote={window.outside ? undefined : said => composer.current?.quote(said)} />}
           {window.outside ? <Outside window={window} outside={window.outside} models={state.models[window.id]} /> : <Composer ref={composer} state={state} window={window} live={live} chat={items} onSend={toChat} />}
           {fresh && !memory && <div className="flex-[1.6]" />}
         </Fragment>

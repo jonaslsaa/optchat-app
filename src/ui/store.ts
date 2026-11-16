@@ -277,12 +277,14 @@ export class App {
     if (push.push === 'settings') { this.set({ settings: push.settings }); return; }
     if (push.push === 'setup') { this.set({ setup: push.setup }); return; }
     if (push.push === 'window') {
-      const { window } = push, outside = this.window(window.id)?.outside;
+      const { window } = push, was = this.window(window.id), outside = was?.outside, live = this.state.live[window.id];
       this.put(window);
       // A Pi outside the app had the chat and let it go: what it wrote meanwhile is in the log.
       if (outside && !window.outside) void this.read(window.profile);
       // A Pi that died in a run never says the run is over; what it had logged by then is in the log.
-      if (window.status === 'stopped' && this.state.live[window.id]?.running) { this.live(window.id, stopped); void this.read(window.profile); }
+      // Nor does it take the message you sent it a moment before it died. A window that was stopped already is only said
+      // again (its model was looked at before its Pi starts): the message is still on its way.
+      if (window.status === 'stopped' && (live?.running || live?.sent && was?.status !== 'stopped')) { this.live(window.id, stopped); void this.read(window.profile); }
       return;
     }
     const { window, seq, record } = push, last = this.state.live[window]?.seq ?? 0;
@@ -438,7 +440,14 @@ export class App {
   /** Sends your message, with its images. In a run it steers the agent, or with `later` waits until the agent has stopped. */
   async send(window: string, text: string, later = false, images: Image[] = []) {
     this.quiet(window);
+    // It is in the chat at once, as Pi will have it (`Live.sent`). Not a command, which is no message, and not in a run, where
+    // it waits under the chat until the agent reads it (`queued`).
+    const shown = !text.startsWith('/') && this.window(window)?.status !== 'running';
+    if (shown) this.live(window, live => ({ ...live, sent: { role: 'user', timestamp: Date.now(), content: [{ type: 'text', text }, ...images.map(({ data, mimeType }) => ({ type: 'image', data, mimeType }))] } }));
     const answer = await this.ask('prompt', { window, text, images, whenBusy: later ? 'followUp' : 'steer' });
+    // Taken back unless it began a run, whose first record is Pi's copy of it: it was refused, it failed, or a run that began
+    // meanwhile has it waiting.
+    if (shown && answer?.disposition !== 'started') this.live(window, live => ({ ...live, sent: undefined }));
     // A message an extension answered itself (`handled`) was not sent, unless it is a command: pi-optchat refused it, and its
     // notice says why. So it is not lost, it counts as not sent.
     return answer !== undefined && (answer.disposition !== 'handled' || text.startsWith('/'));

@@ -43,6 +43,7 @@ keeps(picks, { provider: 'anthropic', model: 'claude-opus-5-5', thinking: 'high'
 seed(createProfile(home, 'work'), 95, NOW); // Ends with the turn that ran the tests.
 seed(createProfile(home, 'notes'), 2, NOW);
 seed(createProfile(home, 'importing'), 2, NOW); // Its import was paused: pi-optchat takes no message for it.
+seed(createProfile(home, 'slow'), 2, NOW); // Its Pi does not start in these pictures.
 // A chat of ten days with its summaries, for the memory view.
 const long = createProfile(home, 'long');
 seed(long, 95, NOW, undefined, 40 * 60_000);
@@ -447,6 +448,11 @@ async function pictures(browser: Browser, control: Client) {
   await say(refused, 'Summarise the release notes');
   await refused.getByRole('status').filter({ hasText: 'import in progress' }).waitFor();
   await shot(refused, '66-message-not-taken');
+  // A message is in the chat the moment it is sent, with the agent at work under it, while its Pi still starts.
+  const starting = await open(['slow']);
+  await say(starting, 'Summarise the release notes');
+  await starting.getByText(/^Starting Pi for/).waitFor();
+  await shot(starting, '101-sent-while-pi-starts');
   // The commands Pi knows, in the list a `/` opens over the composer, and as a name is typed.
   const slash = await open(['notes']), slim2 = await open(['notes'], { width: 420, height: 800, dark: true });
   for (const page of [slash, slim2]) {

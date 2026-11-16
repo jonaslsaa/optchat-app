@@ -146,10 +146,15 @@ function writing({ timestamp, blocks }: NonNullable<Live['streaming']>): Line[] 
 function partial(json: string): unknown {
   try { return JSON.parse(json); } catch { return json ? { '…': json } : {}; }
 }
-/** What the reply being written is thinking now: its last block, if that is thought. */
-export function thinking({ streaming }: Live) {
-  const last = streaming?.blocks.at(-1);
-  return last?.type === 'thinking' ? last.thinking : undefined;
+/** What the reply being written has thought so far, the thought of each of its messages one after the other, and whether it is
+ * thinking now (its last block is thought). pi-optchat does not log thought, so a reply has it only while it is being written. */
+export interface Thinking { text: string; now: boolean }
+export function thinking({ messages, streaming }: Live): Thinking {
+  // The reply is what came after your last message: one that steered the run begins another.
+  const reply = messages.slice(messages.findLastIndex(message => message.role === 'user') + 1);
+  const blocks: unknown[] = [...reply.flatMap(message => message.role === 'assistant' && Array.isArray(message.content) ? message.content : []), ...streaming?.blocks ?? []];
+  const text = blocks.flatMap(block => isObject(block) && block.type === 'thinking' && typeof block.thinking === 'string' && block.thinking.trim() ? [block.thinking.trim()] : []).join('\n\n');
+  return { text, now: streaming?.blocks.at(-1)?.type === 'thinking' };
 }
 
 /** How long a reply that streams is let take to show what has come, in ms. */

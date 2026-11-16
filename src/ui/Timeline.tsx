@@ -1,6 +1,6 @@
 import { ChevronDownIcon, QuoteIcon } from 'lucide-react';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { HandoffRow, NoteRow, ReplyRow, ReportRow, UserRow, Waiting, type Working } from './Rows.tsx';
+import { Doing, HandoffRow, NoteRow, ReplyRow, ReportRow, UserRow, type Working } from './Rows.tsx';
 import { parts, thinking, type Item, type Live, type Part } from './transcript.ts';
 import { escapes } from './keys.ts';
 import { Button, cn } from './ui.tsx';
@@ -88,9 +88,10 @@ export function Timeline({ items, live, running, starting = false, profile, olde
             : part.type === 'note' ? <NoteRow key={part.key} part={part} />
             : part.type === 'handoff' ? <HandoffRow key={part.key} part={part} writing={running && part === last} />
             : <ReplyRow key={part.key} part={part} working={running && part === last ? working : undefined} latest={part === latest} />)}
-          {/* Your message is in the chat before Pi has it (`live.sent`), and the agent is at work on it from then: its Pi may
-              still be starting. */}
-          {(running || live.sent) && last && last.type !== 'reply' && last.type !== 'handoff' && <Waiting from={last.items[0].date} activity={live.activity ?? (starting ? 'Starting Pi' : undefined)} />}
+          {/* What the agent is doing: under your message until it says something, and then under its reply, as one line. Your
+              message is in the chat before Pi has it (`live.sent`), and the agent is at work on it from then: its Pi may still be
+              starting. */}
+          {(running || live.sent) && last && last.type !== 'handoff' && <div className="pb-4"><Doing from={last.type === 'reply' ? last.from : last.items[0].date} activity={live.activity ?? (starting ? 'Starting Pi' : undefined)} thinking={working.thinking} /></div>}
           {quote && onQuote && (
             // The press does not take the selection away, and the click that follows it quotes it. Esc on the button takes
             // both away, and is then not the chat's key.

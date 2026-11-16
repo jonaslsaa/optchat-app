@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import type { Message, PiRecord } from '../src/protocol.ts';
-import { act, apply, chat, closed, failure, idle, logged, merged, news, paced, parts, quiet, quoted, recalled, replay, spoken, stopped, took, without, worked, LAG, type Item, type PiMessage, type Tool } from '../src/ui/transcript.ts';
+import { act, apply, chat, closed, failure, idle, logged, merged, news, paced, parts, quiet, quoted, recalled, replay, spoken, stopped, thinking, took, without, worked, LAG, type Item, type PiMessage, type Tool } from '../src/ui/transcript.ts';
 
 const T = Date.UTC(2026, 0, 1), at = (seconds: number) => new Date(T + seconds * 1000).toISOString();
 const user = (seconds: number, text: string): PiMessage => ({ role: 'user', timestamp: T + seconds * 1000, content: [{ type: 'text', text }] });
@@ -216,6 +216,24 @@ test('a real edit and write are their diff, live and from the log alike, and a f
   // While it runs, and before its arguments are whole, an edit is what it was given so far.
   assert.deepEqual(act(edit(), true), { verb: 'Editing', subject: 'a.ts', detail: [{ change: 'removed', text: '− a' }, { change: 'removed', text: '− b' }, { change: 'added', text: '+ a' }, { change: 'added', text: '+ c' }] });
   assert.deepEqual(act({ ...edit(), args: { path: 'a.ts', edits: [{ oldText: 'a' }] } }, true).detail, [{ change: 'removed', text: '− a' }]);
+});
+
+test('what the reply being written has thought is all of its thought so far, across its messages, and not only while it thinks', () => {
+  // Pi's records for thought, as Haiku 5.5 sends them through Pi 1.5.2: a thinking block streams like text, before the tool call.
+  const first = [{ type: 'agent_start' }, ended(user(0, 'what is 17*23?')), { type: 'message_start', message: reply(1) },
+    update({ type: 'thinking_start', contentIndex: 0 }), update({ type: 'thinking_delta', contentIndex: 0, delta: 'I\'m working out 17 × 23' }), update({ type: 'thinking_delta', contentIndex: 0, delta: ' = 391.\n' })];
+  assert.deepEqual(thinking(run(...first)), { text: 'I\'m working out 17 × 23 = 391.', now: true });
+  const call = [update({ type: 'thinking_end', contentIndex: 0, content: 'I\'m working out 17 × 23 = 391.\n' }), update({ type: 'toolcall_start', contentIndex: 1, id: 'c1', toolName: 'bash' })];
+  assert.deepEqual(thinking(run(...first, ...call)), { text: 'I\'m working out 17 × 23 = 391.', now: false });
+  // Its message ended and the next one thinks again: the thought of both, one after the other.
+  const next = [ended(reply(1, { type: 'thinking', thinking: 'I\'m working out 17 × 23 = 391.\n' }, bash('c1', 'echo ok'))), ended(result(2, 'ok')), { type: 'message_start', message: reply(3) },
+    update({ type: 'thinking_start', contentIndex: 0 }), update({ type: 'thinking_delta', contentIndex: 0, delta: 'The tool said ok.' })];
+  assert.deepEqual(thinking(run(...first, ...call, ...next)), { text: 'I\'m working out 17 × 23 = 391.\n\nThe tool said ok.', now: true });
+  // A message that steered the run begins another reply, with a thought of its own.
+  assert.deepEqual(thinking(run(...first, ...call, ...next, ended(user(4, 'and 18*2?')), { type: 'message_start', message: reply(5) }, update({ type: 'thinking_start', contentIndex: 0 }), update({ type: 'thinking_delta', contentIndex: 0, delta: '18 × 2 = 36.' }))),
+    { text: '18 × 2 = 36.', now: true });
+  // A model that does not think, or a provider that sends no thought: nothing to show.
+  assert.deepEqual(thinking(run(ended(user(0, 'hi')), ended(reply(1, text('Hello.'))))), { text: '', now: false });
 });
 
 test('how long a reply took is said in hours past an hour', () => {

@@ -109,22 +109,31 @@ test('a download that is not the release\'s file, or an app that is not whole, i
   const tampered = join(home, 'tampered');
   mkdirSync(tampered);
   appendFileSync(join(bundle(tampered, '0.2.0'), 'Contents', 'MacOS', 'OptChat'), 'x');
-  const cases: [string, Buffer, (zip: Buffer) => Buffer][] = [
-    ['cut off', zip, zip => zip.subarray(0, zip.length >> 1)],
+  // What went wrong on the way may go right the next time. What is wrong with the release's own file stays wrong.
+  const cases: [what: string, zip: Buffer, served: (zip: Buffer) => Buffer, stays: boolean][] = [
+    ['cut off', zip, zip => zip.subarray(0, zip.length >> 1), false],
     // A whole, signed app, but not the file the release names: only the sha256 tells.
-    ['another file', zip, () => other],
-    ['not a zip of an app', Buffer.from('not a zip'), zip => zip],
-    ['changed after signing', zipped(join(tampered, 'OptChat.app'), join(tampered, 'app.zip')), zip => zip],
+    ['another file', zip, () => other, false],
+    ['not a zip of an app', Buffer.from('not a zip'), zip => zip, true],
+    ['changed after signing', zipped(join(tampered, 'OptChat.app'), join(tampered, 'app.zip')), zip => zip, true],
   ];
-  for (const [what, zip, served] of cases) {
+  for (const [what, zip, served, stays] of cases) {
     const github = await feed('0.2.0', zip, served), { app, said, start, beside, folder } = installed(`refused ${what}`, '0.1.0', github.latest), updates = start();
     try {
       await assert.rejects(updates.look(), Error, what);
       assert.deepEqual([said, existsSync(beside), updates.install(), versionOf(app)], [[], false, false, '0.1.0'], what);
-      assert.deepEqual(readdirSync(folder), ['OptChat.app'], `${what}: nothing is left behind, and nothing is kept against the version`);
-      // The next look tries again, as after a network that came back.
-      await assert.rejects(updates.look());
-      assert.equal(github.downloads(), 2, what);
+      if (stays) {
+        // The same hundred megabytes are not downloaded again at every look to fail again: the release's page is offered.
+        await updates.look();
+        await start().look();
+        assert.deepEqual([said, github.downloads()], [Array(2).fill(`manual 0.2.0 ${github.latest.replace('/latest', '/release')}`), 1], what);
+      } else {
+        assert.deepEqual(readdirSync(folder), ['OptChat.app'], `${what}: nothing is left behind, and nothing is kept against the version`);
+        // The next look tries again, as after a network that came back.
+        await assert.rejects(updates.look());
+        assert.equal(github.downloads(), 2, what);
+      }
+      assert.equal(versionOf(app), '0.1.0', what);
     } finally { await github.close(); }
   }
 });

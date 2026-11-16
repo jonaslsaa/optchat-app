@@ -62,11 +62,15 @@ const run = promisify(execFile);
  * not Node's own: in Electron, Node takes the `app.asar` in an app for a folder, and cannot remove the app around it. */
 export async function tidy(bundle: string) { await run('/bin/rm', ['-rf', beside(bundle)]); }
 
+/** A release's own file that no app can be made ready from: it fails the same way every time it is downloaded. */
+export class Unusable extends Error {}
 /** Downloads the update's zip and makes the app in it ready beside `bundle`. The zip has to be as long as the release says and
  * have its sha256, so one cut off or changed on the way is not unpacked; and the app in it has to be signed and whole, as
- * macOS wants it to start it (`codesign --verify`: ad hoc, the signature says nothing of who made it. That it is ours is the
- * release's sha256). Node downloads it, so macOS does not mark it as downloaded, and it opens without "Open Anyway". Gives the
- * app's path; a failure leaves nothing behind. */
+ * macOS wants it to start it. Neither says who made it: the sha256 comes with the same answer as the zip's address, so it
+ * says the file is the one the release names, and an ad hoc signature (`codesign --verify`) that the app is as it was signed.
+ * What is trusted is GitHub and the release (docs/desktop.md). Node downloads it, so macOS does not mark it as downloaded, and
+ * it opens without "Open Anyway". Gives the app's path; a failure leaves nothing behind, and is `Unusable` when the file was
+ * the release's. */
 export async function stage(update: Update, bundle: string): Promise<string> {
   const folder = beside(bundle), zip = join(folder, 'update.zip');
   await tidy(bundle);
@@ -79,13 +83,15 @@ export async function stage(update: Update, bundle: string): Promise<string> {
     let size = 0;
     await pipeline(async function* () { for await (const chunk of body) { hash.update(chunk); size += chunk.byteLength; yield chunk; } }, createWriteStream(zip));
     if (size !== update.size || hash.digest('hex') !== update.sha256) throw new Error(`The download is not the release's file (${size} of ${update.size} bytes).`);
-    await run('/usr/bin/ditto', ['-x', '-k', zip, folder]);
-    rmSync(zip);
-    const apps = readdirSync(folder).filter(name => name.endsWith('.app'));
-    if (apps.length !== 1) throw new Error('The download has no app in it.');
-    const app = join(folder, apps[0]);
-    await run('/usr/bin/codesign', ['--verify', '--deep', '--strict', app]);
-    return app;
+    try {
+      await run('/usr/bin/ditto', ['-x', '-k', zip, folder]);
+      rmSync(zip);
+      const apps = readdirSync(folder).filter(name => name.endsWith('.app'));
+      if (apps.length !== 1) throw new Error('The download has no app in it.');
+      const app = join(folder, apps[0]);
+      await run('/usr/bin/codesign', ['--verify', '--deep', '--strict', app]);
+      return app;
+    } catch (error) { throw new Unusable(`OptChat ${update.version} cannot be installed from its release.`, { cause: error }); }
   } catch (error) { await tidy(bundle); throw error; }
 }
 /** Puts the ready app where `bundle` is, and `bundle` beside it until `tidy`. Two renames, so there is never half an app; if
@@ -101,7 +107,7 @@ export interface UpdaterOptions {
   /** The app (`OptChat.app`) and its version. */
   bundle: string; version: string;
   feed?: string;
-  /** A file in which it is kept which version could not be put in place, so it is not downloaded again for nothing. */
+  /** A file in which it is kept which version could not be made ready or put in place, so it is not downloaded again for nothing. */
   failed: string;
   /** An update is ready beside the app, and is installed by the next `install`. */
   ready(update: Update): void;
@@ -110,11 +116,12 @@ export interface UpdaterOptions {
 }
 /** Looks for updates and installs them. `look` asks for the latest release and, if it is newer, makes it ready and says so
  * once (`ready`), or says that you have to get it yourself (`manual`): where the app cannot be replaced, or the same version
- * could not be put in place before. `install` is for the app's end, once everything it runs has stopped: it puts the ready
+ * could not be installed before. `install` is for the app's end, once everything it runs has stopped: it puts the ready
  * update in place, and says whether it did. Neither restarts anything. */
 export function updater({ bundle, version, feed = LATEST, failed, ready, manual }: UpdaterOptions) {
   let looking = false, told: string | undefined, staged: { app: string; version: string } | undefined;
   const gaveUp = () => { try { return readFileSync(failed, 'utf8'); } catch { return undefined; } };
+  const giveUp = (version: string) => { try { writeFileSync(failed, version); } catch { /* Then it is tried again. */ } };
   return {
     async look() {
       // One at a time, and none while an update waits for the app to quit: the next one is found by the app it becomes.
@@ -127,7 +134,9 @@ export function updater({ bundle, version, feed = LATEST, failed, ready, manual 
         const update = await latest(feed, version);
         if (!update || update.version === told) return;
         if (!can || gaveUp() === update.version) { told = update.version; manual(update); return; }
-        staged = { app: await stage(update, bundle), version: update.version };
+        // A release that cannot be installed is not downloaded again at every look: its page is offered from the next one on.
+        const app = await stage(update, bundle).catch((error: unknown) => { if (error instanceof Unusable) giveUp(update.version); throw error; });
+        staged = { app, version: update.version };
         told = update.version;
         ready(update);
       } finally { looking = false; }
@@ -138,7 +147,7 @@ export function updater({ bundle, version, feed = LATEST, failed, ready, manual 
       staged = undefined;
       try { swap(bundle, app); return true; } catch {
         // macOS may refuse an app that changes itself (App Management). The app goes on as it is, and offers the page next time.
-        try { writeFileSync(failed, version); } catch { /* Then it is tried again. */ }
+        giveUp(version);
         return false;
       }
     },

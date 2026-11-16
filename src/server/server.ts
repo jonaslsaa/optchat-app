@@ -156,9 +156,11 @@ export async function startServer({ port = 0, origins = [], ui = join(import.met
     const url = URL.parse(request.url ?? '/', 'http://localhost');
     if (closing || url?.pathname !== '/ws' || !allowed(request)) { socket.destroy(); return; }
     // Without the token, the socket is closed before it is read, with a code that tells a page from before a restart to stop.
+    // Whatever it sends after is not waited for: `ws` would keep it while it waits for the other side to close too.
     sockets.handleUpgrade(request, socket, head, client => {
-      if (url.searchParams.get('token') === token) sockets.emit('connection', client, request);
-      else client.on('error', () => client.terminate()).close(REFUSED);
+      if (url.searchParams.get('token') === token) { sockets.emit('connection', client, request); return; }
+      client.on('error', () => client.terminate()).close(REFUSED);
+      socket.once('data', () => socket.destroy());
     });
   });
   await new Promise<void>((resolve, reject) => { server.once('error', reject); server.listen(port, '127.0.0.1', resolve); });

@@ -76,6 +76,12 @@ test('a server that started again numbers its records from one, and the page fol
   const third = await startServer({ port: first.port, home: directory, cwd: directory, pi });
   t.after(() => third.close());
   await until(state => state.connection === 'refused');
+  // Not even once the server with the page's token is back.
+  await third.close();
+  const fourth = await startServer({ port: first.port, home: directory, cwd: directory, pi, token: 'again' });
+  t.after(() => fourth.close());
+  await sleep(250);
+  assert.equal(app.state.connection, 'refused');
 });
 
 test('a dialog goes when its time is up, when its answer has arrived, and with its window', async t => {

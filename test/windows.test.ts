@@ -266,8 +266,14 @@ test('only this machine\'s pages connect, and a request the server cannot serve 
   // A program that is not a browser sends any Origin, or none: only the token in the address the server gave keeps it out.
   const { origin, pathname } = new URL(server.url);
   for (const url of [`${origin}${pathname}`, `${origin}${pathname}?token=guess`]) assert.deepEqual([await answered(undefined, undefined, url), await answered(own, undefined, url)], [false, false], url);
-  // Nor does a request that is not even an address stop the server for everyone.
-  await new Promise(resolve => { const raw = createConnection(server.port, '127.0.0.1', () => raw.end('GET //[ HTTP/1.1\r\nHost: 127.0.0.1\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n')).on('close', resolve); });
+  /** How long the server keeps a socket that asks for `target` by hand, and sends `frame` once it is answered. */
+  const held = (target: string, frame = '') => new Promise<number>(resolve => {
+    const started = Date.now(), raw = createConnection(server.port, '127.0.0.1', () => raw.write(`GET ${target} HTTP/1.1\r\nHost: 127.0.0.1\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n`));
+    raw.once('data', () => raw.write(frame, 'latin1')).on('error', () => {}).on('close', () => resolve(Date.now() - started));
+  });
+  // Nor does a client without the token stop the server for everyone: with a request that is not even an address, or a frame
+  // it may not send (unmasked). Nor is the start of a long frame waited for, which would keep what it sends.
+  for (const [target, frame] of [['//[', ''], ['/ws', '\x81\x02hi'], ['/ws', '\x82\xfe\xff\xff\0\0\0\0partly']]) assert.ok(await held(target, frame) < 2000, `${target} ${frame}`);
   assert.equal(await answered(), true);
 
   // @ts-expect-error: the compiler refuses it too.

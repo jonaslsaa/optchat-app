@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
+import { working } from '../src/agent.ts';
 import { connect } from '../src/client.ts';
 import type { Agent, PiRecord, Push, Result, Setup } from '../src/protocol.ts';
 import { startServer } from '../src/server/server.ts';
@@ -218,18 +219,37 @@ test('an agent is told, interrupted, resumed and stopped from the app, and an ag
   writeFileSync(config, JSON.stringify({ ...JSON.parse(readFileSync(config, 'utf8')), subagentLevels: 2 })); // An agent may start agents here.
   const server = await startServer({ home, cwd, flags });
   t.after(() => server.close());
-  const client = await connect(server.url);
+  const { pushes, record, onPush } = watch(), client = await connect(server.url, onPush);
   const { window } = await client.request('open', { profile: 'live' });
-  /** The agent of this title once it stands so, read from the profile's files as the page reads it. */
+  const listed = async () => (await client.request('agents', { profile: 'live' })).agents;
+  /** What the agents did, for a failure: a model does not always do what it was asked, and then the test says what it did. */
+  const did = (agents: Agent[]) => agents.map(agent => `"${agent.title}" ${agent.state}${agent.doing.length ? `, in ${agent.doing.map(call => call.name === 'bash' ? call.args.command : call.name).join(', ')}` : ''}${agent.headline ? `, reporting: ${agent.headline}` : ''}`).join('; ') || 'none';
+  /** Whether an agent goes on by itself: one that has ended does not, however it ended (a Pi that died leaves it `interrupted`),
+   * and a paused one waits for a message that the test is not about to send. */
+  const goes = (agent: Agent) => working(agent) && agent.state !== 'paused';
+  /** The agent of this title once it stands so, read from the profile's files as the page reads it. What can no longer come
+   * fails at once instead of being waited for: an agent that goes no further and stands otherwise, and one that is not there
+   * when no agent is at work that could start it (the main chat's own turn is over by then: `spawn`). */
   const stands = async (title: string, so: (agent: Agent) => boolean) => {
     for (;;) {
-      const found = (await client.request('agents', { profile: 'live' })).agents.find(agent => agent.title === title);
+      const agents = await listed(), found = agents.find(agent => agent.title === title);
       if (found && so(found)) return found;
+      if (found && !goes(found)) assert.fail(`The agent "${title}" goes no further, without having done what it was asked. The agents: ${did(agents)}`);
+      if (!found && !agents.some(goes)) assert.fail(`No agent "${title}" was started, and none is at work that could start it. The agents: ${did(agents)}`);
       await new Promise(resolve => setTimeout(resolve, 250));
     }
   };
   const runs = (command: string) => (agent: Agent) => agent.doing.some(call => call.name === 'bash' && call.args.command === command);
-  const spawn = (title: string, task: string) => client.request('prompt', { window: window.id, text: `Use spawn to start ONE subagent titled "${title}" with exactly the task between the tags: <task>${task}</task> Then say only: started.` });
+  /** Asks the main chat for an agent, and waits for the turn that takes the message to end: by then the agent is started, or
+   * the model did not start it, which is said with its own words. The message may join a turn a report began. */
+  const spawn = async (title: string, task: string) => {
+    const before = pushes.findLast(push => push.push === 'record')?.seq ?? 0;
+    await client.request('prompt', { window: window.id, text: `Use spawn to start ONE subagent titled "${title}" with exactly the task between the tags: <task>${task}</task> Then say only: started.` });
+    const asked = await record(window.id, r => r.type === 'message_end' && isMessage(r.message) && r.message.role === 'user' && words(r.message.content).includes(`titled "${title}"`), before);
+    const settled = await record(window.id, r => r.type === 'agent_settled', asked.seq);
+    const answer = pushes.findLast(push => push.push === 'record' && push.seq < settled.seq && said(push.record, 'assistant'));
+    if (!(await listed()).some(agent => agent.title === title)) assert.fail(`The main chat started no agent "${title}". It said: ${answer?.push === 'record' && isMessage(answer.record.message) ? words(answer.record.message.content) : 'nothing'}`);
+  };
 
   // Told while it works: the message waits until it reads it. Interrupted: its step is cut, and it goes on with the message at once.
   await spawn('Word', 'Run `sleep 30` with bash. If it is cut short, do not run it again. Then report only the word you were told while you worked, or the word nothing if you were told none.');
@@ -254,8 +274,11 @@ test('an agent is told, interrupted, resumed and stopped from the app, and an ag
   assert.match((await client.request('agent', sleeper)).report ?? '', /^Stopped by the user\./);
 
   // An agent's own agent is told and stopped the same way while it works. It does what it was told, so the message reached it.
-  await spawn('Outer', 'Use spawn to start ONE subagent titled "Inner" with exactly this task: "Run `sleep 30` with bash, then report: slept." Then wait for its report, and report what it said.');
-  const found = await stands('Inner', runs('sleep 30')), inner = { profile: 'live', id: found.id };
+  // The task says what a small model has got wrong here: that it may delegate (one said that a subagent cannot), and that the
+  // command is not its own to run (one ran it). And it is another task than the one just stopped, which the main chat was
+  // told not to delegate again: it has answered "started" to that without starting anything.
+  await spawn('Outer', 'Your whole task is to delegate, which you can: you have a spawn tool. Call it once, to start ONE subagent titled "Inner" with exactly this task: "Run `sleep 25` with bash, then report: rested." Do not run that command yourself. When its report reaches you, report what it said.');
+  const found = await stands('Inner', runs('sleep 25')), inner = { profile: 'live', id: found.id };
   assert.equal(found.parent, (await stands('Outer', () => true)).id);
   assert.deepEqual(await client.request('tellAgent', { ...inner, text: 'Change of plan: run `sleep 21` with bash now, then report: slept.' }), { resumed: false });
   assert.deepEqual(await client.request('interruptAgent', inner), {});

@@ -44,6 +44,10 @@ test('an editor is found by its command or, with launchd\'s PATH, inside its app
   assert.equal(preferred(found, 'windsurf', { VISUAL: 'vim' }), 'vscode');
   assert.equal(preferred(found, 'cursor', { EDITOR: 'zed' }), 'cursor');
   assert.equal(preferred(new Map([['finder', '/usr/bin/open']]), undefined, {}), undefined);
+  // Yours, named by its whole path, is the one started, before one on the PATH.
+  const own = join(mkdtempSync(join(home, 'own-')), 'code');
+  put(own);
+  assert.equal(installed({ env: { PATH: '/usr/bin:/bin', EDITOR: `${own} --wait` }, extra: [bin], apps: [apps] }).get('vscode'), own);
   const all: Installed = new Map([['cursor', '/c'], ['zed', '/z'], ['idea', '/i'], ['finder', '/usr/bin/open']]);
   assert.deepEqual(opening(all, 'cursor', '/a/b.ts', 42), { command: '/c', args: ['--classic', '-g', '/a/b.ts:42'] });
   assert.deepEqual(opening(all, 'zed', '/a/b.ts', 42), { command: '/z', args: ['/a/b.ts:42'] });

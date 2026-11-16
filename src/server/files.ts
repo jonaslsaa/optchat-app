@@ -39,14 +39,17 @@ export interface Launch { command: string; args: string[] }
  * your shell did not answer; then `extra` is where Homebrew puts an editor's command. `apps` hold the apps themselves. */
 export interface Places { env: NodeJS.ProcessEnv; extra: string[]; apps: string[] }
 const PLACES: Places = { env: process.env, extra: ['/opt/homebrew/bin', '/usr/local/bin'], apps: ['/Applications', join(homedir(), 'Applications')] };
+/** A command line's command: `zed` of `zed --wait`. */
+const first = (line?: string) => line?.trim().split(/\s+/)[0] ?? '';
 const runs = (file: string) => { try { accessSync(file, constants.X_OK); return statSync(file).isFile(); } catch { return false; } };
 
-/** The editors on this Mac, in the list's order, each with what starts it: its command, or else the one in its app. */
+/** The editors on this Mac, in the list's order, each with what starts it: the one your `$VISUAL` or `$EDITOR` names by its
+ * whole path, else its command, else the one in its app. */
 export function installed({ env, extra, apps }: Places = PLACES): Installed {
-  const folders = [...(env.PATH ?? '').split(delimiter).filter(isAbsolute), ...extra];
+  const folders = [...(env.PATH ?? '').split(delimiter).filter(isAbsolute), ...extra], yours = [env.VISUAL, env.EDITOR].map(first).filter(isAbsolute);
   return new Map(IDS.flatMap(id => {
     const { command, app }: { command: string; app?: string } = EDITORS[id];
-    const at = isAbsolute(command) ? [command] : [...folders.map(folder => join(folder, command)), ...app ? apps.map(folder => join(folder, app)) : []];
+    const at = isAbsolute(command) ? [command] : [...yours.filter(path => basename(path) === command), ...folders.map(folder => join(folder, command)), ...app ? apps.map(folder => join(folder, app)) : []];
     const found = at.find(runs);
     return found ? [[id, found] as const] : [];
   }));
@@ -57,7 +60,7 @@ export type Installed = Map<EditorId, string>;
  * (a terminal editor, vim or nano, has no terminal to run in), else VS Code, else the first there is. Finder is only ever
  * picked. */
 export function preferred(found: Installed, choice?: string, env: NodeJS.ProcessEnv = process.env): EditorId | undefined {
-  const named = [env.VISUAL, env.EDITOR].map(command => basename(command?.trim().split(/\s+/)[0] ?? '')).map(name => IDS.find(id => id !== 'finder' && EDITORS[id].command === name));
+  const named = [env.VISUAL, env.EDITOR].map(command => basename(first(command))).map(name => IDS.find(id => id !== 'finder' && EDITORS[id].command === name));
   return [choice, ...named, 'vscode', ...IDS.filter(id => id !== 'finder')].find((id): id is EditorId => id !== undefined && isEditor(id) && found.has(id));
 }
 /** How `id`, started as `found` has it, opens `file` at `line`; with none, the Mac's text editor does (`open -t`): `open` on

@@ -104,8 +104,9 @@ export function Config({ profile, config, models }: { profile: string; config: K
  * editor too (`OpenIn`), and then the file is the one to trust: what was typed here is saved before it opens, and back in this
  * window the field reads the file again, unless it holds typing not saved yet. */
 export function Instructions({ profile, kept }: { profile: string; kept: string }) {
-  const [text, setText] = useState(kept), [outcome, setOutcome] = useState<Outcome>();
-  useEffect(() => setText(kept), [kept]);
+  const [text, setText] = useState(kept), [outcome, setOutcome] = useState<Outcome>(), shown = useRef(kept);
+  // The file read again replaces the field only while it holds what was read before: typing since is never lost.
+  useEffect(() => { setText(text => text === shown.current ? kept : text); shown.current = kept; }, [kept]);
   useEffect(() => {
     const back = () => { if (text === kept) void app.readConfig(profile); };
     addEventListener('focus', back);

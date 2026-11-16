@@ -70,7 +70,7 @@ function Picker({ window, models, own, subagent, below }: { window: WindowState;
     else if (event.key === 'ArrowDown' || event.key === 'ArrowUp') { event.preventDefault(); all[(here + (event.key === 'ArrowDown' ? 1 : all.length - 1)) % all.length]?.focus(); }
   };
   return (
-    <div role="dialog" aria-label="Model" className={cn('absolute right-0 z-50 flex w-[min(34.5rem,100%)] flex-col overflow-hidden rounded-lg border bg-popover text-popover-foreground shadow-[0_16px_40px_-18px_rgb(0_0_0/55%)] dark:shadow-[0_18px_44px_-18px_rgb(0_0_0/80%)]', below ? 'top-full mt-2' : 'bottom-full mb-2')}>
+    <div role="dialog" aria-label="Model" className={cn('absolute right-0 z-50 flex w-[min(34.5rem,100%)] flex-col overflow-hidden rounded-lg border bg-popover text-popover-foreground shadow-[0_16px_40px_-18px_rgb(0_0_0/55%)] dark:shadow-[0_18px_44px_-18px_rgb(0_0_0/80%)] transition-[opacity,scale] duration-150 ease-out starting:scale-98 starting:opacity-0 motion-reduce:transition-none', below ? 'top-full mt-2 origin-top-right' : 'bottom-full mb-2 origin-bottom-right')}>
       <div className="flex min-h-0 sm:h-86.5 max-sm:flex-col">
         <div className="flex min-h-0 min-w-0 flex-1 flex-col max-sm:h-56 max-sm:flex-none">
           <div className="shrink-0 px-3 pt-2.5">
@@ -97,7 +97,7 @@ function Picker({ window, models, own, subagent, below }: { window: WindowState;
           </ul>
         </div>
         <div className="flex min-h-0 w-48 shrink-0 flex-col border-border/70 border-l bg-muted/40 max-sm:w-full max-sm:border-t max-sm:border-l-0">
-          <div className="shrink-0 px-3 pt-2.5"><p className={HEAD}><span className="text-muted-foreground">Thinking</span><span className="ms-auto min-w-0 truncate text-muted-foreground text-xs">{now?.name}</span></p></div>
+          <div className="shrink-0 px-3 pt-2.5"><p className={HEAD}><span className="text-muted-foreground">Thinking</span></p></div>
           <div ref={levels} role="radiogroup" aria-label="Thinking" onKeyDown={leveling} className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto overscroll-contain px-2 pt-2.5 pb-1.5 max-sm:flex-row max-sm:flex-wrap">
             {model && now && thinks(now) ? now.levels.map(level => (
               <button key={level} type="button" role="radio" aria-checked={level === model.thinking} tabIndex={level === model.thinking ? 0 : -1} onClick={() => void pick({ ...model, thinking: level }, true)}

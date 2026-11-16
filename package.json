@@ -2,6 +2,7 @@
   "name": "optchat-app",
   "version": "0.0.0",
   "private": true,
+  "license": "MIT",
   "type": "module",
   "main": "dist/desktop/main.js",
   "description": "A desktop app for pi-optchat: one chat per profile, with its memory, windows and agents visible.",

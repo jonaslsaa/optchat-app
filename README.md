@@ -1,54 +1,94 @@
-# OptChat app
+<p align="center">
+  <img src="build/icon.png" width="120" height="120" alt="The OptChat icon">
+</p>
 
-A desktop app for [pi-optchat](https://github.com/jonaslsaa/pi-optchat): one chat per profile that never ends, with the memory tree, connected windows and subagents visible instead of hidden behind a terminal.
+<h1 align="center">OptChat</h1>
 
-Status: the local server ([docs/server.md](docs/server.md)) and a first usable UI ([docs/ui.md](docs/ui.md)) are built: profile tabs, windows, the chat with its history, and the composer. Try it with `npm install && npm start`, or as a desktop app with `npm run desktop` ([docs/desktop.md](docs/desktop.md)).
+<p align="center">One chat that never ends, with a memory you can see.</p>
 
-## Install (macOS, Apple Silicon)
+<p align="center">
+  <a href="https://github.com/jonaslsaa/optchat-app/releases/latest"><b>Download</b></a>
+  &nbsp;·&nbsp; macOS, Apple Silicon
+</p>
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/images/chat-dark.webp">
+    <img src="docs/images/chat-light.webp" width="880" alt="The main chat, with its agents and the pull requests it mentioned beside it">
+  </picture>
+</p>
+
+Coding agents forget. A thread fills up, gets compacted, and you explain the project again in the next one.
+
+OptChat is one chat per profile that never ends. Every message is kept, and the agent reads all of it as a tree of summaries: the latest messages word for word, older ones folded smaller. You can open that tree yourself, down to the original message.
+
+Work in parallel stays in sight. Open a second window on the same chat, or let the agent start subagents, then watch, steer or stop any of them.
+
+It is the desktop app for [pi-optchat](https://github.com/jonaslsaa/pi-optchat), built on [Pi](https://pi.dev). A profile is the same one in the app and in your terminal.
+
+## A memory you can open
+
+The Memory view shows what the agent reads this turn. Open any summary into the two it was made from, all the way down to the messages as they were said. Search finds any message and shows where it sits in the tree.
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/images/memory-dark.webp">
+    <img src="docs/images/memory-light.webp" width="880" alt="The memory view: a summary of 256 messages opened into the two summaries it was made from">
+  </picture>
+</p>
+
+## Agents you can steer
+
+Every subagent is listed live with what it is doing right now, and so are the agents it started. Open one to read its chat, tell it something, interrupt it, stop it, or start a finished one again.
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/images/agent-dark.webp">
+    <img src="docs/images/agent-light.webp" width="880" alt="A working agent's chat beside the main chat, with a message waiting for it and Interrupt and Stop under it">
+  </picture>
+</p>
+
+## Windows that hand work back
+
+Open a connected window for a side task. It reads the same memory, and **Complete** hands what it did back to the main chat.
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/images/window-dark.webp">
+    <img src="docs/images/window-light.webp" width="880" alt="A connected window under the main chat in the sidebar, with its Complete button">
+  </picture>
+</p>
+
+## And the rest
+
+- **Profiles.** `work` and `personal` keep separate memories and instructions. Each has a coloured badge, so you always know which one you are in.
+- **GitHub.** The pull requests and issues the chat mentioned, with their live status, checks and reviews.
+- **Models.** One button picks the model and how hard it thinks, for the chat and for its subagents.
+- **Usage and limits.** Cost, tokens and cache share, by role and model, over time. Bars show how much of your provider's limit is left, and a clear notice says when you hit one.
+- **A composer that keeps up.** Type at any time: Enter steers a running agent, ⌘Enter queues for after it. Paste or drop images, `/` for commands, ↑ for earlier messages, ⌘F to find in the chat, and quote any selection into your reply. Drafts survive a restart.
+- **Nothing hidden.** A tool call reads as what it did and opens to what it printed. Code is highlighted, every reply has a copy button, and notices from Pi show in the chat.
+- **A proper Mac app.** It follows light and dark, keeps the Mac awake while agents work, remembers where its window was, and asks before it quits on running agents.
+- **Setup in the app.** It installs Pi and pi-optchat, signs you in, and keeps every setting on one page.
+
+## Install
+
+1. [Download the dmg](https://github.com/jonaslsaa/optchat-app/releases/latest), open it, and drag OptChat to Applications.
+2. Open it. The app is not signed with an Apple Developer ID, so macOS stops the first open: press **Done**, then System Settings → Privacy & Security → **Open Anyway**.
+
+Downloaded with the GitHub CLI instead, it opens like any other app:
 
 ```sh
 gh release download --repo jonaslsaa/optchat-app --pattern '*.dmg' --dir ~/Downloads
 ```
 
-Open the dmg and drag OptChat to Applications. Downloaded this way it opens like any other app. Downloaded with a browser, macOS stops the first open ("OptChat Not Opened"): press Done, then System Settings → Privacy & Security → **Open Anyway**. The app is not notarized (there is no Apple Developer ID), so a company Mac with endpoint security may flag it. More in [docs/desktop.md](docs/desktop.md#the-first-open).
+The first run sets up the rest: Pi, pi-optchat and your model login. It needs Node.js 22.19 or newer. After that OptChat keeps itself up to date: a new version downloads in the background, and it asks before it restarts.
 
-From then on the app updates itself from the releases here: it downloads a new one in the background, and asks before it restarts ([docs/desktop.md](docs/desktop.md#updates)).
+A company Mac with endpoint security may flag an app that is not signed this way ([more](docs/desktop.md#the-first-open)).
 
-## Layout
+## Under the hood
 
-- **Top: profile tabs.** A profile is the thing you pick once and then stop thinking about. The tab bar is hidden while only one profile is open; opening a second profile shows two tabs.
-- **Left: windows.** The profile's main window sits on top, connected windows below it. "New window" opens a connected window. Each connected window has a **Complete** button that hands its work back to the main chat (this replaces T3 Code's Settle).
-- **Centre: the chat.** Composer at the bottom; you can always type, messages queue and steer mid-turn.
-- **Right: agents and GitHub.** The agents working for the selected window (the main window shows all of them), and the PRs and issues the chat has mentioned, with live status.
+Built on [Pi](https://pi.dev) and [pi-optchat](https://github.com/jonaslsaa/pi-optchat), which implements [Victor Taelin's OptChat recipe](https://gist.github.com/VictorTaelin/91837951a5ce5b38f341ec1ba1df6449). Parts of the UI come from [T3 Code](https://github.com/pingdotgg/t3code) (MIT, see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)).
 
-## Principles
+For the internals, start at [docs/design.md](docs/design.md). To run it from a checkout: `npm install && npm run desktop`.
 
-1. **One chat, not threads.** The sidebar holds a profile's main window and its connected windows, never a list of separate conversations.
-2. **The memory is the product, so make it visible.** Every summary line opens into its originals with a click, and a toggle shows exactly what the agent sees this turn.
-3. **A client, never a second brain.** The app drives the real `pi --mode rpc` with pi-optchat loaded and reads memory through `pi-optchat/core`. It does no compaction or memory logic of its own. The same profile opens in the terminal or the app interchangeably.
-4. **Parallel work is first-class.** Subagents and connected windows get live cards you can read, steer, interrupt and resume.
-5. **Never block the user.** Summarizing and handoffs show as a quiet activity gauge, never a spinner in the way.
-6. **Steal components, not architecture.** From [T3 Code](https://github.com/pingdotgg/t3code) (MIT): the composer, markdown and code rendering, diffs, the command palette, tool-call blocks and the Pi RPC client. Not its server, multi-provider layer, source control, cloud or mobile.
-7. **Small and keyboard-first.** Cost and cache numbers stay honest and visible. Features the terminal already has become panels before new ones are invented.
-
-## Decisions so far
-
-- **Profiles open lazily.** History is read from disk, so a main window shows at once with no Pi process running. Pi starts the first time you type in that profile.
-- **The GitHub list is rebuilt from the chat log**, so it survives a restart without its own storage. Only status (open, merged, CI) is fetched, through `gh`: once for each item, and again only for those not merged or closed.
-- **Tracking an issue or PR** (poll every five minutes, tell the main agent when it changes) comes after the first version.
-
-## Build order
-
-1. ~~pi-optchat: let a Pi process in RPC mode join a busy profile as a connected window.~~ Done.
-2. ~~The local server: profiles and history from disk, one `pi --mode rpc` per window, one typed protocol.~~ Done.
-3. ~~The first usable UI, as a web page: profile tabs, windows sidebar, chat, composer, Complete.~~ Done.
-4. ~~Setup: the app's settings, installing Pi and pi-optchat from the app, and a profile a terminal already has open.~~ Done ([docs/setup.md](docs/setup.md)). Logging in to a model from the app is there too (macOS), and so are a profile's own settings: everything pi-optchat's settings page has in a terminal ([docs/ui.md](docs/ui.md#a-profiles-settings)). The model a chat and its subagents run on is picked in the composer ([docs/ui.md](docs/ui.md#model)).
-5. ~~The agents panel: the main chat's agents, live, each one's chat to read, and telling, interrupting, stopping and resuming one from there.~~ Done ([docs/ui.md](docs/ui.md#agents)). An agent's words as it writes them are next.
-6. The clickable memory tree. Reading it is done: the main chat as the agent reads it, every line opening down to its messages, and a search that finds a message and opens the tree at it ([docs/ui.md](docs/ui.md#memory-view)). Changing it is next.
-7. The GitHub list. Its first part is done: the issues and pull requests the main chat named by link, with how they stand ([docs/ui.md](docs/ui.md#github)). Tracking them is next.
-8. ~~The Electron shell around the same page.~~ Done for macOS ([docs/desktop.md](docs/desktop.md)): `npm run dist` builds the app and a dmg, and the app updates itself from the releases ([docs/desktop.md](docs/desktop.md#updates)).
-
-## Open
-
-- Whether a connected window's first message should wake the main agent for a whole turn.
-- Whether a connected window should start on the model the profile keeps for its main chat. Today it starts on Pi's default.
+[MIT](LICENSE)

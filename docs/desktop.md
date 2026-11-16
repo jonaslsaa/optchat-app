@@ -45,7 +45,7 @@ Why not Electron's updater: it, and electron-updater on top of it, hand the new 
 
 What macOS does with an updated app: the app downloads the zip itself, so nothing is marked as downloaded and the new app opens without "Open Anyway". It asks again for your Documents folder, as [below](#the-first-open).
 
-While this repository is private, GitHub answers 404 without a token, which is "no update": nothing is shown. To try it before then, serve a release as GitHub's API gives one (`tag_name`, `html_url`, and `assets` with `name`, `size`, `digest` and `browser_download_url`; `test/update.test.ts` has one) and start the app with `OPTCHAT_APP_UPDATES=<its address>`. That variable is for trying this out and nothing else: the app installs what that address offers, with the same checks. Run from a checkout (`npm run desktop`), the app never looks.
+Until this repository has a release, GitHub answers 404, which is "no update": nothing is shown. To try it before then, serve a release as GitHub's API gives one (`tag_name`, `html_url`, and `assets` with `name`, `size`, `digest` and `browser_download_url`; `test/update.test.ts` has one) and start the app with `OPTCHAT_APP_UPDATES=<its address>`. That variable is for trying this out and nothing else: the app installs what that address offers, with the same checks. Run from a checkout (`npm run desktop`), the app never looks.
 
 ## Releasing
 

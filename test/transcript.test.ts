@@ -2,8 +2,9 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
+import { cite, citing, whole } from '../src/ui/cite.ts';
 import type { Message, PiRecord } from '../src/protocol.ts';
-import { act, apply, chat, closed, failure, idle, logged, merged, news, paced, parts, quiet, quoted, recalled, replay, spoken, stopped, thinking, took, without, worked, LAG, type Item, type PiMessage, type Tool } from '../src/ui/transcript.ts';
+import { act, apply, chat, closed, failure, idle, logged, merged, news, paced, parts, quiet, recalled, replay, spoken, stopped, thinking, took, without, worked, LAG, type Item, type PiMessage, type Tool } from '../src/ui/transcript.ts';
 
 const T = Date.UTC(2026, 0, 1), at = (seconds: number) => new Date(T + seconds * 1000).toISOString();
 const user = (seconds: number, text: string): PiMessage => ({ role: 'user', timestamp: T + seconds * 1000, content: [{ type: 'text', text }] });
@@ -98,19 +99,19 @@ test('the chat is drawn in parts: your message with its images, a report by its 
   ));
   assert.deepEqual(parts(items).map(({ items: _, ...part }) => part), [
     { key: 0, type: 'note', text: 'Prefers short answers.' },
-    { key: 1, type: 'user', date: at(0), text: 'look at this', images: ['0123456789abcdef'] },
+    { key: 1, type: 'user', date: at(0), text: 'look at this', cites: [], images: ['0123456789abcdef'] },
     { key: 2, type: 'work', date: at(0), agent: '1a2b3c4d', body: '**Done.** All green.' },
     { key: 3, type: 'work', date: at(0), body: 'A report without a name' },
-    { key: 4, type: 'user', date: at(1), text: 'check both', images: [] },
+    { key: 4, type: 'user', date: at(1), text: 'check both', cites: [], images: [] },
     {
-      key: 5, type: 'reply', from: at(2), to: at(5), stopped: false, answer: { text: 'One failed.' },
+      key: 5, type: 'reply', from: at(2), to: at(5), stopped: false, answer: { text: 'One failed.', said: [items[10]] },
       steps: [
         { key: 5, type: 'talk', text: 'On it.' },
         { key: 6, type: 'tool', name: 'bash', args: { command: 'one' }, call: 'c1', output: 'first', failed: false },
         { key: 7, type: 'tool', name: 'bash', args: { command: 'two' }, call: 'c2', output: 'Error: no such file', failed: true },
       ],
     },
-    { key: 11, type: 'user', date: at(6), text: 'and again', images: [] },
+    { key: 11, type: 'user', date: at(6), text: 'and again', cites: [], images: [] },
     {
       key: 12, type: 'reply', from: at(7), to: at(7), stopped: true,
       steps: [{ key: 12, type: 'tool', name: 'bash', args: { command: 'three' }, call: 'c3', failed: false }, { key: 13, type: 'fault', text: 'Agent aborted: No further details' }],
@@ -320,9 +321,17 @@ test('↑ in the composer goes back through what you said and ↓ forward again,
   assert.deepEqual([recalled(mixed, '', true), recalled(mixed, 'see this', true)], ['see this', undefined]);
 });
 
-test('what is quoted goes under what is typed, a > before each of its lines, with an empty line to answer on', () => {
-  assert.equal(quoted('', ' Nothing is replayed twice\n'), '> Nothing is replayed twice\n\n');
-  assert.equal(quoted('About the second one:\n', 'one\n\ntwo'), 'About the second one:\n\n> one\n>\n> two\n\n');
+test('your message is what you typed with what it cites apart, and what is cited from an answer is cited as the message of the log it is in', () => {
+  const sent = citing([cite('Nothing is replayed twice', { id: 3, n: 1 }), whole({ id: 0, n: 4 }, 'user: How is the snapshot taken? [image fedcba9876543210]')], 'Is that still so?');
+  const items = logged([entry(7, 'user', 0, `${sent} [image 0123456789abcdef]`), entry(8, 'tool', 1, 'bash {"command":"ls"}'), entry(9, 'talk', 2, 'It is.'), entry(10, 'talk', 2, 'Twice, even.')]);
+  // A picture that a cited line names is that line's, and not one sent with this message.
+  // An answer in two blocks is two messages of the log: each is there under its own number.
+  assert.partialDeepStrictEqual(parts(items), [
+    { type: 'user', text: 'Is that still so?', cites: [{ text: 'Nothing is replayed twice', at: { id: 3, n: 1 } }, { text: 'user: How is the snapshot taken? [image fedcba9876543210]', at: { id: 0, n: 4 } }], images: ['0123456789abcdef'] },
+    { type: 'reply', answer: { text: 'It is.\n\nTwice, even.', said: [{ key: 9, text: 'It is.' }, { key: 10, text: 'Twice, even.' }] } },
+  ]);
+  // ↑ brings a message back as it was sent, with what it cites.
+  assert.equal(recalled(items, '', true), sent);
 });
 
 test('a message says what pi-optchat would log, with your image to draw, a tool\'s named as one, and a tool call by its id', () => {

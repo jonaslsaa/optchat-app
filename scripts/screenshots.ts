@@ -48,6 +48,10 @@ seed(createProfile(home, 'slow'), 2, NOW); // Its Pi does not start in these pic
 const long = createProfile(home, 'long');
 seed(long, 95, NOW, undefined, 40 * 60_000);
 remember(long);
+// A chat with its summaries where a message cites what was said: the last four messages a line each, the rest folded.
+const cites = createProfile(home, 'cites');
+seed(cites, TEAM.length, NOW, TEAM);
+remember(cites, 4);
 // What it used in those ten days, and a ledger with a line that cannot be read.
 spend(long, NOW);
 spend(join(home, 'profiles', 'notes'), NOW, 1);
@@ -469,11 +473,32 @@ async function pictures(browser: Browser, control: Client) {
   await shot(slim2, '69-commands-narrow-dark');
   await slash.getByRole('textbox', { name: 'Message' }).pressSequentially('s');
   await shot(slash, '68-commands-typed');
-  // A line of a report selected, and the button that quotes it into the composer.
-  const quoting = await open(['team']);
-  await quoting.getByText('The snapshot is the fallback, not the default').click({ clickCount: 3 });
-  await quoting.getByRole('button', { name: 'Quote' }).waitFor();
-  await shot(quoting, '72-quote-selection');
+  // A line of a report selected, and the button that cites it; then two citations as chips over what is typed, as cards in
+  // the message once it is sent, and the same message as the log has it, dark and narrow.
+  const citing = await open(['cites']), cite = citing.getByRole('button', { name: 'Cite', exact: true });
+  await citing.locator('[data-cite] li', { hasText: 'The snapshot is the fallback, not the default' }).click({ clickCount: 3 });
+  await cite.waitFor();
+  await shot(citing, '72-cite-selection');
+  await cite.click();
+  await citing.locator('[data-cite] p', { hasText: 'Started two agents.' }).click({ clickCount: 3 });
+  await cite.click();
+  await citing.getByRole('textbox', { name: 'Message' }).fill('Is that still how ours works?');
+  await shot(citing, '150-cited-in-composer');
+  await citing.keyboard.press('Enter');
+  await citing.getByText('reply', { exact: true }).waitFor();
+  await shot(citing, '151-cited-message');
+  await shot(await open(['cites'], { dark: true }), '152-cited-message-dark');
+  await shot(await open(['cites'], { width: 420, height: 800 }), '153-cited-message-narrow');
+  // The memory view: a line cited whole by its button, which is there for the line the keys are on, and a card opened where it is.
+  await citing.keyboard.press('Alt+m');
+  await citing.locator('[data-line]').first().hover();
+  await citing.getByRole('button', { name: 'Cite this line' }).first().click();
+  await citing.locator('[data-line]').nth(1).focus();
+  await shot(citing, '154-memory-cite');
+  await citing.keyboard.press('Alt+m');
+  await citing.locator('[data-cited]').first().click();
+  await citing.locator('[data-found]').waitFor();
+  await shot(citing, '155-cited-in-memory');
   // Find in the chat: what is typed is marked wherever the chat shows it, with the match it is at marked stronger, and under the
   // box the way on to the memory, which is all there is to press for a text the chat does not have.
   for (const [name, options, text] of [['146-find-in-chat', {}, 'snapshot'], ['147-find-in-chat-dark', { dark: true }, 'snapshot'], ['148-find-in-chat-narrow', { width: 420 }, 'snapshot'], ['149-find-nothing', {}, 'heartbeat']] as const) {

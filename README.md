@@ -65,7 +65,7 @@ Open a connected window for a side task. It reads the same memory, and **Complet
 - **GitHub.** The pull requests and issues the chat mentioned, with their live status, checks and reviews.
 - **Models.** One button picks the model and how hard it thinks, for the chat and for its subagents.
 - **Usage and limits.** Cost, tokens and cache share, by role and model, over time. Bars show how much of your provider's limit is left, and a clear notice says when you hit one.
-- **A composer that keeps up.** Type at any time: Enter steers a running agent, ⌘Enter queues for after it. Paste or drop images, `/` for commands, ↑ for earlier messages, ⌘F to find in the chat, and quote any selection into your reply. Drafts survive a restart.
+- **A composer that keeps up.** Type at any time: Enter steers a running agent, ⌘Enter queues for after it. Paste or drop images, `/` for commands, ↑ for earlier messages, ⌘F to find in the chat, and cite any selection, or a line of the memory, in your reply. Drafts survive a restart.
 - **Nothing hidden.** While the agent thinks, one click shows what it is thinking. A tool call reads as what it did and opens to what it printed, and a file the agent changed opens as the diff, with the lines put in and taken out counted beside its name. Code is highlighted, formulas are typeset, a table copies as Markdown or CSV, a file a reply names opens in your editor, every reply has a copy button, and notices from Pi show in the chat.
 - **A proper Mac app.** It follows light and dark, keeps the Mac awake while agents work, remembers where its window was, and asks before it quits on running agents.
 - **Setup in the app.** It installs Pi and pi-optchat, signs you in, and keeps every setting on one page.

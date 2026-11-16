@@ -8,7 +8,8 @@ import type { Push, WindowState } from '../src/protocol.ts';
 import { startServer } from '../src/server/server.ts';
 import { transcript } from '../src/ui/agents.ts';
 import { building, listed, path, polled } from '../src/ui/memory.ts';
-import { App, type State } from '../src/ui/store.ts';
+import { cite, citing } from '../src/ui/cite.ts';
+import { App, title, UNTITLED, type State } from '../src/ui/store.ts';
 import { chat } from '../src/ui/transcript.ts';
 // pi-optchat's own lock, which only Pi takes: here it stands for a Pi in a terminal.
 import { describeOwner, lockProfile } from 'pi-optchat/files';
@@ -336,7 +337,7 @@ test('what a search found stands in the tree\'s place, and a message of it opens
   const down = ['32+32', '32+16', '32+8', '36+4', '36+2', '37+1'];
   assert.deepEqual(path(memory().view!.lines, 37).map(line => `${line.id}+${line.n}`), down);
   await app.find('sought', 37);
-  assert.deepEqual([listed(memory()), memory().found, memory().open], [false, 37, ['0+32', ...down]]);
+  assert.deepEqual([listed(memory()), memory().found, memory().open], [false, '37+1', ['0+32', ...down]]);
   assert.deepEqual(Object.keys(memory().under).sort(), ['0+32', ...down.slice(0, -1)].sort());
   assert.deepEqual(memory().originals[37].map(message => message.text), ['The needle is here.']);
   // Back at what was found, and then with the search ended while a message of it was still being opened: the tree is there,
@@ -366,7 +367,15 @@ test('what a search found stands in the tree\'s place, and a message of it opens
   await app.search('sought', 'needle');
   assert.deepEqual(answer()?.hits.map(hit => hit.id), [64, 37]);
   await app.find('sought', 64);
-  assert.deepEqual([memory().view?.total, memory().found, memory().open.at(-1), memory().originals[64]?.[0].text], [65, 64, '64+1', 'Another needle.']);
+  assert.deepEqual([memory().view?.total, memory().found, memory().open.at(-1), memory().originals[64]?.[0].text], [65, '64+1', '64+1', 'Another needle.']);
+
+  // What a message cites is shown the same way, and can be a line of several messages: the tree is open down to that line,
+  // which is the one pointed out. Where the view's own line is shorter than what is cited, it is that line.
+  await app.search('sought', '');
+  await app.find('sought', 8, 4);
+  assert.deepEqual([memory().found, memory().open.slice(-3), Object.keys(memory().under).includes('8+4')], ['8+4', ['0+16', '8+8', '8+4'], true]);
+  await app.find('sought', 0, 64);
+  assert.equal(memory().found, '0+32');
 });
 
 test('the memory view is looked at again by the clock while the chat says too little: its Pi runs, or a Pi outside the app has it', async t => {
@@ -465,4 +474,10 @@ test('your message is in the chat the moment it is sent: Pi\'s copy takes its pl
   assert.equal(chat([], app.state.live['importing/main']).at(-1)?.text, 'One more');
   if (idle) app.receive({ push: 'window', window: { ...idle, status: 'stopped' } });
   assert.deepEqual([idle?.status, chat([], app.state.live['importing/main'])], ['idle', []]);
+});
+
+test('a connected window is called by what its first message says, and by what that cites when it says nothing else', t => {
+  const { app } = page(t), window: WindowState = { id: 'work/1', profile: 'work', role: 'connected', cwd: '/tmp', status: 'idle', seq: 0 };
+  const called = (text: string) => title(window, { ...app.state, sessions: { [window.id]: [{ role: 'user', timestamp: 1, content: [{ type: 'text', text }] }] } });
+  assert.deepEqual([called(citing([cite('the banner', { id: 9, n: 1 })], 'Which colour?\nThe hex.')), called(citing([cite('the banner\nof the release')], '').trim()), title(window, app.state)], ['Which colour?', 'the banner', UNTITLED]);
 });

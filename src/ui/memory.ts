@@ -7,15 +7,15 @@ export interface Search { text: string; answer?: { of: string; hits: Hit[]; more
 /** A profile's memory view as the page has it: the view as the server last read it, the two lines under each line that was
  * opened and the message under a line of one, and which lines are open. A line is the same line for as long as the memory is
  * the same one, so what was read under one stays right, and a line stays open while the view is read again. With a `search`
- * the messages it found stand in the tree's place, until one of them is opened: `found` is that message, shown in the tree.
- * Nothing here touches the DOM. */
+ * the messages it found stand in the tree's place, until one of them is opened: `found` is the line that is pointed out in
+ * the tree, which is that message, or what a message cites. Nothing here touches the DOM. */
 export interface Tree {
   view?: Result<'view'>;
   under: Record<string, Line[]>;
   originals: Record<number, Message[]>;
   open: readonly string[];
   search?: Search;
-  found?: number;
+  found?: string;
 }
 export const NO_TREE: Tree = { under: {}, originals: {}, open: [] };
 /** A line's name, in pi-optchat's own notation: the `n` messages from `id` on. */
@@ -33,11 +33,12 @@ export const WHO: Record<Hit['kind'], string> = { user: 'You', talk: 'Agent', to
 /** Whether the messages a search found stand in the tree's place: until one of them is opened. */
 export const listed = (tree: Tree) => tree.search !== undefined && tree.found === undefined;
 /** The lines to open to get to message `id`, outermost first: the line of the view that holds it, then of each line the half
- * that does, down to the line of the message alone. A line begins at a multiple of its length, so they are known without
- * being read. None when the view does not reach the message. */
-export function path(lines: readonly Line[], id: number) {
+ * that does, down to the line of the message alone, or to its line of `to` messages (the view's own line, where that is
+ * shorter). A line begins at a multiple of its length, so they are known without being read. None when the view does not
+ * reach the message. */
+export function path(lines: readonly Line[], id: number, to = 1) {
   const top = lines.find(line => line.id <= id && id < line.id + line.n), down: Pick<Line, 'id' | 'n'>[] = [];
-  for (let n = top?.n ?? 0; n >= 1; n /= 2) down.push({ id: id - id % n, n });
+  for (let n = top?.n ?? 0; n >= 1 && n >= Math.min(to, top?.n ?? 0); n /= 2) down.push({ id: id - id % n, n });
   return down;
 }
 /** Whether a line in sight waits for its summary, which only a line of one message can: a summary of more is written

@@ -26,13 +26,14 @@ export function createProfile(home: string, name: string) {
   writeFileSync(join(directory, 'AGENTS.md'), `# ${name}\n\nA test profile. Answer in one short sentence.\n`);
   return directory;
 }
-/** Fills a profile's memory with `count` messages and every summary node above them, as files. */
-export function writeMemory(directory: string, count: number, text = (i: number) => `message ${i}`) {
+/** Fills a profile's memory with `count` messages and every summary node above them, as files. A message's own line of the
+ * tree says what the message does, unless `line` has it say less. */
+export function writeMemory(directory: string, count: number, text = (i: number) => `message ${i}`, line = text) {
   for (const sub of ['main', 'tree']) mkdirSync(join(directory, sub), { recursive: true });
   const entries: string[] = [], nodes: string[] = [];
   for (let i = 0; i < count; i++) entries.push(JSON.stringify({ i, kind: i % 2 ? 'talk' : 'user', date: new Date(Date.UTC(2026, 0, 1, 0, 0, i)).toISOString(), text: text(i) }));
   for (let l = 0; count >> l > 0; l++) for (let i = 0; i < count >> l; i++) {
-    const summary = l ? `summary of ${i * 2 ** l}+${2 ** l}` : `${i % 2 ? 'talk' : 'user'}: ${text(i)}`;
+    const summary = l ? `summary of ${i * 2 ** l}+${2 ** l}` : `${i % 2 ? 'talk' : 'user'}: ${line(i)}`;
     nodes.push(JSON.stringify({ l, i, text: summary, size: Buffer.byteLength(summary) }));
   }
   writeFileSync(join(directory, 'main', '2026-01-01.jsonl'), entries.join('\n') + '\n');

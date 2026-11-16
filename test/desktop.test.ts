@@ -226,8 +226,10 @@ test('the menu bar names the app, asks the page for what the page does, and leav
   // Electron's own entries would name the app by its package: every one that names it is written out.
   assert.deepEqual(shown('OptChat'), ['About OptChat', 'Check for Updates…', '-', 'Settings… [Cmd+,]', '-', 'services', '-', 'Hide OptChat', 'hideOthers', 'unhide', '-', 'Quit OptChat']);
   assert.deepEqual(shown('File'), ['New Connected Window [Shift+Cmd+O]', '-', 'close']);
-  assert.deepEqual(shown('View').slice(0, 5), ['Search Memory [Cmd+F]', 'Chat or Memory [Alt+M]', 'Usage', 'Show or Hide Sidebar [Cmd+B]', '-']);
+  assert.deepEqual(shown('View').slice(0, 5), ['Search Memory [Cmd+F]', 'Chat or Memory', 'Usage', 'Show or Hide Sidebar [Cmd+B]', '-']);
   assert.deepEqual(shown('help'), ['Report a Problem', 'OptChat on GitHub']);
+  // A key without ⌘ would go to the menu before the page, and be taken from it: no entry has one.
+  assert.deepEqual(menu.flatMap(under).flatMap(item => item.accelerator && !item.accelerator.includes('Cmd') ? [item.label] : []), []);
   // Run from the checkout the app does not update itself, and the entry says so by being off.
   assert.equal(shown('OptChat', appMenu(does))[1], 'Check for Updates… (off)');
 

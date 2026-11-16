@@ -54,15 +54,15 @@ function Profile({ state, profile, onSettings, onUsage, ref }: { state: State; p
   const name = window && title(window, state), composer = useRef<ComponentRef<typeof Composer>>(null);
   // ⌘F searches the memory from the chat too: the view is on the page before the keys go to its search box. Not from the panel,
   // whose keys are its own: as a sheet it lies over the view, and the box under it cannot take them.
-  // The memory is the main chat's: asked for from a connected window, which only the menu bar does, it is shown there.
+  // The memory is the main chat's: asked for from a connected window, it is shown there.
   const main = () => { if (own) app.select(mainOf(profile)); };
   const box = useRef<HTMLInputElement>(null), search = () => { setOver(false); flushSync(() => { main(); setMemory(true); }); box.current?.focus(); box.current?.select(); };
   const newWindow = () => { setOver(false); void app.newWindow(profile); }, remember = () => { main(); setMemory(shown => own || !shown); };
-  useShortcuts((): Record<string, () => void> => own ? {} : { 'mod+f': search }, [own], 'chat', 'memory');
+  useShortcuts(() => ({ 'mod+f': search }), [profile, own], 'chat', 'memory');
   useShortcuts(() => ({
     'mod+shift+o': newWindow,
     'mod+b': toggle,
-    ...!own && { 'alt+m': remember },
+    'alt+m': remember,
     ...Object.fromEntries(ids.split(' ').slice(0, 9).map((id, index) => [`alt+${index + 1}`, () => { setOver(false); app.select(id); }])),
   }), [profile, ids, own, wide]);
   // The menu bar runs the same, from wherever the focus is. The panel as a sheet lies over all of it, and is closed first.
@@ -135,7 +135,8 @@ export function App() {
   const connecting = state.connection === 'connecting', opening = state.profile !== undefined && !state.windows.some(window => window.profile === state.profile);
   useMenu(action => {
     if (connecting) return false;
-    if (action === 'settings') return toSettings();
+    // The menu's Settings… opens them and never closes them, as its key does.
+    if (action === 'settings') return setPage('settings');
     if (opening) return false;
     if (action === 'usage' && state.profile) return setPage('usage');
     flushSync(() => setPage(undefined));

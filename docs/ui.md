@@ -39,11 +39,11 @@ npm run screenshots       # a PNG of every main state, in /tmp/optchat-app-shots
 | ⌘⇧O | New window |
 | ⌥1 … ⌥9 | Go to a window |
 | ⌘B | Show or hide the sidebar |
-| ⌥M | The main chat, or its memory view |
+| ⌥M | The main chat, or its memory view; from a connected window, the main chat's memory view |
 | ↑ ↓ | In an empty composer: what you said last, then the message before it, and ↓ forward again to an empty box |
 | ↑ ↓ | In the list of profiles: the one above or below, round its ends |
 | ↑ ↓ / → ← | In the memory view: the line above or below / open or close it |
-| ⌘F | Search the memory, from the main chat too (not from the panel): the memory view is shown with the keys in its search box. ↓ goes to what was found and ↑ from the first of it back to the box, Enter opens a message in the tree, Esc ends the search |
+| ⌘F | Search the memory, from the main chat and a connected window too (not from the panel): the memory view is shown with the keys in its search box. ↓ goes to what was found and ↑ from the first of it back to the box, Enter opens a message in the tree, Esc ends the search |
 | ⌘, | Settings |
 
 ### Whose a key is

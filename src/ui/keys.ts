@@ -62,12 +62,16 @@ export function useShortcuts(bindings: () => Record<string, () => void>, deps: r
   }, deps);
 }
 /** What the desktop app's menu bar asked for and nothing has done yet. It is heard from the start: the menu may open the
- * window for what it asks, and asks before the page has anything to ask. */
+ * window for what it asks, and asks before the page has anything to ask. What still waits when you press a key or click
+ * is forgotten: you went on to something else, and it is not done behind your back later. */
 let asked: MenuAction | undefined, take: (() => void) | undefined;
-if (typeof window !== 'undefined') addEventListener(MENU_EVENT, event => {
-  asked = event instanceof CustomEvent ? MENU_ACTIONS.find(action => action === event.detail) : undefined;
-  take?.();
-});
+if (typeof window !== 'undefined') {
+  addEventListener(MENU_EVENT, event => {
+    asked = event instanceof CustomEvent ? MENU_ACTIONS.find(action => action === event.detail) : undefined;
+    take?.();
+  });
+  for (const type of ['keydown', 'pointerdown'] as const) addEventListener(type, () => { asked = undefined; }, true);
+}
 /** Does what the desktop app's menu bar asks (`src/menu.ts`), with `does`, which says `false` while the page cannot do it
  * yet: it is asked again when `deps` change, with which `does` is made again. */
 export function useMenu(does: (action: MenuAction) => boolean | void, deps: readonly unknown[]) {

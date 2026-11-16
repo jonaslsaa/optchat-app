@@ -286,3 +286,13 @@ export function spend(directory: string, now: number, days = 10) {
   }
   writeFileSync(join(directory, 'usage.jsonl'), lines.join('\n') + '\n');
 }
+
+/** A subscription's limits as pi-optchat saves them (`limits.json`): counted `ago` before `now`, with the five hours ending
+ * some three hours after that and the week some four days after. A window used up is reached. */
+export function limited(directory: string, now: number, { five, week, ago = 3 * 60_000, overage = false, refused }: { five: number; week: number; ago?: number; overage?: boolean; refused?: number }) {
+  const at = now - ago, date = (time: number) => new Date(time).toISOString();
+  writeFileSync(join(directory, 'limits.json'), JSON.stringify({ at: date(at), overage, ...refused !== undefined && { refused: date(now - refused) }, limits: [
+    { window: '5h', used: five, resets: date(at + 178 * 60_000), reached: five >= 1 },
+    { window: '7d', used: week, resets: date(at + 86 * 3600_000), reached: week >= 1 },
+  ] }));
+}

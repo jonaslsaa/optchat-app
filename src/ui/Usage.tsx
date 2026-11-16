@@ -4,7 +4,7 @@ import type { Usage } from '../protocol.ts';
 import { Page, Section } from './Settings.tsx';
 import { app, mainOf, type State } from './store.ts';
 import { Button, Choice, cn } from './ui.tsx';
-import { breakdown, chart, dollars, headline, short } from './usage.ts';
+import { breakdown, chart, dollars, headline, limits, short } from './usage.ts';
 
 /** The usage page, in place of the chat as the settings are: what the profile in front used in a range, from pi-optchat's
  * ledger ([ui.md](../../docs/ui.md#usage)). The layout is T3 Code's usage page (its totals, its share bar and its table),
@@ -91,6 +91,30 @@ function Table({ rows }: { rows: Rows }) {
     </table>
   );
 }
+/** How much of the subscription is used, whatever the period: a bar for each window its provider counts in, and in plain
+ * words what cannot be missed (extra usage, a limit that is reached, a request that was refused). The count is the one that
+ * came with the latest answer, so it says how old it is, by a clock of the page's own: nothing is asked for it. */
+function Limits({ saved }: { saved: Usage['limits'] }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => { const timer = setInterval(() => setNow(Date.now()), 30_000); return () => clearInterval(timer); }, []);
+  if (!saved) return <Section title="Limits"><p className="text-muted-foreground text-sm">No data yet. Only an Anthropic subscription reports its limits (pi-optchat 0.11.15 or newer).</p></Section>;
+  const { rows, notes, age } = limits(saved, now);
+  return (
+    <Section title="Limits" hint={age}>
+      {notes.map(note => <p key={note} role="status" className="mb-3 rounded-md bg-warning-surface px-3 py-2 text-sm text-warning-foreground">{note}</p>)}
+      <ul className="flex flex-col gap-3">
+        {rows.map(row => (
+          <li key={row.window}>
+            <div className="flex flex-wrap items-baseline justify-between gap-x-3 text-sm"><span>{row.name}</span><span className="text-muted-foreground text-xs tabular-nums">{row.text}</span></div>
+            <div aria-hidden="true" className="mt-1.5 h-2 overflow-hidden rounded-full bg-foreground/10">
+              <div className={cn('h-full rounded-full', row.reached || row.used >= 1 ? 'bg-destructive' : row.used >= 0.8 ? 'bg-warning' : 'bg-foreground/60')} style={{ width: `${Math.min(100, row.percent ?? 0)}%` }} />
+            </div>
+          </li>
+        ))}
+      </ul>
+    </Section>
+  );
+}
 function Figures({ usage }: { usage: Usage }) {
   const total = usage.usage, rows = breakdown(usage);
   if (!rows.length) return <p className="py-8 text-center text-muted-foreground text-sm">No usage in this period.</p>;
@@ -124,7 +148,8 @@ export function UsagePage({ state, profile, onClose }: { state: State; profile: 
       <Button variant="ghost-muted" size="icon-sm" aria-label="Read the usage again" title="Read the usage again" onClick={() => void app.readUsage(profile, range)}><RefreshCwIcon /></Button>
       <Button variant="ghost-muted" size="icon-sm" aria-label="Close the usage" onClick={onClose}><XIcon /></Button>
     </>}>
-      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 pt-1">
+      {usage && <Limits saved={usage.limits} />}
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 pt-5">
         <p className="min-w-0 truncate text-muted-foreground text-sm">What <span className="font-medium text-foreground">{profile}</span> used</p>
         {usage && <Choice label="Period" name={`usage-${profile}`} options={usage.ranges.map(range => [range, range] as const)} value={range} onChange={setRange} />}
       </div>

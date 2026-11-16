@@ -48,8 +48,6 @@ More in [ui.md](ui.md#run-it) and [desktop.md](desktop.md#run-it).
 
 Decided, and named in the README as if they were there. Take one off this list when it lands, with a link to where it is described.
 
-- A Usage page: cost, tokens and cache share, by role and model, over time.
-- Bars for a provider's usage limits, and a notice when one is hit.
 - Pi's notices shown in the chat, and a message Pi refuses put back in the composer.
 - A `/` menu of commands in the composer.
 - Images in the composer: paste, drop or attach.

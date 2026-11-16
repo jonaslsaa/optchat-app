@@ -84,12 +84,14 @@ export function useMenu(does: (action: MenuAction) => boolean | void, deps: read
 }
 /** A menu or a list that lies over the page while it is `open`, under `root` with the button that opens it. Esc closes it and
  * nothing else, wherever the focus is (a click on a row of it leaves the focus with the page), so the key is heard on its way
- * down, before any shortcut; the focus is then on `opener` again. A press anywhere else closes it too. */
+ * down, before any shortcut; the focus is then on `opener` again. A press anywhere else closes it too. One that a modal
+ * dialog lies over does not hear Esc: the dialog is nearer, and the key is for what is in it. */
 export function useOverlay(open: boolean, close: () => void, root: RefObject<HTMLElement | null>, opener: RefObject<HTMLElement | null>) {
   useEffect(() => {
     if (!open) return;
     const away = (event: PointerEvent) => { if (event.target instanceof Node && !root.current?.contains(event.target)) close(); };
-    const pressed = (event: KeyboardEvent) => escapes(event, () => { close(); opener.current?.focus(); });
+    // Any modal dialog, not the topmost: enough while no overlay lies in a modal that another modal lies over.
+    const pressed = (event: KeyboardEvent) => { if (!document.querySelector('dialog:modal') || root.current?.closest('dialog:modal')) escapes(event, () => { close(); opener.current?.focus(); }); };
     addEventListener('pointerdown', away); addEventListener('keydown', pressed, true);
     return () => { removeEventListener('pointerdown', away); removeEventListener('keydown', pressed, true); };
   }, [open]);

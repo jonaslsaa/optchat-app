@@ -1106,6 +1106,17 @@ test('New Profile…: the menu and the list of profiles open a dialog that makes
     await field.fill('unmade');
     await goesOn(page, 'in the New Profile dialog');
     await closed('Esc');
+    // Asked for by the menu while a list lies open on the page: Esc is the dialog's, which is the nearer of the two, and
+    // the next one the list's.
+    await page.getByRole('button', { name: 'Open a profile' }).click();
+    await page.locator('[role=listbox]').waitFor();
+    await ask(page, 'newProfile');
+    await field.waitFor();
+    await goesOn(page, 'in the New Profile dialog, over the list of profiles');
+    await closed('Esc, over the list of profiles');
+    assert.equal(await page.locator('[role=listbox]').count(), 1);
+    await goesOn(page, 'in the list of profiles');
+    assert.equal(await page.locator('[role=listbox]').count(), 0);
     // The other way in, and the only one in a browser: under the list of profiles. Cancel makes nothing either, and the focus
     // is where it was.
     await page.getByRole('button', { name: 'Open a profile' }).click();
@@ -1135,7 +1146,8 @@ test('New Profile…: the menu and the list of profiles open a dialog that makes
     assert.deepEqual([await profiles(), await page.getByRole('alert').count()], [['alone'], 1]);
 
     // A name that will do: the profile is made, opened in a tab beside the first and put in front, with the keys in its chat.
-    await field.fill('second');
+    // The spaces around it are not part of it.
+    await field.fill(' second ');
     await page.keyboard.press('Enter');
     await closed('Making the profile');
     await page.getByRole('tab', { name: 'second' }).and(page.locator('[aria-selected=true]')).waitFor();

@@ -19,7 +19,7 @@ import { clamp, levels, type Thinking } from '../src/models.ts';
  *   that word's turns and answer.
  * - Profile `busy` fails as a profile another Pi owns, `stuck` ignores the request to shut down, `mute` never answers a command,
  *   `bare` is a Pi without pi-optchat, `old` one whose pi-optchat is from before 0.11.9 and names no role, and in `noisy`
- *   another extension fails. `importing` has an import that was paused: pi-optchat takes no message for it, says why
+ *   another extension fails. `slow` starts only once the file `go` is in FAKE_PI_HOME. `importing` has an import that was paused: pi-optchat takes no message for it, says why
  *   (`notify`) and answers the prompt as `handled`, as it answers a command it ran.
  * - It runs on a model, as Pi does: the one the profile keeps as its main chat's when it owns the profile, else the first it
  *   lists. `set_model` and `set_thinking_level` change it, and an owner keeps the pick in the profile, as pi-optchat does.
@@ -271,8 +271,9 @@ if (!joins && !['busy', 'bare'].includes(profile) && existsSync(directory)) {
   await fakeOwner(directory, () => script.clock ?? Date.now());
 }
 let buffer = '';
-process.stdin.on('data', chunk => {
-  buffer += String(chunk);
+// `slow` takes its time to start: it reads nothing it is sent until the file `go` is in FAKE_PI_HOME.
+const read = () => {
+  if (profile === 'slow' && folder && !existsSync(join(folder, 'go'))) { setTimeout(read, 50); return; }
   for (let end: number; (end = buffer.indexOf('\n')) >= 0; buffer = buffer.slice(end + 1)) {
     const command: Record<string, unknown> = JSON.parse(buffer.slice(0, end)), handler = commands[String(command.type)];
     if (profile === 'mute') continue;
@@ -284,7 +285,8 @@ process.stdin.on('data', chunk => {
     }
     else write({ id: command.id, type: 'response', command: command.type, success: false, error: `Unknown command: ${String(command.type)}` });
   }
-});
+};
+process.stdin.on('data', chunk => { buffer += String(chunk); read(); });
 process.stdin.on('end', () => {
   if (profile === 'stuck') { setInterval(() => {}, 1000); return; }
   if (process.env.FAKE_PI_STOPPED && process.argv.includes('--optchat-profile')) appendFileSync(process.env.FAKE_PI_STOPPED, `${profile} ${joins ? 'window' : 'owner'}\n`);

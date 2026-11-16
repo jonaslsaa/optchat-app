@@ -19,7 +19,7 @@ process.env.FAKE_PI_HOME = join(home, 'pi');
 mkdirSync(join(home, 'pi', 'pi-optchat'), { recursive: true });
 writeFileSync(join(home, 'pi', 'pi-optchat', 'package.json'), JSON.stringify({ name: 'pi-optchat', version: '0.11.13' }));
 writeFileSync(join(home, 'pi', 'state.json'), JSON.stringify({ version: '1.5.2', providers: ['anthropic', 'openai'], packages: { 'npm:pi-optchat': join(home, 'pi', 'pi-optchat') } }));
-for (const name of ['chat', 'beside', 'sheet', 'memory', 'rows', 'menus', 'fields', 'asks', 'windows', 'importing', 'keys', 'spend', 'commands', 'arrows', 'mute', 'said', 'images', 'tabs']) {
+for (const name of ['chat', 'beside', 'sheet', 'memory', 'rows', 'menus', 'fields', 'asks', 'windows', 'importing', 'keys', 'spend', 'commands', 'arrows', 'mute', 'said', 'images', 'tabs', 'slow']) {
   const profile = createProfile(home, name);
   if (['memory', 'windows', 'keys', 'spend', 'arrows'].includes(name)) { writeMemory(profile, 16); continue; }
   seed(profile, TEAM.length, Date.now(), TEAM);
@@ -262,6 +262,23 @@ test('while Pi is still asked for its commands, Enter sends nothing: half a name
   // Closed with Esc, the list is out of the way, and the keys are the message's again.
   await page.keyboard.press('Escape');
   await page.getByText('Asking Pi for its commands…').waitFor({ state: 'detached' });
+});
+
+test('a message is in the chat the moment it is sent, with the agent at work under it while its Pi still starts, and Pi\'s copy takes its place', async () => {
+  // This Pi starts only once it is let go.
+  const page = await open('slow'), box = page.getByRole('textbox', { name: 'Message' }), bubble = page.locator('.bg-message', { hasText: 'Please wait for the release' });
+  await box.fill('Please wait for the release');
+  await page.keyboard.press('Enter');
+  await bubble.waitFor({ timeout: 5000 }).catch(() => assert.fail('The message is not in the chat while Pi starts.'));
+  await page.getByText(/^Starting Pi for/).waitFor();
+  assert.equal(await box.inputValue(), '');
+  const drawn = await bubble.elementHandle();
+  writeFileSync(join(home, 'pi', 'go'), '');
+  // The run began, and its first record is Pi's copy of the message: the same row, once, and the agent is working.
+  await stop(page).waitFor();
+  await page.getByText(/^Working for/).waitFor();
+  assert.equal(await page.getByText(/^Starting Pi for/).count(), 0);
+  assert.deepEqual([await bubble.count(), await drawn?.evaluate(node => node.isConnected)], [1, true]);
 });
 
 test('with the list of commands open ↑ and ↓ are its own, and bring back what you said only once it is closed', async () => {

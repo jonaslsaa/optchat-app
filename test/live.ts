@@ -66,6 +66,10 @@ test('a real Pi turn on a throwaway profile, end to end through the WebSocket', 
   const run = pushed.reduce((live, push) => apply(live, push.record, push.seq), idle());
   assert.deepEqual(chat([], run).map(({ kind, text, date }) => ({ kind, text, date })), messages.map(({ kind, text, date }) => ({ kind, text, date })));
   assert.equal(chat(logged(messages), run).length, messages.length);
+  // Your message is in the chat from when it is sent (`Live.sent`): Pi's own copy of it took its place, so it is there once.
+  const sent = { role: 'user', timestamp: Date.now(), content: [{ type: 'text', text: 'Reply with exactly this word and nothing else: pong' }] };
+  const shown = pushed.reduce<ReturnType<typeof idle>>((live, push) => apply(live, push.record, push.seq), { ...idle(), sent });
+  assert.deepEqual([shown.sent, chat([], shown).filter(item => item.kind === 'user').length], [undefined, 1]);
   // The memory view of that turn, as Pi's files have it: a line for each message, and under a line the message as it was said.
   const view = await client.request('view', { profile: 'live' });
   assert.deepEqual(view.lines, messages.map(({ i, kind, text, date }) => ({ id: i, n: 1, text: `${kind}: ${text}`, from: date, to: date })));

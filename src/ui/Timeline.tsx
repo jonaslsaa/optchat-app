@@ -22,7 +22,7 @@ function selected(content: HTMLElement) {
  * pages of the log are read as you reach the top. `running` says the agent is in a run, and `live` what it is doing in it.
  * `onAgent` opens the agent a report is from; `narrow` is for a chat in a panel, which has no room for wide margins. Where
  * there is a composer to quote into (`onQuote`), a "Quote" button stands by what is selected in a reply or a report. */
-export function Timeline({ items, live, running, profile, older, loading, onAgent, onQuote, narrow = false }: { items: Item[]; live: Live; running: boolean; profile: string; older?: () => void; loading?: boolean; onAgent?: (agent: string) => void; onQuote?: (said: string) => void; narrow?: boolean }) {
+export function Timeline({ items, live, running, starting = false, profile, older, loading, onAgent, onQuote, narrow = false }: { items: Item[]; live: Live; running: boolean; starting?: boolean; profile: string; older?: () => void; loading?: boolean; onAgent?: (agent: string) => void; onQuote?: (said: string) => void; narrow?: boolean }) {
   const scroller = useRef<HTMLDivElement>(null), content = useRef<HTMLDivElement>(null);
   const atEnd = useRef(true), before = useRef({ first: items[0]?.key, height: 0, top: 0, sent: -1 });
   const [away, setAway] = useState(false);
@@ -88,7 +88,9 @@ export function Timeline({ items, live, running, profile, older, loading, onAgen
             : part.type === 'note' ? <NoteRow key={part.key} part={part} />
             : part.type === 'handoff' ? <HandoffRow key={part.key} part={part} writing={running && part === last} />
             : <ReplyRow key={part.key} part={part} working={running && part === last ? working : undefined} latest={part === latest} />)}
-          {running && last && last.type !== 'reply' && last.type !== 'handoff' && <Waiting from={last.items[0].date} activity={live.activity} />}
+          {/* Your message is in the chat before Pi has it (`live.sent`), and the agent is at work on it from then: its Pi may
+              still be starting. */}
+          {(running || live.sent) && last && last.type !== 'reply' && last.type !== 'handoff' && <Waiting from={last.items[0].date} activity={live.activity ?? (starting ? 'Starting Pi' : undefined)} />}
           {quote && onQuote && (
             // The press does not take the selection away, and the click that follows it quotes it. Esc on the button takes
             // both away, and is then not the chat's key.

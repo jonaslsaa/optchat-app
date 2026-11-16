@@ -44,6 +44,9 @@ export interface Live {
   notices: Notice[];
   /** What Pi is doing besides answering: retrying, compacting. */
   activity?: string;
+  /** Your message, from when you send it until Pi has it: it is in the chat at once, Pi's own copy takes its place, and it is
+   * taken back if it was not sent. It is only here: nothing keeps it. */
+  sent?: PiMessage;
 }
 export interface Notice { text: string; kind: 'info' | 'warning' | 'error' }
 export const idle = (): Live => ({ seq: 0, running: false, messages: [], tools: {}, queued: { steering: [], followUp: [] }, status: {}, dialogs: [], notices: [] });
@@ -67,7 +70,7 @@ export function apply(live: Live, record: PiRecord, seq = 0): Live {
     case 'agent_settled': return { ...next, running: false, streaming: undefined, tools: {}, activity: undefined };
     case 'message_start': return isMessage(record.message) && record.message.role === 'assistant' ? { ...next, streaming: { timestamp: record.message.timestamp, blocks: [] } } : next;
     case 'message_update': return live.streaming && isObject(record.assistantMessageEvent) ? { ...next, streaming: { ...live.streaming, blocks: written(live.streaming.blocks, record.assistantMessageEvent) } } : next;
-    case 'message_end': return isMessage(record.message) ? { ...next, messages: [...live.messages, record.message], streaming: record.message.role === 'assistant' ? undefined : live.streaming } : next;
+    case 'message_end': return isMessage(record.message) ? { ...next, messages: [...live.messages, record.message], streaming: record.message.role === 'assistant' ? undefined : live.streaming, sent: record.message.role === 'user' ? undefined : live.sent } : next;
     case 'tool_execution_start': return typeof record.toolCallId === 'string' ? { ...next, tools: { ...live.tools, [record.toolCallId]: '' } } : next;
     case 'tool_execution_update': return typeof record.toolCallId === 'string' && isObject(record.partialResult) ? { ...next, tools: { ...live.tools, [record.toolCallId]: words(record.partialResult.content) } } : next;
     case 'tool_execution_end': { const { [String(record.toolCallId)]: _, ...tools } = live.tools; return { ...next, tools }; }
@@ -114,7 +117,7 @@ export function replay({ ui, records }: { ui: PiRecord[]; records: { seq: number
 }
 /** A window whose Pi has stopped: what its run said stays, and nothing is running, being written or asked any more. Pi can die
  * in a run, and then no `agent_settled` says so. */
-export const stopped = (live: Live): Live => ({ ...live, running: false, streaming: undefined, tools: {}, dialogs: [], activity: undefined });
+export const stopped = (live: Live): Live => ({ ...live, running: false, streaming: undefined, tools: {}, dialogs: [], activity: undefined, sent: undefined });
 /** Without a notice that was dismissed, or without any: they were read, or the next message is on its way. */
 export function quiet(live: Live, text?: string): Live { return { ...live, notices: text === undefined ? [] : live.notices.filter(notice => notice.text !== text) }; }
 /** Without the dialog `id`: it was answered, or its time ran out. */
@@ -175,7 +178,7 @@ export const spoken = (messages: readonly PiMessage[]): Item[] => told(messages)
  * number the log will give them. */
 export function chat(before: readonly Item[], live: Live): Item[] {
   const dates = new Set(before.map(item => item.date)), next = (before.at(-1)?.key ?? -1) + 1;
-  const last = live.messages.findLastIndex(message => dates.has(date(message))), lines = told(live.messages, live.streaming);
+  const last = live.messages.findLastIndex(message => dates.has(date(message))), lines = told(live.sent ? [...live.messages, live.sent] : live.messages, live.streaming);
   // The log does not name a tool call; the run does, and what a call that is still running has printed goes by that name.
   const calls = new Map(live.messages.slice(0, last + 1).map((message, at) => [date(message), lines[at].flatMap(line => line.call ?? [])]));
   const named = before.map(item => { const call = item.kind === 'tool' ? calls.get(item.date)?.shift() : undefined; return call ? { ...item, call } : item; });

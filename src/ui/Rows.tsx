@@ -135,7 +135,8 @@ export function Doing({ from, activity, thinking }: { from: string; activity?: s
     <span className={cn('shrink-0', activity && 'shimmer')}>{activity ?? (thinking?.now ? 'Thinking' : 'Working')} for <Timer from={from} /></span>
     {thinking?.now && !open && <span className="min-w-0 flex-1 truncate opacity-70">{thought?.split('\n').at(-1)}</span>}
   </>;
-  if (!thought) return <div className="flex h-6 min-w-0 items-baseline gap-2 px-1 text-muted-foreground text-sm tabular-nums leading-relaxed">{line}</div>;
+  // The line is the page's, not the chat's: find leaves it out (`data-no-find`, find.ts), as it leaves out the button it is below.
+  if (!thought) return <div data-no-find className="flex h-6 min-w-0 items-baseline gap-2 px-1 text-muted-foreground text-sm tabular-nums leading-relaxed">{line}</div>;
   return (
     <>
       <Fold open={open} toggle={() => setOpen(!open)}><span className="flex min-w-0 items-baseline gap-2 text-start">{line}</span></Fold>

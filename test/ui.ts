@@ -507,7 +507,10 @@ test('⌘F finds in the chat: what is typed is marked wherever it is written and
     return [CSS.highlights.get('find')?.size ?? 0, at.startContainer.parentElement!.contains(there)] as const;
   });
   try {
-    await run(page);
+    // The agent at work, on a reply that is held with half of it written, and again with all of it written and not yet ended.
+    await page.getByRole('textbox', { name: 'Message' }).fill('wait slowly');
+    await page.keyboard.press('Enter');
+    await stop(page).waitFor();
     await page.keyboard.press('ControlOrMeta+f');
     assert.equal(await focused(page), 'Find in chat');
     // Eleven messages say it, all above what the chat shows at its end: it is at the nearest, which is the last, and brings it
@@ -534,6 +537,12 @@ test('⌘F finds in the chat: what is typed is marked wherever it is written and
     await page.keyboard.press('Enter');
     await page.keyboard.press('Enter');
     await counts('1/2');
+    // The page's own words are not the chat's: the line that says the agent is working, and what a button says.
+    for (const text of ['working for', 'full message']) {
+      await page.keyboard.press('ControlOrMeta+a');
+      await page.keyboard.type(text);
+      await counts('0/0');
+    }
     // A text that is nowhere leaves the chat where it was before it was typed, though half of it was found further up.
     const end = () => page.evaluate(() => { const chat = document.querySelector('main .overflow-y-auto')!; return chat.scrollHeight - chat.scrollTop - chat.clientHeight; });
     await page.getByRole('button', { name: 'Scroll to end' }).click();
@@ -564,7 +573,12 @@ test('⌘F finds in the chat: what is typed is marked wherever it is written and
     await page.keyboard.press('ControlOrMeta+f');
     await page.keyboard.type('reply');
     await counts('0/0');
+    // The rest of the reply comes into the text that is there, and is found while the agent is still writing it.
     await control.request('command', { window: 'finds/main', command: { type: 'release' } });
+    await counts('1/1');
+    assert.ok(await stop(page).isVisible(), 'the reply had ended');
+    await control.request('command', { window: 'finds/main', command: { type: 'release' } });
+    await stop(page).waitFor({ state: 'detached' });
     await counts('1/1');
     // The chat has its newest messages only. The memory has them all, and is searched for the same text from the bar.
     await bar.getByRole('button', { name: 'Search memory for “reply”' }).click();
@@ -589,8 +603,16 @@ test('⌘F finds in the chat: what is typed is marked wherever it is written and
     await paged.getByRole('search', { name: 'Find in chat' }).getByText('1/1', { exact: true }).waitFor();
     await paged.waitForTimeout(500);
     assert.deepEqual([await earlier.isVisible(), await paged.getByText('message 59', { exact: true }).count()], [true, 0], 'find read an older page');
+    // The match it is at stays the one it is at when the page above is read, which has one more before it.
+    const said = paged.getByRole('search', { name: 'Find in chat' }).locator('[aria-live]'), at = () => paged.evaluate(() => [...CSS.highlights.get('find-at') ?? []][0]?.startContainer.textContent);
+    await paged.keyboard.press('ControlOrMeta+a');
+    await paged.keyboard.type('message 7');
+    await paged.keyboard.press('Shift+Enter');
+    await said.getByText('9/10', { exact: true }).waitFor();
+    assert.equal(await at(), 'message 78');
     await paged.evaluate(() => { const chat = document.querySelector('main .overflow-y-auto')!; chat.scrollTop = chat.scrollTop ? 0 : 1; });
-    await paged.getByText('message 59', { exact: true }).waitFor({ timeout: 3000 }).catch(() => assert.fail('Reading back to the top read no older page.'));
+    await said.getByText('10/11', { exact: true }).waitFor({ timeout: 3000 }).catch(async () => assert.fail(`Reading back to the top read no older page, or the match it was at is another: the bar says ${await said.textContent()}.`));
+    assert.equal(await at(), 'message 78');
   } finally { control.close(); }
 });
 

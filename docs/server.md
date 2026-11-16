@@ -15,6 +15,7 @@ It needs Node 22.19 or newer, and Pi with pi-optchat 0.11.13 or newer in it (`pi
 ```bash
 npm run check             # types
 npm test                  # against a fake Pi: no model, no network
+npm run test:ui           # the built page in your installed Chrome, headless, against the fake Pi: keys and focus
 npm run test:live         # real turns through your Pi and its model login, on throwaway profiles (about a cent)
 PI_OPTCHAT=<checkout> npm run test:live   # the same through a pi-optchat checkout, not the one installed in Pi
 ```

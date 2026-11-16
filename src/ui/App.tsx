@@ -61,7 +61,9 @@ function Profile({ state, profile, onSettings }: { state: State; profile: string
     <div className="flex min-h-0 flex-1">
       {sidebar && <div className="max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:z-40 max-md:shadow-xl"><Sidebar state={state} profile={profile} selected={window.id} /></div>}
       {sidebar && <button type="button" aria-label="Close the sidebar" onClick={() => setSidebar(false)} className="fixed inset-0 z-30 bg-black/20 md:hidden" />}
-      <main className="flex min-w-0 flex-1 flex-col bg-background">
+      {/* The keys in this column are the chat's, or the memory view's while that stands in its place (keys.ts): its top row
+          too, where the focus is right after the memory view is chosen. */}
+      <main data-keys={memory ? 'memory' : 'chat'} className="flex min-w-0 flex-1 flex-col bg-background">
         <header className={cn('flex h-(--topbar-height) shrink-0 items-center gap-2 px-3 sm:px-5', !covered && 'window-bar', sidebar ? 'max-md:window-start' : 'window-start')}>
           <Button variant="ghost-muted" size="icon-sm" aria-label="Toggle the sidebar" aria-pressed={sidebar} onClick={() => setSidebar(!sidebar)}><PanelLeftIcon /></Button>
           {state.tabs.length === 1 && <><ProfileName state={state} profile={profile} /><span aria-hidden="true" className="-ms-1.5 text-muted-foreground/50 text-sm">/</span></>}
@@ -100,7 +102,7 @@ function Profile({ state, profile, onSettings }: { state: State; profile: string
 }
 export function App() {
   const state = useApp(), [settings, setSettings] = useState(false), needs = missing(state);
-  // The settings are in place of the chat, so Esc there closes them: a run is stopped from where it can be seen.
+  // The settings are in place of the chat, so Esc there closes them: a run is stopped from the chat, where it can be seen.
   useShortcuts(() => ({ 'mod+,': () => setSettings(open => !open), ...settings && { escape: () => setSettings(false) } }), [settings]);
   return (
     <div className="flex h-dvh flex-col">

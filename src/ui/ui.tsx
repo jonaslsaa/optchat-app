@@ -1,5 +1,5 @@
 import { CheckIcon, CopyIcon, LoaderCircleIcon } from 'lucide-react';
-import { useState, useSyncExternalStore, type ComponentProps, type ReactNode } from 'react';
+import { useLayoutEffect, useRef, useState, useSyncExternalStore, type ComponentProps, type ReactNode } from 'react';
 import type { WindowState } from '../protocol.ts';
 import { extendTailwindMerge, type ClassNameValue } from 'tailwind-merge';
 
@@ -45,6 +45,16 @@ export function Choice<T extends string | boolean>({ label, name, title, options
       ))}
     </div>
   );
+}
+/** "Show 8 more", under a list (the `ul` before it) that shows `step` at a time and has `more` left. It keeps the focus while
+ * there are more to show. Once there are none it is gone, and the focus it had goes to the list's last row and not to the page. */
+export function More({ more, step, onMore }: { more: number; step: number; onMore: () => void }) {
+  const button = useRef<HTMLButtonElement>(null);
+  useLayoutEffect(() => {
+    const here = button.current;
+    return () => { if (here && here === document.activeElement) here.previousElementSibling?.querySelector<HTMLElement>('li:last-child :is(a, button)')?.focus(); };
+  }, []);
+  return <Button ref={button} variant="ghost-muted" size="xs" className="mx-2.5 mt-2" onClick={onMore}>Show {Math.min(more, step)} more</Button>;
 }
 /** One of the things the panel beside the main chat lists, under a small heading, with a line between it and the one above.
  * One with nothing to list is not drawn at all. */

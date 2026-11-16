@@ -16,6 +16,7 @@
     "check": "tsc --noEmit && tsc --noEmit -p src/ui",
     "test": "node --test --test-timeout=60000 test/*.test.ts",
     "test:live": "node --test test/live.ts",
+    "test:ui": "node --test --test-timeout=120000 test/ui.ts",
     "screenshots": "node scripts/screenshots.ts",
     "build:desktop": "vite build && vite build -c vite.desktop.config.ts",
     "desktop": "npm run build:desktop && electron .",

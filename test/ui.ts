@@ -1,0 +1,276 @@
+import assert from 'node:assert/strict';
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { after, before, test } from 'node:test';
+import { chromium, type Browser, type Page } from 'playwright-core';
+import { build } from 'vite';
+import { agents, seed, TEAM } from '../scripts/seed.ts';
+import { startServer } from '../src/server/server.ts';
+import { createProfile, temporaryHome, writeMemory, writeRun } from './support.ts';
+
+/** `npm run test:ui`: whose a key is and where the focus goes, which only a browser decides. The page is built and driven in
+ * your installed Chrome, headless, against the fake Pi and throwaway profiles under /tmp: no model, no network, nothing of
+ * yours is read. Each test has a profile of its own, with the agents and the chat of the screenshots' `team`. */
+const home = temporaryHome(), pi = { command: process.execPath, args: [join(import.meta.dirname, 'fake-pi.ts')] };
+// A machine that is set up: Pi with pi-optchat in it and two providers logged in, so there are models to pick.
+process.env.FAKE_PI_HOME = join(home, 'pi');
+mkdirSync(join(home, 'pi', 'pi-optchat'), { recursive: true });
+writeFileSync(join(home, 'pi', 'pi-optchat', 'package.json'), JSON.stringify({ name: 'pi-optchat', version: '0.11.12' }));
+writeFileSync(join(home, 'pi', 'state.json'), JSON.stringify({ version: '1.5.2', providers: ['anthropic', 'openai'], packages: { 'npm:pi-optchat': join(home, 'pi', 'pi-optchat') } }));
+for (const name of ['chat', 'beside', 'sheet', 'memory', 'rows', 'menus', 'fields']) {
+  const profile = createProfile(home, name);
+  if (name === 'memory') { writeMemory(profile, 16); continue; }
+  seed(profile, TEAM.length, Date.now(), TEAM);
+  agents(profile, Date.now());
+  // More that ended than the list shows at first.
+  for (let i = 0; i < 6; i++) writeRun(profile, { id: `e000000${i}`, title: `An older agent ${i}`, state: 'completed', started: Date.now() - 9_000_000 - i * 1000, ended: Date.now() - 8_000_000, report: 'Done.' });
+}
+mkdirSync(join(home, 'new'));
+
+let server: Awaited<ReturnType<typeof startServer>>, fresh: typeof server, browser: Browser;
+before(async () => {
+  await build({ logLevel: 'warn' });
+  server = await startServer({ home, app: join(home, 'app'), cwd: home, pi });
+  // A machine with no profile yet, for the first one's name.
+  fresh = await startServer({ home: join(home, 'new'), app: join(home, 'new', 'app'), cwd: home, pi });
+  browser = await chromium.launch({ channel: 'chrome' });
+});
+after(async () => { await browser?.close(); await Promise.all([server?.close(), fresh?.close()]); });
+
+const WIDE = { width: 1280, height: 800 }, NARROW = { width: 420, height: 800 };
+/** A page with one profile open, or the first run's page where there is none. */
+async function open(profile?: string, viewport = WIDE) {
+  const context = await browser.newContext({ viewport, reducedMotion: 'reduce' });
+  if (profile) await context.addInitScript(saved => localStorage.setItem('optchat-app', saved), JSON.stringify({ tabs: [profile], profile, selected: {} }));
+  const page = await context.newPage();
+  await page.goto(profile ? server.page : fresh.page);
+  if (profile) await page.getByRole('textbox', { name: 'Message' }).waitFor();
+  return page;
+}
+const stop = (page: Page) => page.getByRole('button', { name: 'Stop the agent' });
+/** The main agent at work until it is stopped. */
+async function run(page: Page) {
+  await page.getByRole('textbox', { name: 'Message' }).fill('wait');
+  await page.keyboard.press('Enter');
+  await stop(page).waitFor();
+}
+/** Esc stops the main agent. */
+async function stops(page: Page, where: string) {
+  await page.keyboard.press('Escape');
+  await stop(page).waitFor({ state: 'detached', timeout: 5000 }).catch(() => assert.fail(`Esc ${where} did not stop the run.`));
+}
+/** Esc, and the main agent is still at work a moment later. */
+async function goesOn(page: Page, where: string) {
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(400);
+  assert.ok(await stop(page).isVisible(), `Esc ${where} stopped the run.`);
+}
+/** What has the focus, as a reader would name it, and `the page` when nothing has. */
+const focused = (page: Page) => page.evaluate(() => {
+  const at = document.activeElement;
+  return !at || at === document.body ? 'the page' : at.getAttribute('aria-label') ?? at.textContent?.trim().slice(0, 40) ?? at.tagName;
+});
+/** The focus on nothing, as when what had it is gone. */
+const lose = (page: Page) => page.evaluate(() => { if (document.activeElement instanceof HTMLElement) document.activeElement.blur(); });
+const panel = (page: Page) => page.getByLabel('Agents and GitHub', { exact: true }).last();
+const agent = (page: Page, title: string) => panel(page).getByRole('button', { name: title });
+const back = (page: Page) => page.getByRole('button', { name: 'Back to the lists' });
+
+test('Esc stops the run when the keys are in the chat, or outside every part that has its own: on the windows at the left, after a notice is dismissed', async () => {
+  const page = await open('chat');
+  await run(page);
+  await stops(page, 'in the composer');
+  await run(page);
+  await page.getByText('Started two agents.').click();
+  await stops(page, 'after a click on the transcript');
+  await run(page);
+  await page.getByRole('button', { name: 'Toggle the sidebar' }).focus();
+  await stops(page, 'on a button of the chat\'s top row');
+  await run(page);
+  await lose(page);
+  await stops(page, 'with the focus on nothing');
+  // The windows at the left have no keys of their own.
+  await run(page);
+  await page.getByRole('button', { name: 'New window' }).focus();
+  await stops(page, 'on the sidebar');
+  await run(page);
+  await page.getByRole('button', { name: 'New window' }).focus();
+  await lose(page);
+  await stops(page, 'with the focus lost on the sidebar');
+  // A notice that is dismissed takes its button, and the focus, with it.
+  await run(page);
+  await page.getByRole('button', { name: 'Settings' }).click();
+  await page.getByRole('textbox', { name: 'Folder for new windows' }).fill('/no/such/folder');
+  await page.keyboard.press('Enter');
+  await page.getByRole('button', { name: 'Dismiss' }).waitFor();
+  await page.getByRole('button', { name: 'Close the settings' }).click();
+  await stop(page).waitFor();
+  await page.getByRole('button', { name: 'Dismiss' }).click();
+  assert.equal(await focused(page), 'the page');
+  await stops(page, 'after a notice was dismissed');
+  // Stopped with its button, the focus is where the next message is typed.
+  await run(page);
+  await stop(page).click();
+  await stop(page).waitFor({ state: 'detached' });
+  assert.equal(await focused(page), 'Message');
+});
+
+test('Esc in the panel beside the chat is the panel\'s: back from an agent to the list, else nothing, and the run goes on', async () => {
+  const page = await open('beside');
+  await run(page);
+  await page.getByRole('button', { name: 'Agents and GitHub' }).click();
+  await page.getByRole('button', { name: 'Close the panel' }).focus();
+  await goesOn(page, 'on the panel\'s Close button');
+  await agent(page, 'How T3 Code reconnects').waitFor();
+  // An agent is opened: the row that had the focus is gone.
+  await agent(page, 'How T3 Code reconnects').click();
+  await back(page).waitFor();
+  await goesOn(page, 'with an agent just opened');
+  await agent(page, 'How T3 Code reconnects').waitFor();
+  assert.equal(await back(page).count(), 0);
+  // A click on the agent's chat, which nothing in takes the focus.
+  await agent(page, 'How T3 Code reconnects').click();
+  await panel(page).getByText('Sequence numbers are per thread').click();
+  await goesOn(page, 'after a click on the agent\'s chat');
+  await agent(page, 'How T3 Code reconnects').waitFor();
+  // The focus lost, as when what had it went away: the keys are still where they were.
+  await agent(page, 'How T3 Code reconnects').click();
+  await back(page).waitFor();
+  await lose(page);
+  await goesOn(page, 'with the focus lost in the panel');
+  await agent(page, 'How T3 Code reconnects').waitFor();
+  // The box of an agent that has ended has nothing to interrupt: the key is the panel's.
+  await agent(page, 'How T3 Code reconnects').click();
+  await page.getByRole('textbox', { name: 'Tell the agent' }).focus();
+  await goesOn(page, 'in the box of an agent that has ended');
+  await agent(page, 'How T3 Code reconnects').waitFor();
+  // In the box under an agent's chat, Esc interrupts that agent: nearer than the panel, so its chat stays open.
+  await agent(page, 'Draft the release notes').click();
+  await page.getByRole('textbox', { name: 'Tell the agent' }).focus();
+  await goesOn(page, 'in an agent\'s box');
+  await panel(page).getByText('Paused ·').waitFor();
+  assert.equal(await back(page).count(), 1);
+  // Back in the chat, the key is the chat's again.
+  await page.getByText('Started two agents.').click();
+  await stops(page, 'back on the transcript');
+  assert.equal(await back(page).count(), 1);
+});
+
+test('Esc in the panel as a sheet goes back from an agent to the list, then closes the sheet, and the run goes on', async () => {
+  const page = await open('sheet', NARROW);
+  await run(page);
+  await page.getByRole('button', { name: 'Agents and GitHub' }).click();
+  await agent(page, 'How T3 Code reconnects').click();
+  await back(page).waitFor();
+  await goesOn(page, 'with an agent open');
+  await agent(page, 'How T3 Code reconnects').waitFor();
+  assert.equal(await page.locator('dialog[open]').count(), 1, 'the sheet is still open');
+  // In an agent's box it interrupts that agent, in the sheet as beside the chat.
+  await agent(page, 'Draft the release notes').click();
+  await page.getByRole('textbox', { name: 'Tell the agent' }).focus();
+  await goesOn(page, 'in an agent\'s box');
+  await panel(page).getByText('Paused ·').waitFor();
+  await back(page).click();
+  await goesOn(page, 'on the lists');
+  assert.equal(await page.locator('dialog[open]').count(), 0, 'the sheet has closed');
+  assert.equal(await focused(page), 'Agents and GitHub');
+});
+
+test('Esc in the memory view does nothing to the run; in the composer under it, it stops it', async () => {
+  const page = await open('memory');
+  await run(page);
+  await page.getByRole('radiogroup', { name: 'What the page shows' }).getByText('Memory').click();
+  await page.getByRole('heading', { name: 'Memory view' }).waitFor();
+  await goesOn(page, 'with the memory view just shown');
+  await page.locator('[data-line]').first().click();
+  await goesOn(page, 'on a line of it');
+  await lose(page);
+  await goesOn(page, 'with the focus lost');
+  // Its search: Esc ends one, and with none on does nothing, in the box as anywhere in the view.
+  const found = page.getByRole('region', { name: 'Messages found' });
+  await page.keyboard.press('ControlOrMeta+f');
+  assert.equal(await focused(page), 'Search the memory');
+  await goesOn(page, 'in the search box, with nothing in it');
+  await page.keyboard.type('message 1');
+  await found.waitFor();
+  await goesOn(page, 'with a search on');
+  assert.equal(await found.count(), 0, 'the search has ended');
+  assert.equal(await focused(page), 'Search the memory');
+  await goesOn(page, 'in the search box again');
+  await page.getByRole('textbox', { name: 'Message' }).focus();
+  await stops(page, 'in the composer');
+});
+
+for (const [where, viewport] of [['beside the chat', WIDE], ['as a sheet', NARROW]] as const) test(`the focus stays in the panel ${where}: after Show more, after an agent is opened, and after the way back`, async () => {
+  const page = await open('rows', viewport), inside = () => page.evaluate(() => document.activeElement?.closest('[aria-label="Agents and GitHub"]:not(button)') !== null);
+  await page.getByRole('button', { name: 'Agents and GitHub' }).click();
+  // The last of them are shown, and the button that showed them is gone.
+  await page.getByRole('button', { name: /^Show \d more$/ }).click();
+  await agent(page, 'An older agent 5').waitFor();
+  assert.equal(await inside(), true, 'after Show more');
+  assert.match(await focused(page), /^An older agent/, 'on a row that was shown');
+  await agent(page, 'How T3 Code reconnects').click();
+  await back(page).waitFor();
+  assert.equal(await focused(page), 'Back to the lists');
+  await back(page).click();
+  await agent(page, 'How T3 Code reconnects').waitFor();
+  assert.match(await focused(page), /^.*How T3 Code reconnects/);
+  assert.equal(await inside(), true, 'after the way back');
+});
+
+test('a menu that lies over the page takes Esc and gives the focus back to its button, and the run goes on', async () => {
+  const page = await open('menus');
+  await run(page);
+  // The profiles, with the arrows through them.
+  await page.getByRole('button', { name: 'Open a profile' }).click();
+  await page.getByRole('listbox', { name: 'Profiles' }).waitFor();
+  assert.equal(await focused(page), 'menus');
+  await page.keyboard.press('ArrowDown');
+  assert.equal(await focused(page), 'rows');
+  await page.keyboard.press('ArrowUp');
+  await page.keyboard.press('ArrowUp');
+  assert.equal(await focused(page), 'memory');
+  await goesOn(page, 'in the profile menu');
+  assert.equal(await page.getByRole('listbox', { name: 'Profiles' }).count(), 0);
+  assert.equal(await focused(page), 'Open a profile');
+  // The models: a click on a row leaves the focus with the page.
+  await page.getByRole('button', { name: 'Model' }).click();
+  await page.getByRole('option', { name: 'Claude Sonnet 5.5' }).click();
+  await page.getByRole('button', { name: 'Model' }).getByText('Claude Sonnet 5.5').waitFor();
+  await goesOn(page, 'in the model list');
+  assert.equal(await page.getByRole('dialog', { name: 'Model' }).count(), 0);
+  assert.equal(await focused(page), 'Model');
+  // The key is the list's alone, wherever the focus went: in the box under an agent's chat it does not interrupt the agent.
+  await page.getByRole('button', { name: 'Agents and GitHub' }).click();
+  await agent(page, 'Draft the release notes').click();
+  await page.getByRole('button', { name: 'Model' }).click();
+  await page.getByRole('textbox', { name: 'Tell the agent' }).focus();
+  await goesOn(page, 'in the model list, with the focus in an agent\'s box');
+  assert.equal(await page.getByRole('dialog', { name: 'Model' }).count(), 0);
+  assert.equal(await panel(page).getByText('Working ·').count(), 1, 'the agent works on');
+  assert.equal(await back(page).count(), 1, 'its chat is still open');
+});
+
+test('a field keeps the focus when Enter saves it, and when what was typed is refused', async () => {
+  const page = await open('fields');
+  await page.getByRole('button', { name: 'Settings' }).click();
+  const folder = page.getByRole('textbox', { name: 'Folder for new windows' });
+  await folder.fill('/tmp');
+  await page.keyboard.press('Enter');
+  assert.equal(await focused(page), 'Folder for new windows');
+  const most = page.getByRole('textbox', { name: 'Max active agents' });
+  await most.fill('3');
+  await page.keyboard.press('Enter');
+  await page.getByText('Saved.').waitFor();
+  assert.equal(await focused(page), 'Max active agents');
+  await most.fill('0');
+  await page.keyboard.press('Enter');
+  await page.getByRole('alert').filter({ hasText: 'Max active agents' }).waitFor();
+  assert.equal(await focused(page), 'Max active agents');
+  // The first profile's name, refused: the button that was pressed is off while it is asked, and the focus is not lost with it.
+  const first = await open();
+  await first.getByRole('textbox', { name: 'Profile name' }).fill('not a name');
+  await first.getByRole('button', { name: 'Create profile' }).click();
+  await first.getByRole('alert').waitFor();
+  assert.equal(await focused(first), 'Profile name');
+});

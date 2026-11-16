@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="864" viewBox="0 0 640 432">
+  <!-- The dmg's window, light: the picture of dmg-dark.svg on cream (the rules are in that file). The Finder writes the
+       two names in black, which reads here as it is, so there are no plates under them. -->
+  <rect width="640" height="432" fill="#fbf4e6"/>
+  <!-- The icon's rings, going on past it. -->
+  <circle cx="238.5" cy="159" r="690" fill="#faf1e0"/>
+  <circle cx="224.3" cy="169.9" r="575" fill="#f9eeda"/>
+  <circle cx="211.2" cy="179.8" r="470" fill="#f8ead2"/>
+  <circle cx="199.5" cy="188.9" r="375" fill="#f7e6c9"/>
+  <circle cx="188.9" cy="196.9" r="290" fill="#f5e1bf"/>
+  <circle cx="179.6" cy="204.1" r="215" fill="#f4dcb4"/>
+  <circle cx="171.6" cy="210.2" r="150" fill="#f2d6a8"/>
+  <circle cx="164.9" cy="215.4" r="96" fill="#f0d09b"/>
+  <text x="58.5" y="41" fill="#3a1806" font-family="Helvetica" font-size="15" font-weight="700" text-anchor="end">Opt</text>
+  <text x="59" y="41" fill="#3a1806" font-family="Helvetica" font-size="15">Chat</text>
+  <text x="320" y="104" fill="#2a1206" font-family="Helvetica" font-size="23" font-weight="700" text-anchor="middle">Drag OptChat into Applications.</text>
+  <path d="M262 207Q320 181 378 207M365.5 193.5L378 207L359.5 211.5" stroke="#a2470d" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="320" y="352" fill="#8a6b52" font-family="Helvetica" font-size="12" text-anchor="middle">Then open it from Applications.</text>
+</svg>

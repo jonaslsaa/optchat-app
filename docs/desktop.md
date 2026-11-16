@@ -34,6 +34,12 @@ npm run dist      # the same build as OptChat.app and a dmg, in release/ (macOS,
 
 The icon is `build/icon.icns`, where electron-builder looks for it; it is cut from `build/icon.svg`, and `build/icon.png` is the page's icon and the Dock's when the app runs from the checkout.
 
+The dmg opens as a window with a picture, `build/dmg-dark.png` (and its `@2x`), in the icon's browns: the name, "Drag OptChat into Applications.", an arrow between the two icons and a line under them. `build/dmg-dark.svg` is its source, and `npm run dmg:art` cuts the pictures from it with `sips`; they are committed, so a build needs nothing more. Three things about the Finder decide how it is drawn:
+
+- **The window is the picture's size**, 640 by 432 with the title bar, and the picture is never scaled. The lowest strip of it (36 px on macOS 27) is therefore never seen.
+- **The icons' places are part of the picture.** `electron-builder.yml` puts them at (166, 214) and (474, 214), 120 px each, and the arrow and the plates are drawn for those.
+- **The Finder writes the names under the icons in black** in a window with a picture, in light mode and in dark, and no setting changes it. On the dark picture each name therefore has a light plate under it. `build/dmg-light.svg` is the same picture on cream, where black reads without one.
+
 ## Updates
 
 The packaged app updates itself from this repository's GitHub releases. `src/desktop/update.ts` is all of it, and `main.ts` says when it looks and what it asks.

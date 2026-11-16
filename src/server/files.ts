@@ -14,7 +14,8 @@ export function inside(cwd: string, path: string): string | undefined {
 }
 
 type Line = (file: string, line?: number) => string[];
-const goto: Line = (file, line) => ['-g', line ? `${file}:${line}` : file];
+// `-g` only with a line: with it, a file whose name ends in `:12` would be read as line 12 of another.
+const goto: Line = (file, line) => line ? ['-g', `${file}:${line}`] : [file];
 const jetbrains: Line = (file, line) => line ? ['--line', String(line), file] : [file];
 /** The editors a file opens in, as T3 Code lists them (its `contracts/src/editor.ts`): how each is told the line, the command it
  * puts on your PATH, and the one inside its app, since most never put VS Code's `code` there. Finder shows the file in its
@@ -24,13 +25,13 @@ export const EDITORS = {
   vscode: { label: 'VS Code', command: 'code', app: 'Visual Studio Code.app/Contents/Resources/app/bin/code', args: goto },
   'vscode-insiders': { label: 'VS Code Insiders', command: 'code-insiders', app: 'Visual Studio Code - Insiders.app/Contents/Resources/app/bin/code-insiders', args: goto },
   vscodium: { label: 'VSCodium', command: 'codium', app: 'VSCodium.app/Contents/Resources/app/bin/codium', args: goto },
-  windsurf: { label: 'Windsurf', command: 'windsurf', app: 'Windsurf.app/Contents/Resources/app/bin/windsurf', args: goto },
-  zed: { label: 'Zed', command: 'zed', app: 'Zed.app/Contents/MacOS/cli', args: (file, line) => [line ? `${file}:${line}` : file] },
+  // Its app first, as T3 Code does: a `zed` on the PATH can be OpenZFS's event daemon.
+  zed: { label: 'Zed', command: 'zed', app: 'Zed.app/Contents/MacOS/cli', appFirst: true, args: (file, line) => [line ? `${file}:${line}` : file] },
   idea: { label: 'IntelliJ IDEA', command: 'idea', app: 'IntelliJ IDEA.app/Contents/MacOS/idea', args: jetbrains },
   webstorm: { label: 'WebStorm', command: 'webstorm', app: 'WebStorm.app/Contents/MacOS/webstorm', args: jetbrains },
   pycharm: { label: 'PyCharm', command: 'pycharm', app: 'PyCharm.app/Contents/MacOS/pycharm', args: jetbrains },
   finder: { label: 'Finder', command: '/usr/bin/open', args: file => ['-R', file] },
-} satisfies Record<string, { label: string; command: string; app?: string; args: Line }>;
+} satisfies Record<string, { label: string; command: string; app?: string; appFirst?: true; args: Line }>;
 export type EditorId = keyof typeof EDITORS;
 export const isEditor = (id: string): id is EditorId => Object.hasOwn(EDITORS, id);
 const IDS = Object.keys(EDITORS).filter(isEditor);
@@ -48,8 +49,9 @@ const runs = (file: string) => { try { accessSync(file, constants.X_OK); return 
 export function installed({ env, extra, apps }: Places = PLACES): Installed {
   const folders = [...(env.PATH ?? '').split(delimiter).filter(isAbsolute), ...extra], yours = [env.VISUAL, env.EDITOR].map(first).filter(isAbsolute);
   return new Map(IDS.flatMap(id => {
-    const { command, app }: { command: string; app?: string } = EDITORS[id];
-    const at = isAbsolute(command) ? [command] : [...yours.filter(path => basename(path) === command), ...folders.map(folder => join(folder, command)), ...app ? apps.map(folder => join(folder, app)) : []];
+    const { command, app, appFirst }: { command: string; app?: string; appFirst?: true } = EDITORS[id];
+    const onPath = folders.map(folder => join(folder, command)), inApp = app ? apps.map(folder => join(folder, app)) : [];
+    const at = isAbsolute(command) ? [command] : [...yours.filter(path => basename(path) === command), ...appFirst ? [...inApp, ...onPath] : [...onPath, ...inApp]];
     const found = at.find(runs);
     return found ? [[id, found] as const] : [];
   }));
@@ -60,7 +62,7 @@ export type Installed = Map<EditorId, string>;
  * (a terminal editor, vim or nano, has no terminal to run in), else VS Code, else the first there is. Finder is only ever
  * picked. */
 export function preferred(found: Installed, choice?: string, env: NodeJS.ProcessEnv = process.env): EditorId | undefined {
-  const named = [env.VISUAL, env.EDITOR].map(command => basename(first(command))).map(name => IDS.find(id => id !== 'finder' && EDITORS[id].command === name));
+  const named = [env.VISUAL, env.EDITOR].map(command => basename(first(command))).map(name => IDS.find(id => EDITORS[id].command === name));
   return [choice, ...named, 'vscode', ...IDS.filter(id => id !== 'finder')].find((id): id is EditorId => id !== undefined && isEditor(id) && found.has(id));
 }
 /** How `id`, started as `found` has it, opens `file` at `line`; with none, the Mac's text editor does (`open -t`): `open` on

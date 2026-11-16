@@ -10,14 +10,15 @@ import { Button, cn } from './ui.tsx';
  * is "Open", in the Mac's text editor. Esc closes the list and nothing else (`useOverlay`). */
 export function OpenIn({ onOpen }: { onOpen: (editor?: string) => void }) {
   const [found, setFound] = useState<Result<'editors'>>(), [open, setOpen] = useState(false);
-  const root = useRef<HTMLDivElement>(null), chevron = useRef<HTMLButtonElement>(null);
+  const root = useRef<HTMLDivElement>(null), main = useRef<HTMLButtonElement>(null), chevron = useRef<HTMLButtonElement>(null);
   useEffect(() => { void app.editors().then(setFound); }, []);
   useOverlay(open, () => setOpen(false), root, chevron);
   const current = found?.editors.find(editor => editor.id === found.current);
-  const pick = (id: string) => { setOpen(false); setFound(found => found && { ...found, current: id }); onOpen(id); };
+  // The option picked goes with the list, so the focus goes to the button that opens in it now.
+  const pick = (id: string) => { setOpen(false); setFound(found => found && { ...found, current: id }); main.current?.focus(); onOpen(id); };
   return (
     <div ref={root} className="relative flex">
-      <Button variant="outline" className={cn(found?.editors.length && 'rounded-r-none')} onClick={() => onOpen()}>
+      <Button ref={main} variant="outline" className={cn(found?.editors.length && 'rounded-r-none')} onClick={() => onOpen()}>
         <SquareArrowOutUpRightIcon />{current ? `Open in ${current.label}` : 'Open'}
       </Button>
       {!!found?.editors.length && (

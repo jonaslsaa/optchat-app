@@ -669,12 +669,23 @@ test('the instructions open in your editor, what was typed is saved first, and t
   await page.getByRole('status').filter({ hasText: 'Saved' }).waitFor();
   await until(() => launched.length === 1);
   assert.equal(readFileSync(file, 'utf8'), 'Typed here.');
-  assert.deepEqual(launched.pop(), { command: '/usr/local/bin/code', args: ['-g', file] });
+  assert.deepEqual(launched.pop(), { command: '/usr/local/bin/code', args: [file] });
   // The list has what was found; the one picked opens it and is the one from then on.
-  await page.getByRole('button', { name: 'Open in…' }).click();
-  assert.deepEqual(await page.getByRole('listbox', { name: 'Editors' }).getByRole('option').allInnerTexts(), ['Cursor', 'VS Code', 'Zed', 'Finder']);
+  const chevron = page.getByRole('button', { name: 'Open in…' }), list = page.getByRole('listbox', { name: 'Editors' });
+  await chevron.click();
+  assert.deepEqual(await list.getByRole('option').allInnerTexts(), ['Cursor', 'VS Code', 'Zed', 'Finder']);
+  // The arrows walk it from the one in use, and Esc closes the list alone: the settings stay, and the focus is on the chevron.
+  assert.equal(await focused(page), 'VS Code');
+  await page.keyboard.press('ArrowDown');
+  assert.equal(await focused(page), 'Zed');
+  await page.keyboard.press('Escape');
+  await list.waitFor({ state: 'detached' });
+  await page.getByRole('heading', { name: 'Settings' }).waitFor();
+  assert.equal(await focused(page), 'Open in…');
+  await chevron.click();
   await page.getByRole('option', { name: 'Zed' }).click();
   await page.getByRole('button', { name: 'Open in Zed' }).waitFor();
+  assert.equal(await focused(page), 'Open in Zed'); // Not the page: the option it was on is gone.
   await until(() => launched.length === 1);
   assert.deepEqual(launched.pop(), { command: '/Applications/Zed.app/Contents/MacOS/cli', args: [file] });
   // Changed in the editor: back in the window, the field has it, and typing not saved yet is never replaced.
@@ -686,6 +697,17 @@ test('the instructions open in your editor, what was typed is saved first, and t
   await page.evaluate(() => dispatchEvent(new Event('focus')));
   await page.waitForTimeout(300);
   assert.equal(await instructions.inputValue(), 'Typing.');
+  // Typed while the file is read again: the file's text, which comes after, does not replace it.
+  await instructions.fill('Changed in Zed.'); // What was read last.
+  writeFileSync(file, 'Changed a third time.');
+  await page.evaluate(() => {
+    dispatchEvent(new Event('focus'));
+    const field = document.querySelector('textarea')!;
+    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set?.call(field, 'Typed meanwhile.');
+    field.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  await page.waitForTimeout(300);
+  assert.equal(await instructions.inputValue(), 'Typed meanwhile.');
   await page.context().close();
 });
 

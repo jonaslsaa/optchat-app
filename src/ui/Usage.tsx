@@ -97,7 +97,7 @@ function Table({ rows }: { rows: Rows }) {
 function Limits({ saved }: { saved: Usage['limits'] }) {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => { const timer = setInterval(() => setNow(Date.now()), 30_000); return () => clearInterval(timer); }, []);
-  if (!saved) return <Section title="Limits"><p className="text-muted-foreground text-sm">No data yet. A subscription's limits are shown once Anthropic has answered this profile, with pi-optchat 0.11.15 or newer in the Pi that runs it.</p></Section>;
+  if (!saved) return <Section title="Limits"><p className="text-muted-foreground text-sm">No data yet. Only an Anthropic subscription reports its limits (pi-optchat 0.11.15 or newer).</p></Section>;
   const { rows, notes, age } = limits(saved, now);
   return (
     <Section title="Limits" hint={age}>

@@ -68,8 +68,7 @@ export function ago(ms: number) {
 }
 /** A subscription's limits in words, at `now`: a row for each window, how old the count is, and what has to be said plainly.
  * A window that has reset since it was counted has no figure: its count began again and nothing has said how far it is.
- * The notes: that requests go through as extra usage, that a limit is reached, and that a request was refused (the windows
- * are then from before it, so the fullest one is named with what it was at). */
+ * The notes: that requests go through as extra usage, that a limit is reached, or, in place of both, that a request was refused. */
 export function limits({ at: counted, limits, overage, refused }: NonNullable<Usage['limits']>, now: number, locale?: string, timeZone?: string) {
   const time = (date: string) => new Date(date).toLocaleString(locale, { hour: '2-digit', minute: '2-digit', timeZone });
   const day = (date: string) => new Date(date).toLocaleDateString(locale, { day: 'numeric', month: 'short', timeZone });
@@ -79,12 +78,14 @@ export function limits({ at: counted, limits, overage, refused }: NonNullable<Us
     const name = WINDOWS[limit.window], percent = Math.round(100 * limit.used), reset = Date.parse(limit.resets) <= now;
     return { ...limit, name, reset, percent: reset ? undefined : percent, text: reset ? `Reset ${at(limit.resets)}, not counted since` : `${percent}% used · resets ${at(limit.resets)}` };
   });
-  // What was said of a window is over once it has begun again, and a refusal is the fullest window's.
+  // What was said of a window is over once it has begun again. A refusal is said alone: the windows, and whether requests went
+  // through as extra usage, were counted before it. The fullest window is named with it, unless it had begun again by then.
   const reached = rows.filter(row => row.reached && !row.reset), fullest = rows.toSorted((a, b) => b.used - a.used).at(0);
-  const notes = [
-    ...refused && fullest && !fullest.reset ? [`Limit reached: a request was refused at ${at(refused)}. The ${fullest.name} was at ${Math.round(100 * fullest.used)}% and resets ${at(fullest.resets)}.`] : [],
-    ...reached.map(row => overage ? `Past the ${row.name}: running on extra usage until it resets ${at(row.resets)}.` : `The ${row.name} is reached: it resets ${at(row.resets)}.`),
-    ...overage && !reached.length && rows.every(row => !row.reset) ? ['Running on extra usage.'] : [],
-  ];
+  const notes = refused
+    ? [`A request was refused for a rate limit at ${at(refused)}.${fullest && Date.parse(fullest.resets) > Date.parse(refused) ? ` The ${fullest.name} was at ${Math.round(100 * fullest.used)}% and ${fullest.reset ? 'reset' : 'resets'} ${at(fullest.resets)}.` : ''}`]
+    : [
+      ...reached.map(row => overage ? `Past the ${row.name}: running on extra usage until it resets ${at(row.resets)}.` : `The ${row.name} is reached: it resets ${at(row.resets)}.`),
+      ...overage && !reached.length && rows.every(row => !row.reset) ? ['Running on extra usage.'] : [],
+    ];
   return { rows, notes, age: `As of ${ago(now - Date.parse(counted))}` };
 }

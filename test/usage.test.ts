@@ -114,16 +114,19 @@ test('a subscription\'s limits are shown as pi-optchat saved them: how full, whe
     { ...saved.limits[1], name: 'Weekly limit', reset: false, percent: 40, text: '40% used · resets 20 Nov, 04:00' },
   ] });
   // Without extra usage a reached limit refuses requests, and says nothing more with that: the count is from before it.
-  const near = { ...saved, overage: false, limits: [{ ...saved.limits[0], used: 0.98, reached: false }, saved.limits[1]] };
+  const near = { ...saved, overage: false, limits: [{ ...saved.limits[0], used: 0.98, reached: false }, saved.limits[1]] }, refused = '2026-11-16T13:20:00.000Z';
   assert.deepEqual(words({ ...near, limits: [saved.limits[0], saved.limits[1]] }, at('16T13:16')).notes, ['The 5-hour limit is reached: it resets 16:30.']);
-  assert.deepEqual(words({ ...near, refused: '2026-11-16T13:20:00.000Z' }, at('16T13:21')).notes, ['Limit reached: a request was refused at 13:20. The 5-hour limit was at 98% and resets 16:30.']);
   assert.deepEqual(words(near, at('16T13:21')).notes, []);
-  // Once a window has begun again its count is gone, and so is what was said of it.
-  const later = words({ ...saved, refused: '2026-11-16T13:20:00.000Z' }, at('16T17:00'));
-  assert.deepEqual([later.age, later.notes, later.rows.map(row => [row.percent, row.text])],
-    ['As of 3 h ago', [], [[undefined, 'Reset 16:30, not counted since'], [40, '40% used · resets 20 Nov, 04:00']]]);
   assert.deepEqual(words({ ...saved, limits: [{ ...saved.limits[0], reached: false }, saved.limits[1]] }, at('16T13:16')).notes, ['Running on extra usage.']);
-  const gone = words({ ...saved, refused: '2026-11-16T13:20:00.000Z' }, at('21T09:00'));
-  assert.deepEqual([gone.age, gone.notes, gone.rows.map(row => row.text)], ['As of 4 days ago', [], ['Reset 16 Nov, 16:30, not counted since', 'Reset 20 Nov, 04:00, not counted since']]);
+  // A refusal is said alone, with the fullest window as it was: what else was counted (extra usage, reached) is from before it.
+  assert.deepEqual(words({ ...near, refused }, at('16T13:21')).notes, ['A request was refused for a rate limit at 13:20. The 5-hour limit was at 98% and resets 16:30.']);
+  assert.deepEqual(words({ ...saved, refused }, at('16T13:21')).notes, ['A request was refused for a rate limit at 13:20. The 5-hour limit was at 101% and resets 16:30.'], 'not also "running on extra usage"');
+  // A refusal after the window began again is not that window's, and is still said.
+  assert.deepEqual(words({ ...near, refused: '2026-11-16T17:20:00.000Z' }, at('16T17:21')).notes, ['A request was refused for a rate limit at 17:20.']);
+  // Once a window has begun again its count is gone, and so is what was said of it.
+  const later = words(saved, at('16T17:00'));
+  assert.deepEqual([later.age, later.notes, later.rows.map(row => [row.percent, row.text])], ['As of 3 h ago', [], [[undefined, 'Reset 16:30, not counted since'], [40, '40% used · resets 20 Nov, 04:00']]]);
+  const gone = words({ ...saved, refused }, at('21T09:00'));
+  assert.deepEqual([gone.age, gone.notes, gone.rows.map(row => row.text)], ['As of 4 days ago', ['A request was refused for a rate limit at 16 Nov, 13:20. The 5-hour limit was at 101% and reset 16 Nov, 16:30.'], ['Reset 16 Nov, 16:30, not counted since', 'Reset 20 Nov, 04:00, not counted since']]);
   assert.deepEqual([0, 59_000, 60_000, 3_599_000, 3_600_000, 86_400_000, 172_800_000].map(ago), ['just now', 'just now', '1 min ago', '59 min ago', '1 h ago', '1 day ago', '2 days ago']);
 });

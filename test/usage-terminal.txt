@@ -1,0 +1,62 @@
+# Last hour
+This session  [Last hour]  Today  Last 7 days  All time
+
+$0.80 estimated · 503k tokens · 89% cached
+
+           model               cost  share   out  cached
+main       claude-opus-5-5    $0.31    39%  3.9k     98%
+subagents  claude-opus-5-5    $0.46    58%  6.2k     68%
+compactor  claude-sonnet-5-5  $0.02     3%   705     89%
+
+Estimated at API prices, not your subscription bill.
+2 unreadable usage records excluded; totals may be incomplete.
+
+# Today
+This session  Last hour  [Today]  Last 7 days  All time
+
+$0.92 estimated · 952k tokens · 92% cached
+
+           model                            cost  share   out  cached
+main       claude-opus-5-5                 $0.31    34%  3.9k     98%
+subagents  claude-opus-5-5                 $0.46    50%  6.2k     68%
+           claude-haiku-5-5                $0.08     9%  5.1k     97%
+           tool usage (model unavailable)  $0.00     0%   410      0%
+compactor  claude-sonnet-5-5               $0.05     6%  1.3k     86%
+
+Estimated at API prices, not your subscription bill.
+2 unreadable usage records excluded; totals may be incomplete.
+
+# Last 7 days
+This session  Last hour  Today  [Last 7 days]  All time
+
+$6.20 estimated · 2.3M tokens · 39% cached
+
+           model                            cost  share    out  cached
+main       claude-opus-5-5                 $0.31     5%   3.9k     98%
+           session overhead                $0.07     1%    780      0%
+subagents  claude-opus-5-5                 $0.46     7%   6.2k     68%
+           claude-haiku-5-5                $0.08     1%   5.1k     97%
+           tool usage (model unavailable)  $0.00     0%    410      0%
+compactor  claude-sonnet-5-5               $0.21     3%   4.3k     48%
+import     claude-sonnet-5-5               $5.06    82%  96.5k      0%
+
+Estimated at API prices, not your subscription bill.
+2 unreadable usage records excluded; totals may be incomplete.
+
+# All time
+This session  Last hour  Today  Last 7 days  [All time]
+
+$8.67 estimated · 3.8M tokens · 60% cached
+
+           model                            cost  share    out  cached
+main       claude-opus-5-5                 $2.65    31%  55.2k     93%
+           gpt-5.5                         $0.14     2%   3.9k     87%
+           session overhead                $0.07     1%    780      0%
+subagents  claude-opus-5-5                 $0.46     5%   6.2k     68%
+           claude-haiku-5-5                $0.08     1%   5.1k     97%
+           tool usage (model unavailable)  $0.00     0%    410      0%
+compactor  claude-sonnet-5-5               $0.21     2%   4.3k     48%
+import     claude-sonnet-5-5               $5.06    58%  96.5k      0%
+
+Estimated at API prices, not your subscription bill.
+2 unreadable usage records excluded; totals may be incomplete.

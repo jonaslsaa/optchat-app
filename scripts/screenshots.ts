@@ -1,4 +1,4 @@
-import { chmodSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { appendFileSync, chmodSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { chromium, type Browser, type Page } from 'playwright-core';
 import { build } from 'vite';
@@ -7,12 +7,14 @@ import { startServer } from '../src/server/server.ts';
 // pi-optchat's own lock, which only Pi takes: here it stands for a Pi in a terminal.
 import { describeOwner, lockProfile } from 'pi-optchat/files';
 import { createProfile } from '../test/support.ts';
-import { agents, demo, remember, seed, SHIPPED, SHIPPING, TEAM } from './seed.ts';
+import { agents, demo, remember, seed, SHIPPED, SHIPPING, spend, TEAM } from './seed.ts';
 
 /** `npm run screenshots [directory] [--dark]`: a PNG of every main state of the UI, in /tmp/optchat-app-shots unless a directory
  * is named, and all of them in dark mode with `--dark`. It builds the UI, serves it against throwaway profiles under /tmp with
  * the fake Pi (no model, no network, nothing of yours is read), and drives it in your installed Chrome. The same command gives
  * the same pictures. */
+// The pages are drawn in UTC (`timezoneId` below), and so is what the server makes of a day: its bars of what a profile used.
+process.env.TZ = 'UTC';
 const options = process.argv.slice(2), allDark = options.includes('--dark'), out = options.find(option => !option.startsWith('--')) ?? '/tmp/optchat-app-shots';
 /** When the pictures are taken. The seeded chats end here, the fake Pi's messages start here, and the page's clock stands a little later. */
 const NOW = Date.UTC(2026, 10, 12, 9, 0, 0);
@@ -42,6 +44,10 @@ seed(createProfile(home, 'importing'), 2, NOW); // Its import was paused: pi-opt
 const long = createProfile(home, 'long');
 seed(long, 95, NOW, undefined, 40 * 60_000);
 remember(long);
+// What it used in those ten days, and a ledger with a line that cannot be read.
+spend(long, NOW);
+spend(join(home, 'profiles', 'notes'), NOW, 1);
+appendFileSync(join(home, 'profiles', 'notes', 'usage.jsonl'), '{"date":"2026-11-12T08:00:00.000Z","role":"main","mod\n');
 // A chat that names issues and pull requests and has agents, one that only names them, and a GitHub CLI that is not signed in yet.
 const ship = createProfile(home, 'ship');
 seed(ship, SHIPPING.length, NOW, SHIPPING);
@@ -65,7 +71,7 @@ writeFileSync(join(home, 'pi', 'pi-optchat', 'package.json'), JSON.stringify({ n
 writeFileSync(join(home, 'pi', 'state.json'), JSON.stringify({ version: '1.5.2', providers: ['anthropic', 'openai', 'openai-codex', 'github-copilot', 'lab'], packages: { 'npm:pi-optchat': join(home, 'pi', 'pi-optchat') } }));
 
 await build({ logLevel: 'warn' });
-const server = await startServer({ home, app: join(home, 'app'), cwd: home, pi, gh });
+const server = await startServer({ home, app: join(home, 'app'), cwd: home, pi, gh, now: () => NOW + 42_000 });
 // A machine with nothing on it yet: no Pi, no profile.
 mkdirSync(join(home, 'new'));
 const fresh = await startServer({ home: join(home, 'new'), app: join(home, 'new', 'app'), cwd: home, pi: { command: join(home, 'no-such-pi'), args: [] }, npm: { command: process.execPath, args: [join(import.meta.dirname, '../test/fake-npm.ts')] },
@@ -332,6 +338,22 @@ async function pictures(browser: Browser, control: Client) {
   await slender.getByRole('button', { name: 'Settings' }).click();
   await slender.getByRole('heading', { name: 'Profile: notes' }).scrollIntoViewIfNeeded();
   await shot(slender, '43-settings-profile-narrow');
+
+  // What a profile used: today's, the week's (light, dark, narrow), a profile that has used nothing, and a ledger with a
+  // line that cannot be read.
+  const usage = async (profile: string, options?: Parameters<typeof open>[1], range?: string) => {
+    const page = await open([profile], options);
+    await page.getByRole('button', { name: 'Usage' }).click();
+    if (range) await page.getByRole('radio', { name: range }).check({ force: true });
+    await page.getByText(range ? 'Cost over time' : 'Estimated at API prices').waitFor();
+    return page;
+  };
+  await shot(await usage('long', { height: 1000 }), '66-usage-today');
+  await shot(await usage('long', { height: 1000 }, 'Last 7 days'), '67-usage-week');
+  await shot(await usage('long', { dark: true, height: 1000 }, 'Last 7 days'), '68-usage-week-dark');
+  await shot(await usage('long', { width: 420, height: 1100 }, 'Last 7 days'), '69-usage-week-narrow');
+  await shot(await usage('empty'), '70-usage-none');
+  await shot(await usage('notes', { height: 1150 }, 'All time'), '71-usage-unreadable-line');
 
   // Talking to an agent, under its chat. A message is worth a Pi: the app's own is started on the chat for the first one, and
   // its agents are at work with it. One at work keeps the message until it reads it.

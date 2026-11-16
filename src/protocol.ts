@@ -133,6 +133,28 @@ export type Setting = Static<typeof Setting>;
 export const Config = Type.Object({ settings: Type.Array(Setting), compactor: ModelChoice, standard: ModelChoice, subagent: ModelChoice, instructions: Type.String() });
 export type Config = Static<typeof Config>;
 
+/** Tokens and dollars as pi-optchat's usage ledger counts them (its `UsageTotals`): `input` is what was neither read from the
+ * cache nor written to it, and `cost` is at the provider's API prices, which a subscription does not bill. With them,
+ * `cached`: how much of all that went in was read from the cache, a whole percent, by pi-optchat's own sum (its `cacheShare`). */
+const amount = Type.Number({ minimum: 0 });
+const used = {
+  usage: Type.Object({ input: amount, output: amount, cacheRead: amount, cacheWrite: amount, totalTokens: amount, cost: Type.Object({ input: amount, output: amount, cacheRead: amount, cacheWrite: amount, total: amount }) }),
+  cached: Type.Integer({ minimum: 0, maximum: 100 }),
+};
+/** What a profile used in a `range`, from pi-optchat's ledger and summed by pi-optchat (its `summarizeUsage`, which is what
+ * `/optchat usage` shows in a terminal): all of it (`usage`, `cached`), and the same for each role that used something
+ * and for each of a role's models. `ranges` are those there are to ask for. `bars` are the spending over time, oldest first,
+ * from the first of it to now: each begins at `start` and lasts a `step` (five `minutes`, an `hour`, a `day` or a `month`,
+ * by how long ago the first was), with its cost by role. `warnings` are pi-optchat's, about lines of the ledger it could not read. */
+export const Usage = Type.Object({
+  ranges: Type.Array(Type.String()), range: Type.String(), ...used,
+  roles: Type.Array(Type.Object({ role: Type.Enum(['main', 'subagent', 'compactor', 'import']), ...used, models: Type.Array(Type.Object({ model: Type.String(), ...used })) })),
+  step: Type.Enum(['minutes', 'hour', 'day', 'month']),
+  bars: Type.Array(Type.Object({ start: Type.String(), tokens: amount, cost: Type.Object({ main: amount, subagent: amount, compactor: amount, import: amount }) })),
+  warnings: Type.Array(Type.String()),
+});
+export type Usage = Static<typeof Usage>;
+
 const Image = Type.Object({ type: Type.Literal('image'), data: Type.String(), mimeType: Type.String() });
 const target = Type.Object({ window: Type.String() });
 const none = Type.Object({});
@@ -246,6 +268,10 @@ export const methods = {
   configure: method(Type.Object({ profile: Type.String(), key: Type.String(), value: Type.Union([Type.Number(), Type.Boolean(), ModelChoice]) }), Config),
   /** Keeps a profile's instructions (pi-optchat's `saveInstructions`). Its agents read them again each turn. */
   instruct: method(Type.Object({ profile: Type.String(), text: Type.String() }), none),
+
+  /** What a profile used, in tokens and dollars, in one of pi-optchat's ranges (`Today`, unless said): read from its usage
+   * ledger each time, which the Pi that has the profile writes at every answer of a model. Nothing is written. */
+  usage: method(Type.Object({ profile: Type.String(), range: Type.Optional(Type.String()) }), Usage),
 
   /** The app's settings. */
   settings: method(none, Settings),

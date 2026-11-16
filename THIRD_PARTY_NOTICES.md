@@ -18,6 +18,7 @@ Parts of the UI come from [T3 Code](https://github.com/pingdotgg/t3code) (commit
 - `src/ui/Model.tsx`, `src/ui/models.ts`: the look and the keys of the model picker (a search over a list, the options beside it), from `apps/web/src/components/chat/ModelPickerContent.tsx`, `ModelListRow.tsx` and `ComposerModelEffort.tsx`, and the order of its search results, after `packages/client-runtime/src/modelSearch.ts`. The components themselves are written here, without Base UI.
 - `src/ui/Memory.tsx`: how a match is marked in what a search found (bold on muted text), from `apps/web/src/components/ThreadSearchMatch.tsx`.
 - `src/ui/GitHub.tsx`: which glyph and colour stand for a pull request's state, its checks and its review, from `apps/web/src/components/pullRequest/pullRequestIcons.tsx` and `pullRequestPresentation.tsx`.
+- `src/ui/Usage.tsx`: the layout of the usage page (the totals, the share bar with its list, the breakdown table) and their class strings, from `apps/web/src/components/usage/UsagePage.tsx` and `UsageShareBar.tsx` (commit `1f698f01`), without Base UI. The figures and the bars over time are written here.
 
 ```
 MIT License

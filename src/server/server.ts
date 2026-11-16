@@ -9,9 +9,10 @@ import { Envelope, methods, type Method, type Params, type Push, type Result, ty
 import { Agents } from './agents.ts';
 import { GitHub } from './github.ts';
 import { reason } from './pi.ts';
-import { Profiles } from './profiles.ts';
+import { profileDirectory, Profiles } from './profiles.ts';
 import { appHome, isDirectory, readSettings, writeSettings } from './settings.ts';
 import { Setup, type Launch } from './setup.ts';
+import { usage } from './usage.ts';
 import { Windows, type WindowsOptions } from './windows.ts';
 
 export interface ServerOptions extends Partial<Pick<WindowsOptions, 'home' | 'grace'>> {
@@ -32,6 +33,8 @@ export interface ServerOptions extends Partial<Pick<WindowsOptions, 'home' | 'gr
   npm?: Launch;
   /** What opens a file in a terminal of its own, for Pi's sign-in. Without it the server opens none. */
   opener?: Launch;
+  /** What time it is, for what a profile used "Today": the clock's, unless said. */
+  now?: () => number;
   /** The built UI's directory (`npm run build`), served as the page at `/`. */
   ui?: string;
   /** Origins that may connect besides the server's own page: the scheme a desktop shell loads the UI from, as T3 Code's
@@ -44,7 +47,7 @@ const loopback = (url: string) => { try { return LOOPBACK.includes(new URL(url).
 
 /** Starts the app's server on this machine only: the protocol of `protocol.ts` on a WebSocket at `/ws`, a profile's images at
  * `/images/<profile>/<name>`, and the UI's page everywhere else. `close` stops every Pi it started and waits for them. */
-export async function startServer({ port = 0, origins = [], ui = join(import.meta.dirname, '../../dist/ui'), home = dataHome(), app = appHome(), cwd, pi, flags = [], npm, gh, opener, grace = 15_000 }: ServerOptions) {
+export async function startServer({ port = 0, origins = [], ui = join(import.meta.dirname, '../../dist/ui'), home = dataHome(), app = appHome(), cwd, pi, flags = [], npm, gh, opener, grace = 15_000, now = Date.now }: ServerOptions) {
   ui = resolve(ui);
   home = resolve(home); // Pi runs in each window's directory, and has to find the same profiles from there.
   app = resolve(app); // And npm runs in the app's folder, where a path that is not whole would be another folder.
@@ -66,6 +69,7 @@ export async function startServer({ port = 0, origins = [], ui = join(import.met
     windows: () => windows.list(), open: params => windows.open(params), prompt: params => windows.prompt(params), abort: params => windows.abort(params),
     complete: params => windows.complete(params), close: params => windows.close(params), records: params => windows.records(params),
     command: params => windows.command(params), answer: params => windows.answer(params), models: params => windows.models(params), setModel: params => windows.setModel(params),
+    usage: ({ profile, range }) => usage(profileDirectory(home, profile), range, now()),
     settings: () => settings,
     setSettings: params => { settings = writeSettings(app, settings, params); push({ push: 'settings', settings }); return settings; },
     setup: params => setup.state(params), install: async params => { await setup.install(params); return {}; },

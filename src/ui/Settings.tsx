@@ -12,7 +12,7 @@ import { Button, cn } from './ui.tsx';
 
 const THEMES = { system: 'System', light: 'Light', dark: 'Dark' } satisfies Record<Kept['theme'], string>;
 
-function Section({ title, hint, children }: { title: string; hint?: string; children: ReactNode }) {
+export function Section({ title, hint, children }: { title: string; hint?: string; children: ReactNode }) {
   return (
     <section className="border-b py-5 last:border-b-0">
       <h2 className="font-medium text-sm">{title}</h2>
@@ -21,7 +21,7 @@ function Section({ title, hint, children }: { title: string; hint?: string; chil
     </section>
   );
 }
-function Page({ title, action, children }: { title: string; action?: ReactNode; children: ReactNode }) {
+export function Page({ title, action, children }: { title: string; action?: ReactNode; children: ReactNode }) {
   return (
     <main className="min-h-0 flex-1 overflow-y-auto bg-background">
       <div className="mx-auto max-w-2xl px-5 pb-10">

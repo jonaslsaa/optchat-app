@@ -118,13 +118,19 @@ export const CHANGES: Said[][] = [
   ],
 ];
 
-/** A chat that names issues and pull requests, for the GitHub list: by link in what was said, in an agent's report and in what
- * `gh pr create` printed, and one only by its number, which the list cannot know. */
 /** A reply with formulas, prices beside them, and a table: what math and a table's copy buttons are pictured with. */
 export const FORMULAS: Said[][] = [[
   ['user', 'How much does the cache save us, roughly?'],
   ['talk', 'A cached read costs a tenth of new input, so with a cache share $c$ the input bill is\n\n$$\n\\text{cost} = (1 - c) + \\frac{c}{10}\n$$\n\nof what it was. At $c = 0.92$ that is about $0.17$ of it: last week\'s $57.89 would have been about $340 without it.\n\n| Role | Cost | Cache read |\n| --- | ---: | ---: |\n| Main chat | $36.41 | 92% |\n| Subagents | $19.45 | 88% |\n| Compactor | $2.02 | 71% |'],
 ]];
+/** A reply that names files: two that are in the window's folder (`FILES`), and one that is not. */
+export const FILES = ['src/server/pi.ts', 'test/pi.test.ts'];
+export const NAMED: Said[][] = [[
+  ['user', 'Where does the server wait for Pi to stop?'],
+  ['talk', 'In `src/server/pi.ts:74`, where `stop()` waits out the grace period ([`src/server/pi.ts` on GitHub](https://github.com/acme/optchat-app/blob/main/src/server/pi.ts#L74)); [the shutdown test in `test/pi.test.ts`](test/pi.test.ts) covers it. The old `src/server/wait.ts` is gone.'],
+]];
+/** A chat that names issues and pull requests, for the GitHub list: by link in what was said, in an agent's report and in what
+ * `gh pr create` printed, and one only by its number, which the list cannot know. */
 export const SHIPPING: Said[][] = [
   [
     ['user', 'Where does 0.2.0 stand? The Windows failure is https://github.com/acme/optchat-app/issues/38.'],

@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
-import { appendFileSync, mkdirSync, writeFileSync } from 'node:fs';
+import { appendFileSync, mkdirSync, realpathSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { after, before, test } from 'node:test';
 import { chromium, type Browser, type Page } from 'playwright-core';
 import { build } from 'vite';
-import { agents, CHANGES, FORMULAS, seed, TEAM } from '../scripts/seed.ts';
+import { agents, CHANGES, FILES, FORMULAS, NAMED, seed, TEAM } from '../scripts/seed.ts';
+import type { Launch } from '../src/server/files.ts';
 import { connect } from '../src/client.ts';
 import { startServer } from '../src/server/server.ts';
 import { createProfile, give, png, temporaryHome, writeMemory, writeRun, type Given } from './support.ts';
@@ -28,12 +29,18 @@ for (const name of ['chat', 'beside', 'sheet', 'memory', 'rows', 'menus', 'field
 }
 seed(createProfile(home, 'diffs'), CHANGES.length, Date.now(), CHANGES);
 seed(createProfile(home, 'formulas'), 1, Date.now(), FORMULAS);
+// A chat that names files, and those files in the folder its windows run in.
+seed(createProfile(home, 'files'), 1, Date.now(), NAMED);
+seed(createProfile(home, 'linked'), 1, Date.now(), [[['user', 'Show me.'], ['talk', '[![the preview](/images/linked/0123456789abcdef)](test/pi.test.ts)']]]);
+for (const file of FILES) { mkdirSync(join(home, file, '..'), { recursive: true }); writeFileSync(join(home, file), ''); }
 mkdirSync(join(home, 'new'));
 
 let server: Awaited<ReturnType<typeof startServer>>, fresh: typeof server, browser: Browser;
+// What would have started your editor: nothing does here.
+const launched: Launch[] = [];
 before(async () => {
   await build({ logLevel: 'warn' });
-  server = await startServer({ home, app: join(home, 'app'), cwd: home, pi });
+  server = await startServer({ home, app: join(home, 'app'), cwd: home, pi, launcher: launch => launched.push(launch) });
   // A machine with no profile yet, for the first one's name.
   fresh = await startServer({ home: join(home, 'new'), app: join(home, 'new', 'app'), cwd: home, pi });
   browser = await chromium.launch({ channel: 'chrome' });
@@ -653,4 +660,31 @@ test('an image that is pasted, dropped or chosen goes with the message, one that
   await page.mouse.click(5, 5); // Beside the picture.
   await page.getByRole('dialog', { name: 'The image, large' }).waitFor({ state: 'detached' });
   // A reply draws no other: an address elsewhere stays a link, which is the rule of `safe.ts` (test/markdown.test.ts).
+});
+
+test('a file the chat names opens in your editor when it is in the window\'s folder, and one that is not stays as written', async () => {
+  // Its main window runs where the files are, whatever folder another test left the settings at.
+  const control = await connect(server.url);
+  await control.request('open', { profile: 'files', cwd: home });
+  control.close();
+  const page = await open('files');
+  const pi = page.getByRole('button', { name: 'src/server/pi.ts:74' });
+  await pi.click();
+  // A click on the code a link holds is one click on the link: the code is no button of its own, in a link to a file or not.
+  await page.getByRole('button', { name: 'the shutdown test' }).locator('code').click();
+  assert.equal(await page.getByRole('link', { name: 'src/server/pi.ts on GitHub' }).getByRole('button').count(), 0);
+  await page.waitForTimeout(300);
+  // The editor is yours (`code -g <file>:74`) or the system's text editor (`open -t <file>`): either way the file, whole.
+  const named = (file: string) => launched.some(({ args }) => args.some(arg => arg.startsWith(join(realpathSync(home), file))));
+  assert.ok(launched.length === 2 && named('src/server/pi.ts') && named('test/pi.test.ts'), JSON.stringify(launched));
+  assert.equal(await page.getByRole('button', { name: 'src/server/wait.ts' }).count(), 0);
+  assert.equal(await page.getByRole('link', { name: 'src/server/wait.ts' }).count(), 0);
+  // A picture in a link to a file is the link's too: no button of its own to show it large.
+  const again = await connect(server.url);
+  await again.request('open', { profile: 'linked', cwd: home });
+  again.close();
+  const linked = await open('linked');
+  await linked.locator('.file-link').waitFor();
+  assert.equal(await linked.locator('.file-link button').count(), 0);
+  await linked.context().close();
 });

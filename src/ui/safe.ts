@@ -7,7 +7,7 @@ import type { Components } from 'react-markdown';
  * hand whatever is in its address to that server the moment the reply is drawn. Links open in a new tab that knows nothing of
  * this one; react-markdown itself drops addresses that run script. */
 const PROFILE_IMAGE = /^\/images\/[^/]+\/[0-9a-f]{16}$/;
-const link = (props: ComponentProps<'a'>) => createElement('a', { ...props, target: '_blank', rel: 'noreferrer noopener' });
+export const link = (props: ComponentProps<'a'>) => createElement('a', { ...props, target: '_blank', rel: 'noreferrer noopener' });
 export const safe = {
   a: ({ node: _, ...props }) => link(props),
   img: ({ node: _, src, alt, title }) => typeof src === 'string' && PROFILE_IMAGE.test(src) ? createElement('img', { src, alt, title }) : link({ href: src, title, children: alt || src }),

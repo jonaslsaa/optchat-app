@@ -1,5 +1,6 @@
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import { createServer, type IncomingMessage } from 'node:http';
+import { hostname } from 'node:os';
 import { extname, join, resolve, sep } from 'node:path';
 import type { AddressInfo } from 'node:net';
 import { dataHome } from 'pi-optchat/files';
@@ -7,6 +8,7 @@ import { Value } from 'typebox/value';
 import { WebSocket, WebSocketServer } from 'ws';
 import { Envelope, methods, type Method, type Params, type Push, type Result, type ServerMessage } from '../protocol.ts';
 import { Agents } from './agents.ts';
+import { editor, fallback, inside, type Launch as Opened } from './files.ts';
 import { GitHub } from './github.ts';
 import { reason } from './pi.ts';
 import { profileDirectory, Profiles } from './profiles.ts';
@@ -35,6 +37,9 @@ export interface ServerOptions extends Partial<Pick<WindowsOptions, 'home' | 'gr
   opener?: Launch;
   /** What time it is, for what a profile used "Today": the clock's, unless said. */
   now?: () => number;
+  /** What starts your editor on a file the chat named (`launch` in `files.ts`). Without it the server opens none, so nothing a
+   * test starts can. */
+  launcher?: (launch: Opened) => void;
   /** The built UI's directory (`npm run build`), served as the page at `/`. */
   ui?: string;
   /** Origins that may connect besides the server's own page: the scheme a desktop shell loads the UI from, as T3 Code's
@@ -47,7 +52,7 @@ const loopback = (url: string) => { try { return LOOPBACK.includes(new URL(url).
 
 /** Starts the app's server on this machine only: the protocol of `protocol.ts` on a WebSocket at `/ws`, a profile's images at
  * `/images/<profile>/<name>`, and the UI's page everywhere else. `close` stops every Pi it started and waits for them. */
-export async function startServer({ port = 0, origins = [], ui = join(import.meta.dirname, '../../dist/ui'), home = dataHome(), app = appHome(), cwd, pi, flags = [], npm, gh, opener, grace = 15_000, now = Date.now }: ServerOptions) {
+export async function startServer({ port = 0, origins = [], ui = join(import.meta.dirname, '../../dist/ui'), home = dataHome(), app = appHome(), cwd, pi, flags = [], npm, gh, opener, launcher, grace = 15_000, now = Date.now }: ServerOptions) {
   ui = resolve(ui);
   home = resolve(home); // Pi runs in each window's directory, and has to find the same profiles from there.
   app = resolve(app); // And npm runs in the app's folder, where a path that is not whole would be another folder.
@@ -59,8 +64,24 @@ export async function startServer({ port = 0, origins = [], ui = join(import.met
   const setup = new Setup({ app, cwd, pi, npm, opener, push: setup => push({ push: 'setup', setup }) });
   // A window runs in the folder the settings name, unless that folder is gone since it was kept.
   const windows = new Windows({ home, grace, push, cwd: () => settings.cwd && isDirectory(settings.cwd) ? settings.cwd : cwd, pi: async () => { const { command, args } = await setup.launch(); return { command, args: [...args, ...flags] }; }, catalog: () => setup.catalog() });
+  // The folder the files a window's chat names are read from: where its Pi runs, which for a main chat a Pi outside the app
+  // holds is that Pi's, and none when that Pi is on another machine or does not say.
+  const folder = (id: string) => {
+    const window = windows.list().windows.find(window => window.id === id);
+    if (!window) throw new Error(`No window ${id}.`);
+    const { outside } = window;
+    return !outside ? window.cwd : outside !== 'unknown' && outside.host === hostname() ? outside.cwd : undefined;
+  };
   const handlers: { [M in Method]: (params: Params<M>) => Result<M> | Promise<Result<M>> } = {
     agents: params => agents.list(params), agent: params => agents.one(params), github: params => github.list(params),
+    isFile: ({ window, path }) => { const at = folder(window); return { file: at !== undefined && inside(at, path) !== undefined }; },
+    openFile: ({ window, path, line }) => {
+      const at = folder(window), file = at && inside(at, path);
+      if (!file) throw new Error(`${path} is not a file in the folder this chat runs in.`);
+      if (!launcher) throw new Error('This server opens no editor.');
+      launcher(editor()?.(file, line) ?? fallback(file));
+      return {};
+    },
     config: params => profiles.config(params), configure: params => profiles.configure(params), instruct: params => profiles.instruct(params),
     // An agent is reached through the Pi that has its profile open, and a message to one is worth starting that Pi for.
     tellAgent: async params => { await windows.owned(params.profile); return agents.tell(params); },

@@ -233,6 +233,10 @@ export const methods = {
   github: method(Type.Object({ profile: Type.String(), limit: Type.Optional(Type.Integer({ minimum: 0 })), fresh: Type.Optional(Type.Boolean()) }),
     Type.Object({ items: Type.Array(GitHubItem), more: id, pending: id, gh: Type.Enum(['ok', 'missing', 'signed_out', 'failed']), message: Type.Optional(Type.String()) })),
 
+  /** Whether `path` is a file under the folder the window runs in: a path its chat named, which is a link only when it is. */
+  isFile: method(Type.Object({ window: Type.String(), path: Type.String({ maxLength: 1024 }) }), Type.Object({ file: Type.Boolean() })),
+  /** Opens that file in your editor, at `line`. Refused for anything else. */
+  openFile: method(Type.Object({ window: Type.String(), path: Type.String({ maxLength: 1024 }), line: Type.Optional(Type.Integer({ minimum: 1 })) }), none),
   /** Every window the server knows. */
   windows: method(none, Type.Object({ windows: Type.Array(WindowState) })),
   /** A profile's main window (the same one each time), or a new connected window, which runs in `cwd` or else the folder in

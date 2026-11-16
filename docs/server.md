@@ -43,6 +43,7 @@ The client sends `{ id, method, params }` and gets `{ id, result }` or `{ id, er
 | `interruptAgent { profile, id }` | Cuts the agent's current step: it goes on at once with your messages it has not read, or else waits for the next one. It ends nothing. |
 | `stopAgent { profile, id }` | Ends the agent and the agents it started. The agent that started it gets a report that says you stopped it. |
 | `github { profile, limit?, fresh? }` | The issues and pull requests the profile's main chat named by their address on github.com, found in the log each time: the open ones first, then the latest named, `limit` (30) of them, with `more` for how many that leaves out. Each has its `repo`, `number`, `url` and `kind`, and from GitHub its `title`, `state` (`open`, `draft`, `merged`, `closed`), and for an open pull request its `checks` and `review`. GitHub is asked through the GitHub CLI after the answer, so `pending` says how many items are being asked about, and `gh` how the last asking went (`ok`, `missing`, `signed_out`, `failed` with a `message`). See [GitHub](#github). |
+| `isFile { window, path }`, `openFile { window, path, line? }` | Whether `path` is a file in the folder the window runs in, and opening it there in your editor ([Files the chat names](#files-the-chat-names)). |
 | `windows` | Every window and its state. |
 | `open { profile, role?, cwd? }` | The profile's main window (always the same one), or a new connected window. Starts nothing. `cwd` is where the window runs, set when it is first opened. |
 | `prompt { window, text, images?, whenBusy? }` | Sends your message, starting the window's Pi if it has none. In a run it is queued (`steer` by default, or `followUp`). Answers Pi's `disposition`: `started`, `queued` or `handled`. |
@@ -161,6 +162,15 @@ The windows run an agent with a shell, so the server listens on 127.0.0.1 only a
 - `Origin`, which a browser always sends on a WebSocket, must be the server's own page (`http://127.0.0.1:<port>` or `http://localhost:<port>`), or one of `startServer`'s `origins`: that option is for a desktop shell, which loads the UI from its own scheme (T3 Code's is `t3code://app`), and for Vite's address in `npm run dev`. Another program's page on this machine is refused like any other. A client that is not a browser sends no `Origin`.
 
 The page is sent with `X-Frame-Options: DENY` and a `Content-Security-Policy` that lets it load only from the server itself, so no other page can frame it and nothing the agent writes can make it fetch an address elsewhere.
+
+## Files the chat names
+
+A path in a reply (`src/ui/App.tsx:42`) is a link once the server says it is a file (`isFile`), and a click opens it in your editor (`openFile`). The path is the model's, so the server takes it as a name and nothing more (`src/server/files.ts`):
+
+- **Only a file under the window's folder.** That is the folder its Pi runs in: the window's `cwd`, or for a main chat a Pi outside the app holds, that Pi's (none when it is on another machine or does not say). It is resolved against it with its links followed, and has to stay under that folder (followed too) and be a regular file: no `..`, no absolute path elsewhere, no link out, no folder. `openFile` checks it all again.
+- **Your editor**, the one `$VISUAL` or `$EDITOR` names when it is one that has a window of its own (`code` and `cursor` with `-g file:line`, `zed` with `file:line`), else VS Code's `code` if it is there; looked for on the PATH and in `/opt/homebrew/bin` and `/usr/local/bin`, where an app opened from the Finder whose shell did not answer still finds it ([desktop.md](desktop.md)). A terminal editor is passed over. No setting.
+- **Never run.** The editor gets the whole path as one argument, with no shell. With no editor, the Mac opens the file as text (`open -t`): `open` on the file itself would run a `.command`, a script or an app.
+- **Only where it is told to.** `startServer` opens nothing unless it is given a `launcher`; the app, `npm start` and `npm run dev` give it, no test does.
 
 ## From T3 Code
 

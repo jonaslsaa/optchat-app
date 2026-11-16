@@ -7,7 +7,7 @@ import { startServer } from '../src/server/server.ts';
 // pi-optchat's own lock, which only Pi takes: here it stands for a Pi in a terminal.
 import { describeOwner, lockProfile } from 'pi-optchat/files';
 import { createProfile, give, png } from '../test/support.ts';
-import { agents, CHANGES, demo, FORMULAS, limited, remember, seed, SHIPPED, SHIPPING, spend, TEAM } from './seed.ts';
+import { agents, CHANGES, demo, FILES, FORMULAS, limited, NAMED, remember, seed, SHIPPED, SHIPPING, spend, TEAM } from './seed.ts';
 
 /** `npm run screenshots [directory] [--dark]`: a PNG of every main state of the UI, in /tmp/optchat-app-shots unless a directory
  * is named, and all of them in dark mode with `--dark`. It builds the UI, serves it against throwaway profiles under /tmp with
@@ -61,6 +61,8 @@ limited(long, NOW, { five: 0.62, week: 0.18 });
 limited(join(home, 'profiles', 'notes'), NOW, { five: 1.01, week: 0.4, overage: true });
 limited(join(home, 'profiles', 'work'), NOW, { five: 0.98, week: 0.71, ago: 4 * 60_000, refused: 60_000 });
 limited(join(home, 'profiles', 'links'), NOW, { five: 0.35, week: 0.52, ago: 6 * 3600_000 });
+seed(createProfile(home, 'files'), 1, NOW, NAMED);
+for (const file of FILES) { mkdirSync(join(home, file, '..'), { recursive: true }); writeFileSync(join(home, file), ''); }
 const gh = { command: process.execPath, args: [join(import.meta.dirname, '../test/fake-gh.ts')] }, github = (state: object) => writeFileSync(join(home, 'gh', 'gh.json'), JSON.stringify(state));
 process.env.FAKE_GH_HOME = join(home, 'gh');
 mkdirSync(join(home, 'gh'));
@@ -462,6 +464,12 @@ async function pictures(browser: Browser, control: Client) {
   for (const [name, options] of [['91-formulas-and-table', {}], ['92-formulas-and-table-dark', { dark: true }], ['93-formulas-and-table-narrow', { width: 420 }]] as const) {
     const page = await open(['formulas'], options);
     await page.locator('.katex-display').waitFor();
+    await shot(page, name);
+  }
+  // A reply that names files: the two in the window's folder are links to your editor, the one that is not stays code.
+  for (const [name, options] of [['98-files-named', {}], ['99-files-named-dark', { dark: true }], ['100-files-named-narrow', { width: 420 }]] as const) {
+    const page = await open(['files'], options);
+    await page.getByRole('button', { name: 'the shutdown test' }).waitFor();
     await shot(page, name);
   }
   // Not a picture: Esc closes the list and the run goes on, wherever the focus is. A click on a row once left the key to the

@@ -39,11 +39,11 @@ npm run screenshots       # a PNG of every main state, in /tmp/optchat-app-shots
 | ⌘⇧O | New window |
 | ⌥1 … ⌥9 | Go to a window |
 | ⌘B | Show or hide the sidebar |
-| ⌥M | The main chat, or its memory view |
+| ⌥M | The main chat, or its memory view; from a connected window, the main chat's memory view |
 | ↑ ↓ | In an empty composer: what you said last, then the message before it, and ↓ forward again to an empty box |
 | ↑ ↓ | In the list of profiles: the one above or below, round its ends |
 | ↑ ↓ / → ← | In the memory view: the line above or below / open or close it |
-| ⌘F | Search the memory, from the main chat too (not from the panel): the memory view is shown with the keys in its search box. ↓ goes to what was found and ↑ from the first of it back to the box, Enter opens a message in the tree, Esc ends the search |
+| ⌘F | Search the memory, from the main chat and a connected window too (not from the panel): the memory view is shown with the keys in its search box. ↓ goes to what was found and ↑ from the first of it back to the box, Enter opens a message in the tree, Esc ends the search |
 | ⌘, | Settings |
 
 ### Whose a key is
@@ -78,7 +78,7 @@ One rule, in `keys.ts`. A part of the page that has keys of its own says so: the
 | `src/ui/models.ts`, `Model.tsx`, `Mark.tsx` | The model: how the list is ordered and searched, the composer's button and its list, and the providers' marks ([Model](#model)). Tested in `test/models.test.ts`. |
 | `src/ui/usage.ts`, `Usage.tsx` | What a profile used: the words and the figures, with no DOM, and the page ([Usage](#usage)). Tested in `test/usage.test.ts`. |
 | `src/ui/Settings.tsx`, `Setup.tsx`, `Outside.tsx`, `theme.ts` | The settings page, what a chat needs, a profile a terminal has open, and the theme ([setup.md](setup.md)). |
-| `src/ui/keys.ts` | Shortcuts, and `useShortcuts`. |
+| `src/ui/keys.ts` | Shortcuts, and `useShortcuts`; `useMenu`, by which the desktop app's menu bar runs what a shortcut runs ([desktop.md](desktop.md)). |
 | `src/ui/ui.tsx`, `WorkLog.tsx`, `markdownStreamBlocks.ts`, `index.css` | Buttons, tool-call rows, the Markdown splitter and the design tokens, from T3 Code. |
 | `src/window.ts` | What a window can do (`canComplete`) and which of its Pi's messages are the conversation it is in (`current`), for the server and the page alike. |
 

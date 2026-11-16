@@ -42,9 +42,11 @@ export function offered(release: unknown, current: string, arch: string = proces
   const sha256 = /^sha256:([0-9a-f]{64})$/.exec(zip?.digest ?? '')?.[1];
   return zip && sha256 ? { version, page: release.html_url, url: zip.browser_download_url, size: zip.size, sha256 } : undefined;
 }
-/** The latest release, when it is an update for an app at `current`. No answer (no network, a private repository) is none. */
+/** The latest release, when it is an update for an app at `current`. None is none (a private repository, or no release yet);
+ * any other refusal, as when GitHub has been asked too often, is no answer, as no network is. */
 export async function latest(feed: string, current: string): Promise<Update | undefined> {
   const response = await fetch(feed, { headers: { accept: 'application/vnd.github+json', 'user-agent': 'OptChat' }, signal: AbortSignal.timeout(30_000) });
+  if (!response.ok && response.status !== 404) throw new Error(`GitHub answered ${response.status}.`);
   return response.ok ? offered(await response.json(), current) : undefined;
 }
 
@@ -116,34 +118,39 @@ export interface UpdaterOptions {
 }
 /** Looks for updates and installs them. `look` asks for the latest release and, if it is newer, makes it ready and says so
  * once (`ready`), or says that you have to get it yourself (`manual`): where the app cannot be replaced, or the same version
- * could not be installed before. `install` is for the app's end, once everything it runs has stopped: it puts the ready
+ * could not be installed before. A look you `asked` for says again what was said before, and every look answers what it
+ * found: an update (`found`), nothing newer (`none`), or that it is looking already, which may be a download (`busy`).
+ * `install` is for the app's end, once everything it runs has stopped: it puts the ready
  * update in place, and says whether it did. Neither restarts anything. */
 export function updater({ bundle, version, feed = LATEST, failed, ready, manual }: UpdaterOptions) {
-  let looking = false, told: string | undefined, staged: { app: string; version: string } | undefined;
+  let looking = false, told: string | undefined, staged: { app: string; update: Update } | undefined;
   const gaveUp = () => { try { return readFileSync(failed, 'utf8'); } catch { return undefined; } };
   const giveUp = (version: string) => { try { writeFileSync(failed, version); } catch { /* Then it is tried again. */ } };
   return {
-    async look() {
+    async look(asked = false): Promise<'found' | 'none' | 'busy'> {
       // One at a time, and none while an update waits for the app to quit: the next one is found by the app it becomes.
-      if (looking || staged) return;
+      if (looking) return 'busy';
+      if (staged) { if (asked) ready(staged.update); return 'found'; }
       looking = true;
       try {
         // The app this one replaced, when it is the first look after an update. Where nothing can be removed, nothing is.
         const can = replaceable(bundle);
         if (can) await tidy(bundle);
         const update = await latest(feed, version);
-        if (!update || update.version === told) return;
-        if (!can || gaveUp() === update.version) { told = update.version; manual(update); return; }
+        if (!update) return 'none';
+        if (update.version === told && !asked) return 'found';
+        if (!can || gaveUp() === update.version) { told = update.version; manual(update); return 'found'; }
         // A release that cannot be installed is not downloaded again at every look: its page is offered from the next one on.
         const app = await stage(update, bundle).catch((error: unknown) => { if (error instanceof Unusable) giveUp(update.version); throw error; });
-        staged = { app, version: update.version };
+        staged = { app, update };
         told = update.version;
         ready(update);
+        return 'found';
       } finally { looking = false; }
     },
     install() {
       if (!staged) return false;
-      const { app, version } = staged;
+      const { app, update: { version } } = staged;
       staged = undefined;
       try { swap(bundle, app); return true; } catch {
         // macOS may refuse an app that changes itself (App Management). The app goes on as it is, and offers the page next time.

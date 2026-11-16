@@ -2,12 +2,14 @@ import { app, BrowserWindow, clipboard, dialog, Menu, powerSaveBlocker, screen, 
 import { readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
+import { MENU_EVENT, type MenuAction } from '../menu.ts';
 import { startServer } from '../server/server.ts';
 import { launch } from '../server/files.ts';
 import { terminal } from '../server/setup.ts';
 import { awake } from './awake.ts';
 import { loginEnvironment } from './environment.ts';
 import { destination } from './links.ts';
+import { appMenu } from './menu.ts';
 import { quitter } from './quit.ts';
 import { updater } from './update.ts';
 import { contextMenu, placed, recovery } from './window.ts';
@@ -77,6 +79,21 @@ else {
     // Shown once the page is there and marked: the first time it loads whole, which may be after a crash.
     webContents.once('did-finish-load', () => { if (!leaving) window.show(); });
     void load().catch(() => {});
+    return window;
+  };
+  /** The window, in front: opened when there is none, unless the app is on its way out. */
+  const front = () => {
+    const window = current();
+    if (!window) return leaving ? undefined : open();
+    if (window.isMinimized()) window.restore();
+    // One that is still loading is shown when it has loaded, not before.
+    if (window.isVisible()) window.focus();
+    return window;
+  };
+  /** What the menu asks of the page (menu.ts), said to it once it is loaded: the menu may have opened the window for it. */
+  const tell = (action: MenuAction) => {
+    const page = front()?.webContents, say = () => void page?.executeJavaScript(`dispatchEvent(new CustomEvent('${MENU_EVENT}', { detail: '${action}' }))`).catch(() => {});
+    if (page?.isLoading()) page.once('did-finish-load', say); else say();
   };
   // Electron is ready only once this file has run to its end, so the window is not waited for here.
   void app.whenReady().then(() => {
@@ -88,7 +105,9 @@ else {
     for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP'] as const) process.on(signal, () => { sure = true; app.quit(); });
     // The window closed, the app is still in the Dock, and a click on it there opens the window again.
     app.on('activate', () => { if (!current() && !leaving) open(); });
-    app.on('second-instance', () => { const window = current(); if (!window) { if (!leaving) open(); } else { if (window.isMinimized()) window.restore(); window.focus(); } });
+    app.on('second-instance', front);
+    /** Looks for an update because you asked, and answers whatever it finds: an update is said as at any other look. */
+    let check: (() => void) | undefined;
     // The packaged app updates itself (update.ts): it looks soon after it opens and every four hours, downloads a newer
     // release without a word, and asks once. It never restarts on its own: a restart stops every Pi, as quitting does.
     if (app.isPackaged) {
@@ -110,7 +129,15 @@ else {
       const look = () => void updates?.look().catch(() => {});
       setTimeout(look, 10_000);
       setInterval(look, 4 * 3_600_000);
+      const say = (message: string, detail?: string) => void ask({ type: 'info', message, detail, buttons: ['OK'] });
+      check = () => void updates?.look(true).then(found => {
+        // Not "the newest": a newer release whose app is not there for this Mac yet is no update either.
+        if (found === 'none') say(`There is no update for OptChat ${app.getVersion()}`);
+        if (found === 'busy') say('OptChat is looking for an update already', 'If there is one it is downloaded now, and you are asked when it is ready.');
+      }, (error: unknown) => say('OptChat could not look for an update', error instanceof Error ? error.message : String(error)));
     }
+    // The menu bar, in place of Electron's own, which names the app by its package (menu.ts).
+    Menu.setApplicationMenu(Menu.buildFromTemplate(appMenu({ page: tell, keys: () => current()?.webContents.isFocused() ?? false, update: check, browse })));
   });
   // Closing the window (Cmd+W) closes only the window: the app stays in the Dock, and every Pi and its agents go on.
   app.on('window-all-closed', () => {});

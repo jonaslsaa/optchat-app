@@ -1,15 +1,16 @@
 import { ChartColumnIcon, CheckIcon, PanelLeftIcon, PanelRightIcon, SettingsIcon, XIcon } from 'lucide-react';
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ComponentRef } from 'react';
+import { Fragment, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, type ComponentRef, type Ref } from 'react';
 import { flushSync } from 'react-dom';
 import { canComplete, current } from '../window.ts';
 import { busy } from './agents.ts';
 import { Composer } from './Composer.tsx';
-import { label, useOverlay, useShortcuts } from './keys.ts';
+import type { MenuAction } from '../menu.ts';
+import { label, useMenu, useOverlay, useShortcuts } from './keys.ts';
 import { InWindow } from './Markdown.tsx';
 import { MemoryView } from './Memory.tsx';
 import { NO_TREE } from './memory.ts';
 import { Outside } from './Outside.tsx';
-import { Panel, type Shown } from './Panel.tsx';
+import { BESIDE, Panel, type Shown } from './Panel.tsx';
 import { ProfileName, Tabs } from './Profiles.tsx';
 import { Settings, Welcome } from './Settings.tsx';
 import { missing } from './Setup.tsx';
@@ -24,9 +25,11 @@ import { UsagePage } from './Usage.tsx';
 const NOTHING = idle();
 const SHOWS = [['Chat', false], ['Memory', true]] as const;
 
+/** What the desktop app's menu bar asks of a profile's page, which its own shortcuts run too. */
+type InProfile = Record<Exclude<MenuAction, 'settings' | 'usage'>, () => void>;
 /** One profile: its windows on the left, the selected window's chat, and beside the main chat its agents or what it named on
  * GitHub, when they are opened. */
-function Profile({ state, profile, onSettings, onUsage }: { state: State; profile: string; onSettings: () => void; onUsage: () => void }) {
+function Profile({ state, profile, onSettings, onUsage, ref }: { state: State; profile: string; onSettings: () => void; onUsage: () => void; ref: Ref<InProfile> }) {
   // The sidebar stands beside the chat in a wide window. In a narrow one it lies over the chat and is opened for one pick: a
   // window picked, a new one, Esc and a press beside it close it (`useOverlay`), and it is closed again whenever the window
   // is narrow anew. Its top row is then not what the desktop app's window is dragged by: Electron goes by the order in the
@@ -51,14 +54,20 @@ function Profile({ state, profile, onSettings, onUsage }: { state: State; profil
   const name = window && title(window, state), composer = useRef<ComponentRef<typeof Composer>>(null);
   // ⌘F searches the memory from the chat too: the view is on the page before the keys go to its search box. Not from the panel,
   // whose keys are its own: as a sheet it lies over the view, and the box under it cannot take them.
-  const box = useRef<HTMLInputElement>(null), search = () => { setOver(false); flushSync(() => setMemory(true)); box.current?.focus(); box.current?.select(); };
-  useShortcuts((): Record<string, () => void> => own ? {} : { 'mod+f': search }, [own], 'chat', 'memory');
+  // The memory is the main chat's: asked for from a connected window, it is shown there.
+  const main = () => { if (own) app.select(mainOf(profile)); };
+  const box = useRef<HTMLInputElement>(null), search = () => { setOver(false); flushSync(() => { main(); setMemory(true); }); box.current?.focus(); box.current?.select(); };
+  const newWindow = () => { setOver(false); void app.newWindow(profile); }, remember = () => { main(); setMemory(shown => own || !shown); };
+  useShortcuts(() => ({ 'mod+f': search }), [profile, own], 'chat', 'memory');
   useShortcuts(() => ({
-    'mod+shift+o': () => { setOver(false); void app.newWindow(profile); },
+    'mod+shift+o': newWindow,
     'mod+b': toggle,
-    ...!own && { 'alt+m': () => setMemory(shown => !shown) },
+    'alt+m': remember,
     ...Object.fromEntries(ids.split(' ').slice(0, 9).map((id, index) => [`alt+${index + 1}`, () => { setOver(false); app.select(id); }])),
   }), [profile, ids, own, wide]);
+  // The menu bar runs the same, from wherever the focus is. The panel as a sheet lies over all of it, and is closed first.
+  const sheet = !useMedia(BESIDE), under = (run: () => void) => () => { if (sheet) setPanel(undefined); run(); };
+  useImperativeHandle(ref, () => ({ newWindow: under(newWindow), sidebar: under(toggle), memory: under(remember), search: under(search) }));
   // What of the main chat says its agents changed: its Pi started or stopped, an agent was started or ended, a report came.
   const pulse = [window?.status, live.status.optchat, live.messages.length, log?.total].join(' ');
   // What says a turn of it began or ended, for what reads the whole log: that is too much to do at every message.
@@ -117,8 +126,22 @@ function Profile({ state, profile, onSettings, onUsage }: { state: State; profil
 export function App() {
   // The page in the chat's place, if one is: the settings, or what the profile in front used.
   const state = useApp(), [page, setPage] = useState<'settings' | 'usage'>(), settings = page === 'settings', needs = missing(state);
+  const toSettings = () => setPage(page => page === 'settings' ? undefined : 'settings'), chat = useRef<InProfile>(null);
   // Such a page is in place of the chat, so Esc there closes it: a run is stopped from the chat, where it can be seen.
-  useShortcuts(() => ({ 'mod+,': () => setPage(page => page === 'settings' ? undefined : 'settings'), ...page && { escape: () => setPage(undefined) } }), [page]);
+  useShortcuts(() => ({ 'mod+,': toSettings, ...page && { escape: () => setPage(undefined) } }), [page]);
+  // The desktop app's menu bar. What it asks of a profile's page is done there, with that page in front, once the profile's
+  // chat is there to do it in: the menu may have opened the window to ask. Without a profile there is nothing to do it to:
+  // the first page is put in front, with the focus where a profile is named.
+  const connecting = state.connection === 'connecting', opening = state.profile !== undefined && !state.windows.some(window => window.profile === state.profile);
+  useMenu(action => {
+    if (connecting) return false;
+    // The menu's Settings… opens them and never closes them, as its key does.
+    if (action === 'settings') return setPage('settings');
+    if (opening) return false;
+    if (action === 'usage' && state.profile) return setPage('usage');
+    flushSync(() => setPage(undefined));
+    if (action !== 'usage' && chat.current) chat.current[action](); else document.querySelector<HTMLElement>('[aria-label="Profile name"]')?.focus();
+  }, [connecting, opening, state.profile]);
   return (
     <div className="flex h-dvh flex-col">
       {state.tabs.length > 1 && <Tabs state={state} />}
@@ -136,7 +159,7 @@ export function App() {
       )}
       {settings ? <Settings state={state} onClose={() => setPage(undefined)} />
         : page && state.profile ? <UsagePage key={state.profile} state={state} profile={state.profile} onClose={() => setPage(undefined)} />
-        : state.profile ? <Profile key={state.profile} state={state} profile={state.profile} onSettings={() => setPage('settings')} onUsage={() => setPage('usage')} />
+        : state.profile ? <Profile ref={chat} key={state.profile} state={state} profile={state.profile} onSettings={() => setPage('settings')} onUsage={() => setPage('usage')} />
         : state.connection === 'connecting' ? <p className="m-auto text-muted-foreground text-sm">Connecting…</p>
         : <Welcome state={state} />}
     </div>

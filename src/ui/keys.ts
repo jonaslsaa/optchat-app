@@ -1,4 +1,5 @@
 import { useEffect, useState, type RefObject } from 'react';
+import { MENU_ACTIONS, MENU_EVENT, type MenuAction } from '../menu.ts';
 
 /** Keyboard shortcuts, written as `mod+shift+o`: `mod` is ⌘ on a Mac and Ctrl elsewhere. Letters and digits are matched by the
  * key's place on the keyboard, so Alt+1 is found though a Mac types ¡ for it. */
@@ -58,6 +59,27 @@ export function useShortcuts(bindings: () => Record<string, () => void>, deps: r
     };
     addEventListener('keydown', pressed);
     return () => removeEventListener('keydown', pressed);
+  }, deps);
+}
+/** What the desktop app's menu bar asked for and nothing has done yet. It is heard from the start: the menu may open the
+ * window for what it asks, and asks before the page has anything to ask. What still waits when you press a key or click
+ * is forgotten: you went on to something else, and it is not done behind your back later. */
+let asked: MenuAction | undefined, take: (() => void) | undefined;
+if (typeof window !== 'undefined') {
+  addEventListener(MENU_EVENT, event => {
+    asked = event instanceof CustomEvent ? MENU_ACTIONS.find(action => action === event.detail) : undefined;
+    take?.();
+  });
+  for (const type of ['keydown', 'pointerdown'] as const) addEventListener(type, () => { asked = undefined; }, true);
+}
+/** Does what the desktop app's menu bar asks (`src/menu.ts`), with `does`, which says `false` while the page cannot do it
+ * yet: it is asked again when `deps` change, with which `does` is made again. */
+export function useMenu(does: (action: MenuAction) => boolean | void, deps: readonly unknown[]) {
+  useEffect(() => {
+    take = () => { if (asked && does(asked) !== false) asked = undefined; };
+    // What waited is done after this, not in it: it may want the page drawn at once (`flushSync`), which an effect cannot have.
+    const waited = setTimeout(take);
+    return () => { clearTimeout(waited); take = undefined; };
   }, deps);
 }
 /** A menu or a list that lies over the page while it is `open`, under `root` with the button that opens it. Esc closes it and

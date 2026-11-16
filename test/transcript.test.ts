@@ -357,11 +357,17 @@ test('what a streaming reply has opened and not closed on its end is held back, 
   assert.equal(closed('So $E=mc^2$ and'), 'So $E=mc^2$ and');
   // A price is no formula.
   assert.equal(closed('It costs $5 a month'), 'It costs $5 a month');
-  assert.equal(closed('Then:\n\n$$\nE = m'), 'Then:\n');
+  assert.equal(closed('Then:\n\n$$\nE = m'), 'Then:\n\n');
   // A table shows once the line under its head has come, and only then.
   assert.equal(closed('Zones:\n\n| Zone | Exposure |\n|---'), 'Zones:\n\n');
   assert.equal(closed('Zones:\n\n| Zone | Exposure |\n|---|---|\n| High | Dr'), 'Zones:\n\n| Zone | Exposure |\n|---|---|\n| High | Dr');
   // In a code block all of it is code.
+  assert.equal(closed('Run `echo $HOME` and `a ** b` here'), 'Run `echo $HOME` and `a ** b` here');
+  assert.equal(closed('Run `echo $HO'), 'Run ');
+  assert.equal(closed('Run ``a ` b`` and **so'), 'Run ``a ` b`` and ');
+  assert.equal(closed('````md\n```js\nx\n```\nIt is **so'), '````md\n```js\nx\n```\nIt is **so');
+  assert.equal(closed('````md\n```js\nx\n```\n````\nIt is **so'), '````md\n```js\nx\n```\n````\nIt is ');
+  assert.equal(closed('```\n$$\n```\nAfter it'), '```\n$$\n```\nAfter it');
   assert.equal(closed('```py\nx = a ** b'), '```py\nx = a ** b');
   assert.equal(closed('```py\nx = 1\n```\nIt is **so'), '```py\nx = 1\n```\nIt is ');
   // More than a short stretch is more likely a lone mark than an opened one, and shows as written.

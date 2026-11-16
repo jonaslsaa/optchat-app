@@ -163,19 +163,29 @@ export function paced(text: string, shown: number, ms: number): number {
   return end < 0 ? to : to + end;
 }
 /** A reply that streams, without the Markdown its end has opened and not closed yet, so it never shows as it was written: a
- * `**`, `` ` `` or a formula's `$` on its last line, a `$$` formula, or a table's rows before the line under its head. What is
+ * `**`, `` ` `` or `$` on its last line outside code, a `$$` formula, or a table's rows before the line under its head. What is
  * held back is at most `HOLD` letters: a longer one is more likely a lone `$` than a formula, and shows as it is. Nothing is
- * held in a code block, where all of it is code. */
+ * held in a code block, where all of it is code; fences close as in `markdownStreamBlocks.ts`. */
 const HOLD = 80;
 export function closed(text: string): string {
-  const lines = text.split('\n'), last = lines.at(-1) ?? '', start = text.length - last.length;
-  if (lines.filter(line => /^ {0,3}(`{3,}|~{3,})/.test(line)).length % 2) return text;
-  const cuts = ['**', '`', '$'].flatMap(mark => {
-    const at = last.lastIndexOf(mark);
-    return last.split(mark).length % 2 === 0 && !(mark === '$' && /[\s\d]/.test(last.charAt(at + 1))) ? [start + at] : [];
-  });
-  const display = lines.flatMap((line, at) => line.trim() === '$$' ? [at] : []);
-  if (display.length % 2) cuts.push(lines.slice(0, display.at(-1)).join('\n').length);
+  const lines = text.split('\n'), display: number[] = [];
+  let fence = '', offset = 0;
+  for (const line of lines) {
+    const opener = /^ {0,3}(`{3,}|~{3,})/.exec(line)?.[1];
+    if (fence) { if (opener?.[0] === fence[0] && opener.length >= fence.length && line.trim() === opener) fence = ''; }
+    else if (opener) fence = opener;
+    else if (line.trim() === '$$') display.push(offset);
+    offset += line.length + 1;
+  }
+  if (fence) return text;
+  // The last line with its code spans blanked out, up to a code span that is still open.
+  const last = lines.at(-1) ?? '', start = text.length - last.length, bare = last.replace(/(`+)(?:[^]*?[^`])?\1(?!`)/g, span => '\0'.repeat(span.length));
+  const tick = bare.indexOf('`'), prose = tick < 0 ? bare : bare.slice(0, tick), cuts = tick < 0 ? [] : [start + tick];
+  for (const mark of ['**', '$']) {
+    const at = prose.lastIndexOf(mark);
+    if (prose.split(mark).length % 2 === 0 && !(mark === '$' && /[\s\d]/.test(prose.charAt(at + 1)))) cuts.push(start + at);
+  }
+  if (display.length % 2) cuts.push(display.at(-1) ?? 0);
   const rows = /(?:^|\n)((?:[ \t]*\|.*(?:\n|$))+)$/.exec(text.slice(text.lastIndexOf('\n\n') + 1));
   if (rows && !/^[ \t|:-]*-[ \t|:-]*\n/m.test(rows[1])) cuts.push(text.length - rows[1].length);
   const cut = Math.min(...cuts.filter(cut => text.length - cut <= HOLD));

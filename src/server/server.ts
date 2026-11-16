@@ -127,8 +127,14 @@ export async function startServer({ port = 0, origins = [], ui = join(import.met
   const address = server.address() as AddressInfo;
   return {
     port: address.port, url: `ws://127.0.0.1:${address.port}/ws`, page: `http://127.0.0.1:${address.port}/`,
-    /** How many chats have an agent at work now: what stopping the server would cut short. */
-    working: () => windows.list().windows.filter(window => window.status === 'running').length,
+    /** How many agents stopping the server would cut short: every chat of its own that is in a run, and every agent that
+     * is running under a main chat it runs (not one that is paused, or only waits for its own agents). A chat in a terminal
+     * and its agents are not the server's to stop. */
+    async working() {
+      const own = windows.list().windows.filter(window => !window.outside && window.status !== 'stopped' && window.status !== 'closed');
+      const under = await Promise.all(own.filter(window => window.role === 'main').map(({ profile }) => agents.list({ profile }).then(list => list.agents.filter(agent => agent.state === 'running').length, () => 0)));
+      return own.filter(window => window.status === 'running').length + under.reduce((sum, count) => sum + count, 0);
+    },
     /** No request is taken from here on; one already under way ends with its Pi. */
     async close() {
       closing = true;

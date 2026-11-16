@@ -72,12 +72,15 @@ test('an agent is told, interrupted, stopped and resumed through the Pi that has
   // No Pi has the profile, so there is no agent to reach: pi-optchat says so, and nothing is started to interrupt or stop one.
   await assert.rejects(client.request('stopAgent', agent('aaaaaaaa')), /No running OptChat session on this profile accepts connections/);
   assert.deepEqual((await client.request('windows', {})).windows, []);
+  assert.equal(await server.working(), 0, 'a run saved as working, in a profile no Pi has open: stopping the server stops nothing');
   // A message is worth a Pi: the main window's is started. An agent that has ended is resumed with it, and one at work is
   // told, which it keeps until it reads it: you do not choose between the two.
   assert.deepEqual(await client.request('tellAgent', { ...agent('bbbbbbbb'), text: 'And the Windows run?' }), { resumed: true });
   assert.partialDeepStrictEqual((await client.request('windows', {})).windows, [{ id: 'crew/main', status: 'idle' }]);
   assert.deepEqual(await client.request('tellAgent', { ...agent('aaaaaaaa'), text: 'Skip the slow test.' }), { resumed: false });
   assert.deepEqual(await states(), { aaaaaaaa: 'running', bbbbbbbb: 'running', cccccccc: 'completed' });
+  // The main chat is not in a run, but its two agents are: that is what a quit would cut short.
+  assert.equal(await server.working(), 2);
   assert.deepEqual((await client.request('agent', agent('aaaaaaaa'))).queued, ['Skip the slow test.']);
 
   // pi-optchat refuses in its own words, which are the answer: an agent's own agent is resumed by that agent alone.
@@ -90,5 +93,6 @@ test('an agent is told, interrupted, stopped and resumed through the Pi that has
   assert.deepEqual(await client.request('interruptAgent', agent('aaaaaaaa')), {});
   assert.deepEqual(await client.request('stopAgent', agent('bbbbbbbb')), {});
   assert.deepEqual(await states(), { aaaaaaaa: 'paused', bbbbbbbb: 'stopped', cccccccc: 'completed' });
+  assert.equal(await server.working(), 0, 'an agent that is paused is not at work');
   assert.equal((await client.request('agent', agent('bbbbbbbb'))).report, 'Stopped by the user.');
 });

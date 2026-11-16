@@ -65,8 +65,9 @@ else {
       const wait = recover(reason);
       if (wait !== undefined) setTimeout(() => { if (!window.isDestroyed()) void load().catch(() => {}); }, wait);
     });
-    // Shown once the page is there and marked.
-    void load().then(() => { if (!window.isDestroyed()) window.show(); });
+    // Shown once the page is there and marked: the first time it loads whole, which may be after a crash.
+    webContents.once('did-finish-load', () => window.show());
+    void load().catch(() => {});
   };
   // Electron is ready only once this file has run to its end, so the window is not waited for here.
   void app.whenReady().then(() => {

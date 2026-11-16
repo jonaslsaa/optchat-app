@@ -22,7 +22,8 @@ export function quitter({ working, ask, close, quit }: Quitting) {
       else if (!asking) {
         asking = true;
         // What cannot be counted is not asked about: a quit that never comes is worse than one that was not asked about.
-        void working().catch(() => 0).then(count => count === 0 || ask(count)).then(yes => { asking = false; if (yes) stop(); }, () => { asking = false; });
+        // And a quit that became sure while the agents were counted is not asked about any more.
+        void working().catch(() => 0).then(count => closing !== undefined || count === 0 || ask(count)).then(yes => { asking = false; if (yes) stop(); }, () => { asking = false; });
       }
       return false;
     },

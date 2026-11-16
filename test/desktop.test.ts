@@ -147,6 +147,16 @@ test('a quit waits until everything is stopped, and asks first only while agents
   await sure.next();
   assert.deepEqual([sure.did, sure.quit.request()], [['ask 3', 'close', 'quit'], true]);
 
+  // The same while the agents are still being counted: once they are, nothing is asked.
+  let counted = (_count: number) => {};
+  const did: string[] = [];
+  const counting = quitter({ working: () => new Promise(resolve => { counted = resolve; }), ask: async working => { did.push(`ask ${working}`); return false; }, close: async () => { did.push('close'); }, quit: () => { did.push('quit'); } });
+  counting.request();
+  counting.request(true);
+  counted(2);
+  await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual([did, counting.request()], [['close', 'quit'], true]);
+
   // What cannot be counted is not asked about: the app still quits.
   const unknown = app(new Error('No answer.'));
   unknown.quit.request();

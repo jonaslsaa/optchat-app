@@ -442,7 +442,7 @@ async function pictures(browser: Browser, control: Client) {
   const quoting = await open(['team']);
   await quoting.getByText('The snapshot is the fallback, not the default').click({ clickCount: 3 });
   await quoting.getByRole('button', { name: 'Quote' }).waitFor();
-  await shot(quoting, '67-quote-selection');
+  await shot(quoting, '72-quote-selection');
   // Not a picture: Esc closes the list and the run goes on, wherever the focus is. A click on a row once left the key to the
   // shortcut that stops the agent.
   await pick.getByText('Main chat', { exact: true }).last().click();

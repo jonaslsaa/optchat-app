@@ -68,7 +68,7 @@ export async function startServer({ port = 0, origins = [], ui = join(import.met
     profiles: () => profiles.list(), createProfile: params => profiles.create(params), history: params => profiles.history(params), view: params => profiles.view(params), zoom: params => profiles.zoom(params), original: params => profiles.original(params), search: params => profiles.search(params),
     windows: () => windows.list(), open: params => windows.open(params), prompt: params => windows.prompt(params), abort: params => windows.abort(params),
     complete: params => windows.complete(params), close: params => windows.close(params), records: params => windows.records(params),
-    command: params => windows.command(params), answer: params => windows.answer(params), models: params => windows.models(params), setModel: params => windows.setModel(params),
+    command: params => windows.command(params), answer: params => windows.answer(params), commands: params => windows.commands(params), models: params => windows.models(params), setModel: params => windows.setModel(params),
     usage: ({ profile, range }) => usage(profileDirectory(home, profile), range, now()),
     settings: () => settings,
     setSettings: params => { settings = writeSettings(app, settings, params); push({ push: 'settings', settings }); return settings; },

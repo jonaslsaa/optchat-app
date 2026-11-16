@@ -1,6 +1,7 @@
 import { CircleAlertIcon, CornerUpRightIcon, ListPlusIcon, XIcon } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import type { PiRecord, WindowState } from '../protocol.ts';
+import { useCommands } from './Commands.tsx';
 import { escapes, label, useShortcuts } from './keys.ts';
 import { Model } from './Model.tsx';
 import { app, type State } from './store.ts';
@@ -100,6 +101,7 @@ export function Composer({ state, window, live, chat, onSend }: { state: State; 
   // What is typed is kept as it is typed (`app.draft`): while you look at another window, and when the page is opened again.
   const change = (value: string) => { setText(value); app.keep(window.id, value); };
   useEffect(() => area.current?.focus(), [window.id]);
+  const commands = useCommands(state, window, text, change, area);
 
   const send = async (later: boolean) => {
     const message = text.trim();
@@ -129,12 +131,15 @@ export function Composer({ state, window, live, chat, onSend }: { state: State; 
         {/* However much Pi says, the box you type in stays on the page: past a few lines they scroll. */}
         {live.notices.length > 0 && <div className="flex max-h-40 flex-col gap-2 overflow-y-auto">{live.notices.map(notice => <Said key={notice.text} notice={notice} onDismiss={() => quiet(notice.text)} />)}</div>}
         <div className="relative isolate rounded-2xl bg-card shadow-composer after:pointer-events-none after:absolute after:inset-0 after:rounded-[inherit] after:border after:border-black/8 dark:bg-(--surface-raised) dark:shadow-none dark:after:border-white/8">
-          <div className="relative px-4 pt-3.5 pb-2">
+          <div ref={commands.root} className="relative px-4 pt-3.5 pb-2">
+            {commands.menu}
             <textarea
-              ref={area} value={text} rows={1} aria-label="Message"
+              ref={area} value={text} rows={1} aria-label="Message" {...commands.field}
               placeholder={running ? 'Steer the agent, or queue a message for later' : window.role === 'main' ? 'Message the main chat' : window.completed ? 'A message starts a new connected window' : 'Message this window'}
               onChange={event => change(event.target.value)}
               onKeyDown={event => {
+                // The list a `/` opens gets its keys first: the arrows, Tab and Enter.
+                if (commands.keyed(event)) return;
                 if (event.shiftKey || event.altKey || event.nativeEvent.isComposing) return;
                 if (event.key === 'Enter') { event.preventDefault(); void send(event.metaKey || event.ctrlKey); }
                 // ↑ on the first line and ↓ on the last go through what you said; on a line between, they move in the text.

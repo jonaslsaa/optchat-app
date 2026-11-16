@@ -1,5 +1,5 @@
 import { CheckIcon, CopyIcon, LoaderCircleIcon } from 'lucide-react';
-import { useLayoutEffect, useRef, useState, useSyncExternalStore, type ComponentProps, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type ComponentProps, type ReactNode } from 'react';
 import type { WindowState } from '../protocol.ts';
 import { extendTailwindMerge, type ClassNameValue } from 'tailwind-merge';
 
@@ -46,6 +46,28 @@ export function Choice<T extends string | boolean>({ label, name, title, options
     </div>
   );
 }
+export const ROW = 'flex min-h-8 w-full cursor-pointer items-center gap-2 rounded-sm px-2 py-1 text-left text-sm outline-none sm:min-h-7';
+/** A list one row of which is picked: with a click, or with the keys from the field the typing goes on in, which says which
+ * row that would be (`at`: its `aria-activedescendant` is `${id}-${at}`, its `aria-controls` `${id}-list`) and moves it with
+ * the arrows (`stepped`). That row is kept in sight. `head` is what stands over a row, `selected` the row in use. The look
+ * and the keys are T3 Code's model picker (MIT, see THIRD_PARTY_NOTICES.md). */
+export function Options<T>({ id, label, rows, at, selected, head, empty, onPick, children }: { id: string; label: string; rows: readonly T[]; at: number; selected?: T; head?: (row: T, k: number) => ReactNode; empty: ReactNode; onPick: (row: T, k: number) => void; children: (row: T) => ReactNode }) {
+  const list = useRef<HTMLUListElement>(null);
+  useEffect(() => { list.current?.querySelector('[data-at]')?.scrollIntoView({ block: 'nearest' }); }, [at, rows]);
+  return (
+    <ul ref={list} id={`${id}-list`} role="listbox" aria-label={label} className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 py-1.5">
+      {rows.map((row, k) => (
+        <li key={k}>
+          {head?.(row, k)}
+          <div id={`${id}-${k}`} role="option" aria-selected={row === selected} data-at={k === at ? '' : undefined} onClick={() => onPick(row, k)} className={cn(ROW, 'hover:bg-foreground/[0.09] data-at:bg-foreground/[0.09]')}>{children(row)}</div>
+        </li>
+      ))}
+      {rows.length === 0 && <li className="p-2 text-center text-muted-foreground text-sm">{empty}</li>}
+    </ul>
+  );
+}
+/** The row an arrow moves to from `at`, round the ends of the list. */
+export const stepped = (key: 'ArrowDown' | 'ArrowUp', at: number, rows: number) => (at + (key === 'ArrowDown' ? 1 : rows - 1)) % Math.max(1, rows);
 /** "Show 8 more", under a list (the `ul` before it) that shows `step` at a time and has `more` left. It keeps the focus while
  * there are more to show. Once there are none it is gone, and the focus it had goes to the list's last row and not to the page. */
 export function More({ more, step, onMore }: { more: number; step: number; onMore: () => void }) {

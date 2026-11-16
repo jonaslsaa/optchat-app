@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from 'react';
 import { connect, type Client } from '../client.ts';
-import type { Config, Line, Message, Method, ModelChoice, Params, Push, Result, Settings, Setup, Usage, WindowState } from '../protocol.ts';
+import type { Command, Config, Line, Message, Method, ModelChoice, Params, Push, Result, Settings, Setup, Usage, WindowState } from '../protocol.ts';
 import { current } from '../window.ts';
 import { calling, key, NO_TREE, path, read, toggled, type Tree } from './memory.ts';
 import { apply, idle, isMessage, isObject, merged, quiet, replay, stopped, without, words, type Live, type PiMessage } from './transcript.ts';
@@ -30,6 +30,8 @@ export interface State {
   github: Record<string, Result<'github'>>;
   /** The models each window's agent can run on, as last read, with what Pi starts on by itself where the window had no Pi. */
   models: Record<string, Result<'models'>>;
+  /** The commands each window's Pi knows, once the list a `/` opens has asked for them. */
+  commands: Record<string, Command[]>;
   chats: Record<string, { total: number; messages: PiMessage[]; report?: string; ended?: number; queued?: string[] }>;
   /** Each profile's memory view, once it was looked at, with the lines that were opened in it. */
   memory: Record<string, Tree>;
@@ -58,7 +60,7 @@ export function title(window: WindowState, state: State) {
 }
 
 export class App {
-  state: State = { connection: 'connecting', profiles: [], tabs: [], windows: [], selected: {}, logs: {}, live: {}, sessions: {}, agents: {}, github: {}, models: {}, chats: {}, memory: {}, config: {}, usage: {} };
+  state: State = { connection: 'connecting', profiles: [], tabs: [], windows: [], selected: {}, logs: {}, live: {}, sessions: {}, agents: {}, github: {}, models: {}, commands: {}, chats: {}, memory: {}, config: {}, usage: {} };
   private client?: Client;
   private retrying?: ReturnType<typeof setTimeout>;
   private closed = false;
@@ -321,6 +323,11 @@ export class App {
   async readUsage(profile: string, range?: string) {
     const usage = await this.ask('usage', { profile, range });
     if (usage && JSON.stringify(usage) !== JSON.stringify(this.state.usage[profile])) this.set({ usage: { ...this.state.usage, [profile]: usage } });
+  }
+  /** Reads the commands a window's Pi knows, which starts that Pi: they are its extensions', its prompt templates and its skills. */
+  async readCommands(window: string) {
+    const answer = await this.client?.request('commands', { window }).catch(() => ({ commands: [] }));
+    if (answer) this.set({ commands: { ...this.state.commands, [window]: answer.commands } });
   }
   /** The models a window's agent can run on. Asked quietly, and none where Pi cannot be asked: the page already says what
    * is missing then. */

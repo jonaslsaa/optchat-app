@@ -125,6 +125,9 @@ export class Windows {
     if (['prompt', 'steer', 'follow_up'].includes(command.type)) throw new Error('Send a message with `prompt`, which knows when a window takes one.');
     return { data: await this.running(window).request(command) };
   }
+  async commands({ window }: Params<'commands'>): Promise<Result<'commands'>> {
+    return answered('get_commands', methods.commands.result, await (await this.started(this.get(window))).request({ type: 'get_commands' }));
+  }
   async models({ window }: Params<'models'>): Promise<Result<'models'>> {
     const { pi } = this.get(window);
     return pi ? { models: await offered(pi) } : this.options.catalog();

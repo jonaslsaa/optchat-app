@@ -6,7 +6,7 @@ import { useOverlay } from './keys.ts';
 import { Mark } from './Mark.tsx';
 import { arranged, listed, picked, provider, search, thinks } from './models.ts';
 import { app, type State } from './store.ts';
-import { Choice, cn } from './ui.tsx';
+import { Choice, cn, Options, ROW, stepped } from './ui.tsx';
 
 /** A model as the page writes one: its provider's mark, its name (its id, until Pi's list is read), and how hard it thinks,
  * for one that can. The mark is the only colour in it. */
@@ -21,7 +21,6 @@ export function ModelName({ model, models }: { model: ModelChoice; models?: Resu
   );
 }
 
-const ROW = 'flex min-h-8 w-full cursor-pointer items-center gap-2 rounded-sm px-2 py-1 text-left text-sm outline-none sm:min-h-7';
 const HEAD = 'flex h-8.25 shrink-0 items-center gap-2 border-border/70 border-b pb-1.5 text-sm';
 /** The list a model is picked from: every model Pi can use, each provider's under its name, found by typing; beside it the
  * levels the picked model can think at. A click picks, and the list stays open for the level. The look and the keys are
@@ -40,8 +39,7 @@ function Picker({ window, models, own, subagent, below }: { window: WindowState;
   const rows = useMemo(() => typed.trim() ? search(all, typed) : arranged(all), [all, typed]);
   // Until an arrow moves it, the one that would be picked is the model in use, or the best match of what is typed.
   const at = moved ?? Math.max(0, typed.trim() || !now ? 0 : rows.indexOf(now));
-  const list = useRef<HTMLUListElement>(null), levels = useRef<HTMLDivElement>(null), field = useRef<HTMLInputElement>(null);
-  useEffect(() => { list.current?.querySelector('[data-at]')?.scrollIntoView({ block: 'nearest' }); }, [at, rows]);
+  const levels = useRef<HTMLDivElement>(null), field = useRef<HTMLInputElement>(null);
   const radios = () => [...levels.current?.querySelectorAll<HTMLButtonElement>('[role=radio]') ?? []];
   // A picked model is followed by its level, so the focus goes there, as in T3 Code: to the level it thinks at, once the
   // levels are the picked model's. One that does not think leaves the focus with the typing.
@@ -60,7 +58,7 @@ function Picker({ window, models, own, subagent, below }: { window: WindowState;
   const typing = (event: KeyboardEvent<HTMLInputElement>) => {
     const { key, currentTarget: { selectionStart, value } } = event;
     if (event.nativeEvent.isComposing) return;
-    if (key === 'ArrowDown' || key === 'ArrowUp') { event.preventDefault(); setMoved((at + (key === 'ArrowDown' ? 1 : rows.length - 1)) % Math.max(1, rows.length)); }
+    if (key === 'ArrowDown' || key === 'ArrowUp') { event.preventDefault(); setMoved(stepped(key, at, rows.length)); }
     else if (key === 'Enter' && rows[at]) { event.preventDefault(); void pick(picked(rows[at], model)); }
     else if (key === 'ArrowRight' && selectionStart === value.length) (radios().find(radio => radio.ariaChecked === 'true') ?? radios()[0])?.focus();
   };
@@ -80,21 +78,18 @@ function Picker({ window, models, own, subagent, below }: { window: WindowState;
                 value={typed} onChange={event => { setTyped(event.target.value); setMoved(undefined); }} onKeyDown={typing} onFocus={() => { leveled.current = false; }} className="h-6.5 min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-placeholder" />
             </label>
           </div>
-          <ul ref={list} id={`${id}-list`} role="listbox" aria-label="Models" className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 py-1.5">
-            {rows.map((row, k) => (
-              <li key={`${row.provider}/${row.id}`}>
-                {!typed.trim() && rows[k - 1]?.provider !== row.provider && <p className="px-2 pt-2 pb-1 font-medium text-2xs text-muted-foreground select-none">{provider(row.provider)}</p>}
-                <div id={`${id}-${k}`} role="option" aria-selected={row === now} data-at={k === at ? '' : undefined} onClick={() => { setMoved(k); void pick(picked(row, model)); }}
-                  className={cn(ROW, 'hover:bg-foreground/[0.09] data-at:bg-foreground/[0.09]')}>
-                  <Mark provider={row.provider} />
-                  <span className="min-w-0 truncate">{row.name}</span>
-                  {row === now && <CheckIcon className="size-3.5 shrink-0 text-muted-foreground" />}
-                  {typed.trim() && <span className="ms-auto min-w-0 shrink truncate ps-2 text-muted-foreground/70 text-xs">{provider(row.provider)}</span>}
-                </div>
-              </li>
-            ))}
-            {rows.length === 0 && <li className="p-2 text-center text-muted-foreground text-sm">{!models ? 'Asking Pi for its models…' : all.length ? 'No models found' : 'Pi lists no model: no provider is logged in.'}</li>}
-          </ul>
+          <Options id={id} label="Models" rows={rows} at={at} selected={now} onPick={(row, k) => { setMoved(k); void pick(picked(row, model)); }}
+            head={(row, k) => !typed.trim() && rows[k - 1]?.provider !== row.provider && <p className="px-2 pt-2 pb-1 font-medium text-2xs text-muted-foreground select-none">{provider(row.provider)}</p>}
+            empty={!models ? 'Asking Pi for its models…' : all.length ? 'No models found' : 'Pi lists no model: no provider is logged in.'}>
+            {row => (
+              <>
+                <Mark provider={row.provider} />
+                <span className="min-w-0 truncate">{row.name}</span>
+                {row === now && <CheckIcon className="size-3.5 shrink-0 text-muted-foreground" />}
+                {typed.trim() && <span className="ms-auto min-w-0 shrink truncate ps-2 text-muted-foreground/70 text-xs">{provider(row.provider)}</span>}
+              </>
+            )}
+          </Options>
         </div>
         <div className="flex min-h-0 w-48 shrink-0 flex-col border-border/70 border-l bg-muted/40 max-sm:w-full max-sm:border-t max-sm:border-l-0">
           <div className="shrink-0 px-3 pt-2.5"><p className={HEAD}><span className="text-muted-foreground">Thinking</span></p></div>

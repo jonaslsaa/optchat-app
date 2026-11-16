@@ -420,6 +420,16 @@ async function pictures(browser: Browser, control: Client) {
   await say(refused, 'Summarise the release notes');
   await refused.getByRole('status').filter({ hasText: 'import in progress' }).waitFor();
   await shot(refused, '66-message-not-taken');
+  // The commands Pi knows, in the list a `/` opens over the composer, and as a name is typed.
+  const slash = await open(['notes']), slim2 = await open(['notes'], { width: 420, height: 800, dark: true });
+  for (const page of [slash, slim2]) {
+    await page.getByRole('textbox', { name: 'Message' }).pressSequentially('/');
+    await page.getByRole('option', { name: '/skill:sol-loop' }).waitFor();
+  }
+  await shot(slash, '67-commands');
+  await shot(slim2, '69-commands-narrow-dark');
+  await slash.getByRole('textbox', { name: 'Message' }).pressSequentially('s');
+  await shot(slash, '68-commands-typed');
   // Not a picture: Esc closes the list and the run goes on, wherever the focus is. A click on a row once left the key to the
   // shortcut that stops the agent.
   await pick.getByText('Main chat', { exact: true }).last().click();

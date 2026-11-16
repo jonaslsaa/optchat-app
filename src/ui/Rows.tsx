@@ -1,11 +1,14 @@
-import { BotIcon, ChevronRightIcon, EyeIcon, GlobeIcon, HistoryIcon, SearchIcon, SquarePenIcon, StickyNoteIcon, TerminalIcon, WrenchIcon, XIcon, type LucideIcon } from 'lucide-react';
-import { memo, useEffect, useState, type ReactNode } from 'react';
+import { BotIcon, CheckIcon, ChevronRightIcon, CircleSlashIcon, EyeIcon, GlobeIcon, HistoryIcon, SearchIcon, SquarePenIcon, StickyNoteIcon, TerminalIcon, WrenchIcon, XIcon, type LucideIcon } from 'lucide-react';
+import { createContext, memo, useContext, useEffect, useState, type ReactNode } from 'react';
 import { flushSync } from 'react-dom';
+import { working as agentWorks } from '../agent.ts';
+import type { Agent } from '../protocol.ts';
+import { among, doing, named, stood } from './agents.ts';
 import { CiteCard } from './Cite.tsx';
 import { citing, type Place } from './cite.ts';
 import { Markdown } from './Markdown.tsx';
-import { act, took, worked, type Part, type Step, type Thinking, type Tool } from './transcript.ts';
-import { Button, cn, CopyButton, Picture, Spinner } from './ui.tsx';
+import { act, started, took, worked, type Part, type Step, type Thinking, type Tool } from './transcript.ts';
+import { Button, cn, CopyButton, Picture, Spinner, StatusDot } from './ui.tsx';
 import { WorkLogDetails, WorkLogRow } from './WorkLog.tsx';
 
 /** The rows of the chat. They only draw: what a row says is worked out in `parts` (transcript.ts). Each is drawn again only when
@@ -120,13 +123,50 @@ function ToolRow({ step, live, running }: { step: Tool; live: boolean; running?:
 export function StepRow({ step, tools }: { step: Step; tools?: Record<string, string> }) {
   if (step.type === 'talk') return <div className="px-1 py-1"><Markdown text={step.text} streaming={step.streaming} /></div>;
   if (step.type === 'fault') return <p className="px-1 py-0.5 text-destructive-foreground text-sm">{step.text}</p>;
-  return <ToolRow step={step} live={tools !== undefined} running={step.call !== undefined ? tools?.[step.call] : undefined} />;
+  return <><ToolRow step={step} live={tools !== undefined} running={step.call !== undefined ? tools?.[step.call] : undefined} />{step.name === 'spawn' && <Spawned ids={started(step)} />}</>;
 }
 /** Counts the seconds since `from` while the agent works. */
 export function Timer({ from }: { from: string }) {
   const [now, setNow] = useState(Date.now());
   useEffect(() => { const timer = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(timer); }, []);
   return <>{took(from, new Date(now).toISOString())}</>;
+}
+const iso = (time: number) => new Date(time).toISOString();
+/** How long an agent has worked, counting while it does. */
+export const Took = ({ agent }: { agent: Agent }) => agentWorks(agent) ? <Timer from={iso(agent.started)} /> : agent.ended !== undefined ? <>{took(iso(agent.started), iso(agent.ended))}</> : null;
+/** The colours an agent's state is said in, and the only ones it has: at work (the dot's blue), done, failed. */
+export const TONES = { working: 'text-info-foreground', done: 'text-success-foreground', failed: 'text-error-foreground' };
+/** How an agent stands: a dot while it works, a mark for how it ended. */
+export function Mark({ agent }: { agent: Agent }) {
+  if (agentWorks(agent)) return <StatusDot tone="working" pulse={agent.state !== 'paused'} />;
+  const Icon = agent.state === 'completed' ? CheckIcon : agent.state === 'failed' ? XIcon : CircleSlashIcon, { tone } = stood(agent);
+  return <Icon role="img" aria-label={agent.state} className={cn('size-3.5 shrink-0 text-muted-foreground/70', tone && TONES[tone])} />;
+}
+/** The profile's agents as the panel's list has them, for the chat that started them, and the way to open one (`onAgent`). A
+ * chat without them (the memory view's) has an empty list. */
+export const AgentsInChat = createContext<{ agents: readonly Agent[]; onAgent?: (agent: string) => void }>({ agents: [] });
+/** Under a `spawn` call, the agents it started, a line each, as the panel's list has them: how each stands, what it is called,
+ * what it is doing now or how it ended, and how long it has worked. Where agents can be opened, a line opens its chat. An agent
+ * the list does not have is not here, and the call says what it started as before. `folded`: the reply is folded shut, and
+ * they are shown under it only while one of them works. They are the page's words, which find leaves out. */
+function Spawned({ ids, folded = false }: { ids: readonly string[]; folded?: boolean }) {
+  const { agents, onAgent } = useContext(AgentsInChat), shown = among(ids, agents);
+  if (!shown.length || folded && !shown.some(agentWorks)) return null;
+  return (
+    <ul data-no-find aria-label="The agents it started" className={cn('ms-3 mb-1 flex flex-col border-border/70 border-s ps-2', folded && 'mt-1.5')}>
+      {shown.map(agent => {
+        const line = <>
+          <Mark agent={agent} />
+          <span className="max-w-1/2 shrink-0 truncate text-secondary-label">{named(agent)}</span>
+          <span className={cn('min-w-0 flex-1 truncate text-muted-foreground', agent.state === 'failed' && 'text-destructive-foreground')}>{doing(agent)}</span>
+          <span className="shrink-0 text-muted-foreground tabular-nums"><Took agent={agent} /></span>
+        </>, look = 'flex h-6 w-full min-w-0 select-none items-center gap-2 rounded-md px-1.5 text-left text-xs';
+        return <li key={agent.id}>{onAgent
+          ? <button type="button" title="Open this agent's chat" onClick={() => onAgent(agent.id)} className={cn(look, 'cursor-pointer outline-none transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring/70')}>{line}</button>
+          : <span className={look}>{line}</span>}</li>;
+      })}
+    </ul>
+  );
 }
 /** What the agent is doing while it works, beside the reply itself: what it thinks, what Pi does (retrying, compacting), and
  * what its tools have printed so far, by call. */
@@ -155,7 +195,7 @@ export const ReplyRow = memo(function ReplyRow({ part, working, latest }: { part
   const [open, setOpen] = useState(false);
   const { steps, answer } = part, tools = steps.filter(step => step.type === 'tool'), failed = tools.filter(step => step.failed).length;
   // Why a reply failed is said outside the fold too, or a failed turn would look like one that answered nothing.
-  const faults = part.stopped ? [] : steps.filter(step => step.type === 'fault');
+  const faults = part.stopped ? [] : steps.filter(step => step.type === 'fault'), spawned = steps.flatMap(started);
   return (
     <div className="group/reply pb-2">
       {!working && steps.length > 0 && (
@@ -167,6 +207,7 @@ export const ReplyRow = memo(function ReplyRow({ part, working, latest }: { part
         </div>
       )}
       {(working || open) && steps.length > 0 && <div className={cn('flex min-w-0 flex-col py-1', !working && 'enter')}>{steps.map(step => <StepRow key={step.key} step={step} tools={working?.tools} />)}</div>}
+      {!working && !open && spawned.length > 0 && <Spawned ids={spawned} folded />}
       {!working && !open && faults.map(step => <StepRow key={step.key} step={step} />)}
       {/* An answer in several blocks is a message of the log each: what is cited from one is cited as that message. */}
       {answer && <div className="relative flex min-w-0 flex-col gap-[0.65rem] px-1 py-0.5 pt-2">{answer.said.map((block, at) => <div key={block.key} data-cite={block.key}><Markdown text={block.text} streaming={answer.streaming && at === answer.said.length - 1} /></div>)}</div>}

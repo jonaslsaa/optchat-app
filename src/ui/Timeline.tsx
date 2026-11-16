@@ -3,12 +3,13 @@ import { useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useSt
 import { CiteSelection } from './Cite.tsx';
 import type { Cite, Place } from './cite.ts';
 import { Find } from './Find.tsx';
-import { Doing, HandoffRow, NoteRow, ReplyRow, ReportRow, UserRow, type Working } from './Rows.tsx';
+import type { Agent } from '../protocol.ts';
+import { AgentsInChat, Doing, HandoffRow, NoteRow, ReplyRow, ReportRow, UserRow, type Working } from './Rows.tsx';
 import { parts, thinking, type Item, type Live, type Part } from './transcript.ts';
 import { Button, cn } from './ui.tsx';
 
 /** How near the end counts as at the end, in pixels. */
-const EDGE = 48;
+const EDGE = 48, NONE: readonly Agent[] = [];
 
 /** The chat, oldest at the top. It stays at the end while you are there, and stays where you are while you read back; older
  * pages of the log are read as you reach the top. `running` says the agent is in a run, and `live` what it is doing in it.
@@ -16,8 +17,9 @@ const EDGE = 48;
  * there is a composer to cite into (`onCite`), a "Cite" button stands by what is selected in a message, a reply or a report;
  * `logged` is the last message of the chat that the profile's log has, where the chat is the log. `onPlace` shows what a
  * message cites in the memory view. Where the memory can be searched from (`onMemory`), the chat can be found in: `ref.find`
- * shows the bar for it (`Find`). */
-export function Timeline({ items, live, running, starting = false, profile, older, loading, onAgent, onCite, logged, onPlace, onMemory, ref, narrow = false }: { items: Item[]; live: Live; running: boolean; starting?: boolean; profile: string; older?: () => void; loading?: boolean; onAgent?: (agent: string) => void; onCite?: (cite: Cite) => void; logged?: number; onPlace?: (at: Place) => void; onMemory?: (text: string) => void; ref?: Ref<{ find: () => void }>; narrow?: boolean }) {
+ * shows the bar for it (`Find`). `agents` are the profile's as the panel lists them, which the calls that started them show
+ * under them. */
+export function Timeline({ items, live, running, starting = false, profile, older, loading, onAgent, onCite, logged, onPlace, onMemory, ref, narrow = false, agents = NONE }: { items: Item[]; live: Live; running: boolean; starting?: boolean; profile: string; older?: () => void; loading?: boolean; onAgent?: (agent: string) => void; onCite?: (cite: Cite) => void; logged?: number; onPlace?: (at: Place) => void; onMemory?: (text: string) => void; ref?: Ref<{ find: () => void }>; narrow?: boolean; agents?: readonly Agent[] }) {
   const scroller = useRef<HTMLDivElement>(null), content = useRef<HTMLDivElement>(null);
   const atEnd = useRef(true), before = useRef({ first: items[0]?.key, height: 0, top: 0, sent: -1 });
   // Find scrolls the chat to what it found (`found` is where it put it), which is not you reading back to the top: no older
@@ -29,6 +31,7 @@ export function Timeline({ items, live, running, starting = false, profile, olde
   const blocks = useMemo(() => drawn.current = parts(items, drawn.current), [items]);
   // A handoff is said to the main chat: the latest thing said to you is what is above it.
   const last = blocks.at(-1), latest = last?.type === 'handoff' ? blocks.at(-2) : last;
+  const inChat = useMemo(() => ({ agents, onAgent }), [agents, onAgent]);
   const working = useMemo((): Working => ({ thinking: thinking(live), activity: live.activity, tools: live.tools }), [live]);
 
   useLayoutEffect(() => {
@@ -75,11 +78,11 @@ export function Timeline({ items, live, running, starting = false, profile, olde
               <span className="h-px flex-1 bg-border/70" />{loading ? 'Loading earlier messages…' : 'Load earlier messages'}<span className="h-px flex-1 bg-border/70" />
             </button>
           )}
-          {blocks.map(part => part.type === 'user' ? <UserRow key={part.key} part={part} profile={profile} onPlace={onPlace} />
+          <AgentsInChat value={inChat}>{blocks.map(part => part.type === 'user' ? <UserRow key={part.key} part={part} profile={profile} onPlace={onPlace} />
             : part.type === 'work' ? <ReportRow key={part.key} part={part} onAgent={onAgent} />
             : part.type === 'note' ? <NoteRow key={part.key} part={part} />
             : part.type === 'handoff' ? <HandoffRow key={part.key} part={part} writing={running && part === last} />
-            : <ReplyRow key={part.key} part={part} working={running && part === last ? working : undefined} latest={part === latest} />)}
+            : <ReplyRow key={part.key} part={part} working={running && part === last ? working : undefined} latest={part === latest} />)}</AgentsInChat>
           {/* What the agent is doing: under your message until it says something, and then under its reply, as one line. Your
               message is in the chat before Pi has it (`live.sent`), and the agent is at work on it from then: its Pi may still be
               starting. */}

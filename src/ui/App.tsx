@@ -2,7 +2,8 @@ import { ChartColumnIcon, CheckIcon, PanelLeftIcon, PanelRightIcon, SettingsIcon
 import { Fragment, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, type ComponentRef, type Ref } from 'react';
 import { flushSync } from 'react-dom';
 import { canComplete, current } from '../window.ts';
-import { busy } from './agents.ts';
+import { busy, polled } from './agents.ts';
+import { AtWork, useAgents } from './Agents.tsx';
 import type { Cite, Place } from './cite.ts';
 import { Composer } from './Composer.tsx';
 import type { MenuAction } from '../menu.ts';
@@ -38,7 +39,7 @@ function Profile({ state, profile, onSettings, onUsage, onNewProfile, ref }: { s
   // page, not by what is on top, and the sidebar's buttons would drag instead of being pressed.
   const wide = useMedia('(min-width: 48rem)'), [beside, setBeside] = useState(true), [over, setOver] = useState(false);
   const sidebar = wide ? beside : over, covered = sidebar && !wide, toggle = () => (wide ? setBeside : setOver)(shown => !shown);
-  const drawer = useRef<HTMLDivElement>(null), opener = useRef<HTMLButtonElement>(null);
+  const drawer = useRef<HTMLDivElement>(null), opener = useRef<HTMLButtonElement>(null), panelButton = useRef<HTMLButtonElement>(null);
   useEffect(() => { if (wide) setOver(false); }, [wide]);
   useOverlay(covered, () => setOver(false), drawer, opener);
   // What the panel beside the main chat shows, while it is open: `panel.agent` is the agent whose chat is open in it.
@@ -83,7 +84,8 @@ function Profile({ state, profile, onSettings, onUsage, onNewProfile, ref }: { s
   // What says a turn of it began or ended, for what reads the whole log: that is too much to do at every message.
   const turn = [window?.status, log?.total, state.connection].join(' ');
   // A Pi that has stopped counts nothing: its last status line still stands, and is about agents that went with it.
-  const agentsWork = busy(window?.status === 'stopped' ? undefined : live.status.optchat, panel && state.agents[profile]?.agents);
+  const agents = state.agents[profile]?.agents, agentsWork = busy(window?.status === 'stopped' ? undefined : live.status.optchat, panel && agents);
+  useAgents(profile, { closed: !panel && !own, pulse, busy: agentsWork || polled(agents ?? [], window?.outside !== undefined), connected: state.connection === 'open' });
   if (!window) return <p className="m-auto text-muted-foreground text-sm">Opening {profile}…</p>;
   const more = !own && log && log.entries.length > 0 && log.entries[0].i > 0;
   // Nothing has been said here, as far as is known: a window that may have a conversation waits for it rather than say so.
@@ -110,7 +112,7 @@ function Profile({ state, profile, onSettings, onUsage, onNewProfile, ref }: { s
           )}
           {canComplete(window) && <Button variant="outline" title="Complete: hand this conversation to the main chat" onClick={() => void app.complete(window.id)}><CheckIcon />Complete</Button>}
           {!own && (
-            <Button variant="ghost-muted" size="icon-sm" aria-label="Agents and GitHub" title={agentsWork ? 'Agents and GitHub: agents are working' : 'Agents and GitHub'} aria-pressed={panel !== undefined}
+            <Button ref={panelButton} variant="ghost-muted" size="icon-sm" aria-label="Agents and GitHub" title={agentsWork ? 'Agents and GitHub: agents are working' : 'Agents and GitHub'} aria-pressed={panel !== undefined}
               className="aria-pressed:bg-accent aria-pressed:text-foreground" onClick={() => setPanel(panel ? undefined : {})}>
               <PanelRightIcon />{agentsWork && <span className="absolute top-0.5 right-0.5 size-1.5 rounded-full bg-sky-500 dark:bg-sky-300/80" />}
             </Button>
@@ -127,7 +129,11 @@ function Profile({ state, profile, onSettings, onUsage, onNewProfile, ref }: { s
                 {!own ? 'One chat that remembers everything.' : window.completed ? 'The main chat has this conversation. Your next message starts a new one.' : 'Its own conversation, with this profile\'s memory. Complete hands it to the main chat.'}
               </p>
             </div>
-          ) : <Timeline ref={timeline} items={items} live={live} running={window.status === 'running'} starting={window.status === 'starting'} profile={profile} loading={log?.loading} older={more ? () => void app.older(profile) : undefined} onAgent={own ? undefined : openAgent} onCite={cite} logged={own ? undefined : log?.entries.at(-1)?.i} onPlace={recall} onMemory={search} />}
+          ) : <Timeline ref={timeline} items={items} live={live} running={window.status === 'running'} starting={window.status === 'starting'} profile={profile} loading={log?.loading} older={more ? () => void app.older(profile) : undefined} onAgent={own ? undefined : openAgent} onCite={cite} logged={own ? undefined : log?.entries.at(-1)?.i} onPlace={recall} onMemory={search} agents={own ? undefined : agents} />}
+          {!own && !panel && agentsWork && agents && (
+            // The line goes when the panel opens: the focus goes first to the panel's button, where closing the panel brings it back.
+            <AtWork agents={agents} onOpen={() => { panelButton.current?.focus(); setPanel({}); }} />
+          )}
           {window.outside ? <Outside window={window} outside={window.outside} models={state.models[window.id]} /> : <Composer ref={composer} state={state} window={window} live={live} chat={items} onSend={toChat} />}
           {fresh && !memory && <div className="flex-[1.6]" />}
         </Fragment>

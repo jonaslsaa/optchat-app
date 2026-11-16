@@ -269,7 +269,7 @@ test('a tool call that failed is marked so', () => {
 
 test('pi-optchat\'s status line and Pi\'s failures are said as news, not as they were written for a terminal', () => {
   assert.deepEqual(news('OptChat: work · 350 messages · 0 pending · 0 agents'), []);
-  assert.deepEqual(news('OptChat: work · 350 messages · 3 pending · 1 agents · importing'), ['3 summaries to write', '1 agent working', 'importing']);
+  assert.deepEqual(news('OptChat: work · 350 messages · 3 pending · 1 agents · importing'), ['3 summaries to write', 'importing']);
   assert.deepEqual(news('OptChat: work · connected window · main window not reachable'), ['main window not reachable']);
   assert.deepEqual([news('OptChat: work · completed'), news('OptChat: choose profile'), news(undefined)], [[], [], []]);
 

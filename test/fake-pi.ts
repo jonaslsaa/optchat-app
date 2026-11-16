@@ -3,8 +3,9 @@ import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, realp
 import { homedir, hostname } from 'node:os';
 import { join } from 'node:path';
 // pi-optchat's own lock, which a Pi holds while it has a profile open.
-import { describeOwner, lockProfile } from 'pi-optchat/files';
+import { describeOwner, lockProfile, readRuns } from 'pi-optchat/files';
 import { fakeOwner } from './fake-owner.ts';
+import { working } from '../src/agent.ts';
 import { clamp, levels, type Thinking } from '../src/models.ts';
 
 /** Stands in for `pi --mode rpc` with pi-optchat: the same records on stdin and stdout, scripted by the profile's name and the
@@ -268,7 +269,9 @@ if (profile === 'busy') {
   write({ type: 'extension_error', extensionPath: 'pi-optchat', event: 'session_start', error: `Profile already running: ${profile} · PID 1 · a-terminal · /somewhere` });
 } else if (profile !== 'bare') {
   if (profile === 'noisy') write({ type: 'extension_error', extensionPath: 'something-else', event: 'session_start', error: 'No API key' });
-  status('optchat', joins ? `OptChat: ${profile} · connected window` : `OptChat: ${profile} · ${logged} messages · 0 pending · 0 agents${profile === 'importing' ? ' · import paused: /optchat import' : ''}`);
+  // pi-optchat counts the main chat's own agents at work, as their records have them when it starts.
+  const agents = readRuns(join(process.env.OPTCHAT_HOME ?? '.', 'profiles', profile)).filter(run => !run.connected && !run.parentId && working(run)).length;
+  status('optchat', joins ? `OptChat: ${profile} · connected window` : `OptChat: ${profile} · ${logged} messages · 0 pending · ${agents} agents${profile === 'importing' ? ' · import paused: /optchat import' : ''}`);
   if (profile !== 'old') role();
 }
 // An owner has its profile before it answers anything, as Pi has once its session has started.

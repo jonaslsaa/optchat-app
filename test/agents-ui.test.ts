@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import type { Agent } from '../src/protocol.ts';
-import { busy, controls, doing, listed, named, polled, stood } from '../src/ui/agents.ts';
+import { among, busy, controls, doing, listed, named, ownAtWork, polled, stood } from '../src/ui/agents.ts';
 
 const agent = (id: string, state: Agent['state'], started: number, more: Partial<Agent> = {}): Agent => ({ id, task: `Task of ${id}\nand more`, model: 'm', state, started, doing: [], ...more });
 
@@ -51,4 +51,13 @@ test('an agent\'s chat offers what its state allows: a message while it works or
   // Colour is for three things: at work, done, failed.
   assert.deepEqual(['running', 'waiting', 'paused', 'completed', 'failed', 'stopped', 'interrupted'].map(state => stood({ state: state as Agent['state'] })),
     [{ word: 'Working', tone: 'working' }, { word: 'Waiting for its agents', tone: 'working' }, { word: 'Paused', tone: 'working' }, { word: 'Completed', tone: 'done' }, { word: 'Failed', tone: 'failed' }, { word: 'Stopped' }, { word: 'Interrupted' }]);
+});
+
+test('the chat shows the agents a call started as the list has them, and over the composer the main chat\'s own at work', () => {
+  const agents = [agent('b', 'running', 5), agent('a', 'waiting', 2), agent('done', 'completed', 1), agent('child', 'running', 3, { parent: 'a' })];
+  // In the call's order; one whose record is gone, or that ended before the newest the list keeps, is not there.
+  assert.deepEqual(among(['a', 'gone', 'done'], agents).map(agent => agent.id), ['a', 'done']);
+  assert.deepEqual(among(['gone'], agents), []);
+  // An agent's own agents are the panel's, and pi-optchat's count leaves them out too.
+  assert.deepEqual(ownAtWork(agents).map(agent => agent.id), ['a', 'b']);
 });

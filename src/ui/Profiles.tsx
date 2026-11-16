@@ -20,7 +20,7 @@ export function ProfilePicker({ state, label, className, children }: { state: St
     <div ref={menu} className="relative shrink-0">
       <button ref={opener} type="button" aria-label={label} title={label} aria-haspopup="listbox" aria-expanded={open} onClick={() => setOpen(!open)} className={className}>{children}</button>
       {open && (
-        <ul role="listbox" aria-label="Profiles" onKeyDown={walk} className="absolute top-full left-0 z-50 mt-1 max-h-80 w-56 overflow-auto rounded-lg border bg-popover p-1 text-popover-foreground shadow-lg">
+        <ul role="listbox" aria-label="Profiles" onKeyDown={walk} className="enter enter-grow absolute top-full left-0 z-50 mt-1 max-h-80 w-56 origin-top-left overflow-auto rounded-lg border bg-popover p-1 text-popover-foreground shadow-lg">
           {state.profiles.map(name => (
             <li key={name} role="option" aria-selected={name === state.profile}>
               <button type="button" autoFocus={name === state.profile} onClick={() => { setOpen(false); void app.openProfile(name); }} className="flex h-8 w-full items-center gap-2 rounded-md px-2 text-left text-sm hover:bg-accent focus-visible:bg-accent focus-visible:outline-none">

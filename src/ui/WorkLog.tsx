@@ -11,7 +11,7 @@ type RowContent = {
 
 function WorkLogLine({ icon, label, trailing }: RowContent) {
   return (
-    <div className="flex min-h-6 min-w-0 items-center gap-1.5 text-sm leading-relaxed select-none [&_*]:select-none">
+    <div className="enter flex min-h-6 min-w-0 items-center gap-1.5 text-sm leading-relaxed select-none [&_*]:select-none">
       <div className="flex min-w-0 flex-1 items-baseline gap-1.5">
         {icon ? (
           <span className="relative w-6 shrink-0 leading-0">
@@ -71,7 +71,7 @@ export function WorkLogDetails({ children, followLive = false }: { children: Rea
         const { scrollHeight, scrollTop, clientHeight } = event.currentTarget;
         atLiveEdgeRef.current = scrollHeight - scrollTop - clientHeight <= LIVE_EDGE_PX;
       }}
-      className="ms-7 flex max-h-96 cursor-auto flex-col gap-3 overflow-auto px-0.5 py-1 select-text"
+      className="enter ms-7 flex max-h-96 cursor-auto flex-col gap-3 overflow-auto px-0.5 py-1 select-text"
       onClick={(event) => event.stopPropagation()}
       onPointerDown={(event) => event.stopPropagation()}
     >

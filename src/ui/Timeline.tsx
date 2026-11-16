@@ -95,16 +95,18 @@ export function Timeline({ items, live, running, starting = false, profile, olde
           {quote && onQuote && (
             // The press does not take the selection away, and the click that follows it quotes it. Esc on the button takes
             // both away, and is then not the chat's key.
-            <Button size="xs" variant="glass" className="absolute z-20 mt-1" style={{ left: quote.left, top: quote.top }} onPointerDown={event => event.preventDefault()}
-              onClick={() => { onQuote(quote.text); getSelection()?.removeAllRanges(); setQuote(undefined); }}
-              onKeyDown={event => escapes(event, () => { getSelection()?.removeAllRanges(); setQuote(undefined); })}>
-              <QuoteIcon className="size-3.5" />Quote
-            </Button>
+            <span className="enter enter-grow absolute z-20 mt-1 flex" style={{ left: quote.left, top: quote.top }}>
+              <Button size="xs" variant="glass" onPointerDown={event => event.preventDefault()}
+                onClick={() => { onQuote(quote.text); getSelection()?.removeAllRanges(); setQuote(undefined); }}
+                onKeyDown={event => escapes(event, () => { getSelection()?.removeAllRanges(); setQuote(undefined); })}>
+                <QuoteIcon className="size-3.5" />Quote
+              </Button>
+            </span>
           )}
         </div>
       </div>
       {away && (
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-30 flex justify-center py-1.5">
+        <div className="enter enter-from-below pointer-events-none absolute inset-x-0 bottom-0 z-30 flex justify-center py-1.5">
           <Button size="xs" variant="glass" className="pointer-events-auto" onClick={toEnd}><ChevronDownIcon className="size-3.5" />Scroll to end</Button>
         </div>
       )}

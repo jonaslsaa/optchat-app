@@ -28,6 +28,7 @@ for (const name of ['chat', 'beside', 'sheet', 'memory', 'rows', 'menus', 'field
   for (let i = 0; i < 6; i++) writeRun(profile, { id: `e000000${i}`, title: `An older agent ${i}`, state: 'completed', started: Date.now() - 9_000_000 - i * 1000, ended: Date.now() - 8_000_000, report: 'Done.' });
 }
 seed(createProfile(home, 'diffs'), CHANGES.length, Date.now(), CHANGES);
+writeMemory(createProfile(home, 'thinks'), 4);
 seed(createProfile(home, 'formulas'), 1, Date.now(), FORMULAS);
 createProfile(home, 'paced');
 // A chat that names files, and those files in the folder its windows run in.
@@ -524,6 +525,37 @@ test('↑ in an empty composer brings back what you said, and ⌘F in the chat s
   await narrow.keyboard.press('ControlOrMeta+f');
   await narrow.waitForTimeout(300);
   assert.equal(await narrow.getByRole('heading', { name: 'Memory view' }).count(), 0);
+});
+
+test('the working line opens to what the agent has thought so far, and Esc on it still stops the run', async () => {
+  const page = await open('thinks');
+  await page.getByRole('textbox', { name: 'Message' }).fill('think about it, and wait');
+  await page.keyboard.press('Enter');
+  // The fake Pi is held halfway through its thought: the line says its last line so far, and opens to all of it.
+  const line = page.getByRole('button', { name: /^Thinking for/ });
+  assert.equal(await line.getAttribute('aria-expanded'), 'false');
+  assert.equal(await page.getByText('The user wants the shutdown path checked.').count(), 0, 'the thought is folded until it is opened');
+  await line.click();
+  assert.equal(await line.getAttribute('aria-expanded'), 'true');
+  await page.getByText('The user wants the shutdown path checked.').waitFor();
+  assert.ok(await line.evaluate(element => element === document.activeElement), 'the working line has the focus');
+  // Its thought done, the agent begins to answer: the line is under the reply now, the same one, open still and with the focus.
+  const control = await connect(server.url);
+  await control.request('command', { window: 'thinks/main', command: { type: 'release' } });
+  await page.getByText('rep', { exact: true }).waitFor(); // Half of its answer, "reply", where the fake Pi is held.
+  const moved = page.getByRole('button', { name: /^Working for/ });
+  assert.ok(await moved.evaluate(element => element === document.activeElement && element.getAttribute('aria-expanded') === 'true'), 'the line under the reply is open and has the focus');
+  await page.keyboard.press('Enter');
+  assert.equal(await moved.getAttribute('aria-expanded'), 'false');
+  // It is the chat's line: Esc there stops the run, as anywhere else in the chat.
+  await stops(page, 'on the working line');
+  // A run with no thought has nothing to open: its line is no button.
+  await run(page);
+  await page.getByText(/^Working for/).waitFor();
+  assert.equal(await page.getByRole('button', { name: /^Working for/ }).count(), 0);
+  await stops(page, 'in the chat');
+  control.close();
+  await page.context().close();
 });
 
 test('a long edit opens as its diff, which scrolls in its box and does not make the page longer', async () => {

@@ -1,7 +1,7 @@
 import { BotIcon, ChevronRightIcon, EyeIcon, GlobeIcon, HistoryIcon, SearchIcon, SquarePenIcon, StickyNoteIcon, TerminalIcon, WrenchIcon, XIcon, type LucideIcon } from 'lucide-react';
 import { memo, useEffect, useState, type ReactNode } from 'react';
 import { Markdown } from './Markdown.tsx';
-import { act, took, worked, type Part, type Step, type Tool } from './transcript.ts';
+import { act, took, worked, type Part, type Step, type Thinking, type Tool } from './transcript.ts';
 import { Button, cn, CopyButton, Picture, Spinner } from './ui.tsx';
 import { WorkLogDetails, WorkLogRow } from './WorkLog.tsx';
 
@@ -15,7 +15,7 @@ const Time = ({ date }: { date: string }) => <time dateTime={date} title={new Da
 /** The line that something is folded under, which opens it. */
 function Fold({ open, toggle, children }: { open: boolean; toggle: () => void; children: ReactNode }) {
   return (
-    <button type="button" aria-expanded={open} onClick={toggle} className="flex select-none items-center gap-1 rounded-md px-1 text-muted-foreground text-sm tabular-nums leading-relaxed transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/70">
+    <button type="button" aria-expanded={open} onClick={toggle} className="flex max-w-full select-none items-center gap-1 rounded-md px-1 text-muted-foreground text-sm tabular-nums leading-relaxed transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/70">
       <ChevronRightIcon className={cn('size-3.5 transition-transform duration-200', open && 'rotate-90')} />{children}
     </button>
   );
@@ -122,18 +122,26 @@ export function Timer({ from }: { from: string }) {
 }
 /** What the agent is doing while it works, beside the reply itself: what it thinks, what Pi does (retrying, compacting), and
  * what its tools have printed so far, by call. */
-export interface Working { thinking?: string; activity?: string; tools: Record<string, string> }
-/** "Working for 12s", as one phrase. A light passes over it only when Pi is doing something out of the ordinary (`activity`). */
-function Doing({ from, activity, thinking }: { from: string; activity?: string; thinking?: string }) {
+export interface Working { thinking?: Thinking; activity?: string; tools: Record<string, string> }
+/** "Working for 12s", as one phrase. A light passes over it only when Pi is doing something out of the ordinary (`activity`).
+ * While the agent thinks it says the last line of its thought; once it has thought anything, it opens to all of it so far. The
+ * chat draws it in one place, under your message and then under the reply, so what is open stays open, scrolled where it was. */
+export function Doing({ from, activity, thinking }: { from: string; activity?: string; thinking?: Thinking }) {
+  const [open, setOpen] = useState(false), thought = thinking?.text;
+  const line = <>
+    <span className={cn('shrink-0', activity && 'shimmer')}>{activity ?? (thinking?.now ? 'Thinking' : 'Working')} for <Timer from={from} /></span>
+    {thinking?.now && !open && <span className="min-w-0 flex-1 truncate opacity-70">{thought?.split('\n').at(-1)}</span>}
+  </>;
+  if (!thought) return <div className="flex h-6 min-w-0 items-baseline gap-2 px-1 text-muted-foreground text-sm tabular-nums leading-relaxed">{line}</div>;
   return (
-    <div className="flex h-6 min-w-0 items-baseline gap-2 px-1 text-muted-foreground text-sm tabular-nums leading-relaxed">
-      <span className={cn('shrink-0', activity && 'shimmer')}>{activity ?? (thinking !== undefined ? 'Thinking' : 'Working')} for <Timer from={from} /></span>
-      {thinking && <span className="min-w-0 flex-1 truncate opacity-70">{thinking.trim().split('\n').at(-1)}</span>}
-    </div>
+    <>
+      <Fold open={open} toggle={() => setOpen(!open)}><span className="flex min-w-0 items-baseline gap-2 text-start">{line}</span></Fold>
+      {open && <WorkLogDetails followLive><p className="whitespace-pre-wrap text-secondary-label text-xs leading-relaxed [overflow-wrap:anywhere]">{thought}</p></WorkLogDetails>}
+    </>
   );
 }
 /** The agent's reply: its work, folded once it is done, and then its answer. While it works (`working`) the steps stay open, and
- * a line under them says what it is doing. The chat's `latest` reply always shows what can be done with it; the others on hover. */
+ * the chat says under them what it is doing (`Doing`). The chat's `latest` reply always shows what can be done with it; the others on hover. */
 export const ReplyRow = memo(function ReplyRow({ part, working, latest }: { part: Of<'reply'>; working?: Working; latest: boolean }) {
   const [open, setOpen] = useState(false);
   const { steps, answer } = part, tools = steps.filter(step => step.type === 'tool'), failed = tools.filter(step => step.failed).length;
@@ -152,7 +160,6 @@ export const ReplyRow = memo(function ReplyRow({ part, working, latest }: { part
       {(working || open) && steps.length > 0 && <div className="flex min-w-0 flex-col py-1">{steps.map(step => <StepRow key={step.key} step={step} tools={working?.tools} />)}</div>}
       {!working && !open && faults.map(step => <StepRow key={step.key} step={step} />)}
       {answer && <div data-quote className="relative min-w-0 px-1 py-0.5 pt-2"><Markdown text={answer.text} streaming={answer.streaming} /></div>}
-      {working && <div className="pt-2"><Doing from={part.from} activity={working.activity} thinking={working.thinking} /></div>}
       {!working && answer && (
         <div className={cn('-ms-0.5 flex items-center gap-1.5 px-1 pt-1 transition-opacity duration-200', !latest && 'opacity-0 focus-within:opacity-100 group-hover/reply:opacity-100')}>
           <CopyButton text={answer.text} label="Copy reply" /><Time date={part.to} />
@@ -175,7 +182,3 @@ export const HandoffRow = memo(function HandoffRow({ part, writing }: { part: Of
     </div>
   );
 });
-/** The agent has your message and has not said anything yet. */
-export function Waiting({ from, activity }: { from: string; activity?: string }) {
-  return <div className="pb-4"><Doing from={from} activity={activity} /></div>;
-}

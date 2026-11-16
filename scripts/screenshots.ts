@@ -527,6 +527,16 @@ async function pictures(browser: Browser, control: Client) {
   await sends(pocket);
   await shot(pocket, '97-composer-images-dark-narrow');
 
+  // What the agent is thinking, opened from the line under your message while it thinks: wide, then narrow.
+  for (const [name, options] of [['101-thinking-opened', {}], ['102-thinking-opened-narrow', { width: 420 }]] as const) {
+    const thinks = await open(['changes'], options);
+    await say(thinks, 'Have a think about the shutdown path, and wait');
+    await thinks.getByRole('button', { name: /^Thinking for/ }).click();
+    await shot(thinks, name);
+    await thinks.keyboard.press('Escape');
+    await thinks.getByRole('button', { name: 'Send', exact: true }).waitFor();
+  }
+
   // Nor this: what is typed and not sent is there when the page is opened again, and not once it is sent.
   const typed = await open(['notes']), box = typed.getByRole('textbox', { name: 'Message' });
   await box.fill('half a thought');

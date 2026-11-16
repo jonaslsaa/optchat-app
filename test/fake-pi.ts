@@ -12,7 +12,7 @@ import { clamp, levels, type Thinking } from '../src/models.ts';
  * - It says it owns its profile, or with `--optchat-connect join` that it is a window on it. An owner holds the profile's lock
  *   and answers for its agents (`fake-owner.ts`), and logs what is said to the profile's `main/`, as pi-optchat does; a window keeps its conversation to itself (`get_messages`), and writes a handoff
  *   when it is completed with `/complete`.
- * - A prompt holding "wait" stays mid-reply until a `release` command or an abort; "ask" asks a dialog first and replies with its
+ * - A prompt holding "wait" stays mid-reply until a `release` command or an abort, and one holding "think" thinks before it answers; "ask" asks a dialog first and replies with its
  *   answer; "crash" kills it without an answer. A message sent during a run waits in the queue it was sent to: one that steers
  *   is answered next, one for later after those.
  * - FAKE_PI_SCRIPT names a JSON file of longer replies (`Script`), for the screenshots: a prompt holding one of its words gets
@@ -140,13 +140,14 @@ function ended(message: Said) {
 }
 const user = (text: string, images: Image[] = []) => { const message: Said = { role: 'user', content: [{ type: 'text', text }, ...images], timestamp: now() }; write({ type: 'message_start', message }); ended(message); };
 
+const THOUGHT = 'The user wants the shutdown path checked.\n\nFirst `stop()` closes stdin, then waits for the grace period.\nThe timer is never cleared, so a clean exit still waits the whole grace period.\nI should read src/server/pi.ts before saying so.';
 let running = false, settled = Promise.resolve(), steering: string[] = [], followUp: string[] = [], release: ((held: { aborted: boolean; answer?: string }) => void) | undefined;
 const held = () => new Promise<{ aborted: boolean; answer?: string }>(resolve => { release = held => { release = undefined; resolve(held); }; });
 
 /** Streams a reply block by block, in the records real Pi writes in RPC mode (test/pi-turn.jsonl is a capture): a start, deltas
  * and the whole block at its end, each naming the block by `contentIndex` and none carrying the reply so far. `pause` holds it
- * before block `at` is finished. */
-async function reply(content: Content[], stopReason: string, pause?: { at: number }) {
+ * before each block `at` is finished. */
+async function reply(content: Content[], stopReason: string, pause?: { at: number[] }) {
   const message: Said = { role: 'assistant', content: [], timestamp: now(), stopReason: 'pending' };
   write({ type: 'message_start', message });
   const update = (assistantMessageEvent: object) => write({ type: 'message_update', assistantMessageEvent });
@@ -155,7 +156,7 @@ async function reply(content: Content[], stopReason: string, pause?: { at: numbe
     const kind = block.type === 'toolCall' ? 'toolcall' : block.type, half = Math.ceil(text.length / 2);
     update({ type: `${kind}_start`, contentIndex, ...block.type === 'toolCall' && { id: block.id, toolName: block.name } });
     update({ type: `${kind}_delta`, contentIndex, delta: text.slice(0, half) });
-    if (pause?.at === contentIndex && (await held()).aborted) {
+    if (pause?.at.includes(contentIndex) && (await held()).aborted) {
       ended({ ...message, content: content.slice(0, contentIndex), stopReason: 'aborted' });
       return true;
     }
@@ -190,7 +191,9 @@ async function run(text: string, images?: Image[]) {
     await reply(content, 'toolUse');
     content.filter(block => block.type === 'toolCall').forEach((call, at) => tool(call, results[at]));
   }
-  if (!aborted) aborted = await reply([{ type: 'text', text: scripted?.answer ?? answer }], 'stop', text.includes('wait') ? { at: 0 } : undefined);
+  // Asked to think, it thinks first, as a model does that Pi lets think, and a "wait" then holds it in the middle of its thought, and once it is released, in the middle of its answer.
+  const thought: Content[] = text.includes('think') ? [{ type: 'thinking', thinking: THOUGHT }] : [];
+  if (!aborted) aborted = await reply([...thought, { type: 'text', text: scripted?.answer ?? answer }], 'stop', text.includes('wait') ? { at: thought.length ? [0, 1] : [0] } : undefined);
   write({ type: 'agent_end', messages: [] });
   const next = aborted ? undefined : steering.shift() ?? followUp.shift();
   if (next !== undefined) { write({ type: 'queue_update', steering, followUp }); return run(next); }

@@ -59,7 +59,7 @@ The client sends `{ id, method, params }` and gets `{ id, result }` or `{ id, er
 | `configure { profile, key, value }` | Changes one of them, a setting by its `key` or the model `compactor` or `subagent`, and answers them all as they then are. Refused in pi-optchat's words. |
 | `instruct { profile, text }` | Keeps the profile's instructions. |
 | `usage { profile, range? }` | What the profile used in a range (`Last hour`, `Today` unless said, `Last 7 days`, `All time`), in tokens and dollars: all of it, each role's and each of a role's models', and its cost over time. Read from pi-optchat's usage ledger each time; nothing is written. See [Usage](#usage). |
-| `settings`, `setSettings { theme?, cwd? }` | The app's own settings, and a change to the ones it names ([setup.md](setup.md)). |
+| `settings`, `setSettings { theme?, cwd?, awake? }` | The app's own settings, and a change to the ones it names ([setup.md](setup.md)). |
 | `setup { fresh? }` | What a chat needs and whether it is there: Pi, pi-optchat in it, a model that is logged in. `fresh` looks again. |
 | `install { what }` | Installs or updates `pi` or `optchat` where the setup says `installable`: only the app's own Pi, and a pi-optchat from npm. Answers once it has started; the rest is pushed. |
 | `signIn { provider }`, `signedIn { provider }` | Opens a terminal where Pi signs you in to `anthropic`, `openai-codex` or `github-copilot`; and whether Pi can use that provider now (`ready` or `not_ready`; refused when Pi cannot tell). The app sees nothing of the sign-in ([setup.md](setup.md)). |

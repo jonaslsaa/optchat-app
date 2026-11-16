@@ -15,9 +15,10 @@ Two servers on one machine share that folder. Each reads the settings when it st
 | Setting | What it does |
 | --- | --- |
 | `theme` | `system` (the default), `light` or `dark`. |
+| `awake` | Whether the desktop app keeps the Mac from sleeping while agents work ([desktop.md](desktop.md)): `true` until you turn it off. In a browser it does nothing, and the settings page does not show it. |
 | `cwd` | The folder a window's agent works in when the window is opened. Your home folder while it is not set. It has to exist when you set it, and is kept as its whole path (`~` is your home folder). If it is gone later, windows run in your home folder until you set another. |
 
-`settings` reads them. `setSettings` changes the ones it names and leaves the others, so two pages changing different settings do not undo each other; every open page gets the change. A file the app cannot read counts as no settings and is left alone until you change one. The page opens them with the gear in the title bar or ⌘, (Ctrl+, elsewhere).
+`settings` reads them. `setSettings` changes the ones it names and leaves the others, so two pages changing different settings do not undo each other; every open page gets the change. A file the app cannot read counts as no settings and is left alone until you change one; a setting a file does not have, as one from before the setting was there, is as it is before it is changed. The page opens them with the gear in the title bar or ⌘, (Ctrl+, elsewhere).
 
 ## What a chat needs
 

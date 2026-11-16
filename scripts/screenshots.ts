@@ -322,6 +322,10 @@ async function pictures(browser: Browser, control: Client) {
   for (const page of [desk, desks]) await page.evaluate(() => { document.documentElement.dataset.shell = 'windowed'; });
   await shot(desk, '39-desktop-window');
   await shot(desks, '40-desktop-window-tabs-narrow');
+  // The desktop app's settings have what only it can do: keeping the Mac awake. A browser's do not show it (15-settings).
+  await desk.getByRole('button', { name: 'Settings' }).click();
+  await desk.getByRole('switch', { name: 'Keep the Mac awake while agents work', checked: true }).waitFor();
+  await shot(desk, '40b-desktop-settings');
 
   // A profile's own settings, as pi-optchat keeps them: a model saved at a level it has, with Enter, which leaves the focus in
   // its field; one that was changed; and one pi-optchat would not have.

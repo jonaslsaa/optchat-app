@@ -4,7 +4,7 @@ import type { Settings as Kept } from '../protocol.ts';
 import { Config, Instructions } from './Config.tsx';
 import { Setup } from './Setup.tsx';
 import { app, mainOf, type State } from './store.ts';
-import { Button, cn } from './ui.tsx';
+import { Button, cn, Switch } from './ui.tsx';
 
 /** The settings page, in place of the chat: how the app looks, where new windows run, the settings and instructions of the
  * profile in front as pi-optchat keeps them (`Config`), and what a chat needs (`Setup`). Before there is a profile the app's
@@ -12,9 +12,9 @@ import { Button, cn } from './ui.tsx';
 
 const THEMES = { system: 'System', light: 'Light', dark: 'Dark' } satisfies Record<Kept['theme'], string>;
 
-export function Section({ title, hint, children }: { title: string; hint?: string; children: ReactNode }) {
+export function Section({ title, hint, className, children }: { title: string; hint?: string; className?: string; children: ReactNode }) {
   return (
-    <section className="border-b py-5 last:border-b-0">
+    <section className={cn('border-b py-5 last:border-b-0', className)}>
       <h2 className="font-medium text-sm">{title}</h2>
       {hint && <p className="mt-0.5 text-muted-foreground text-sm">{hint}</p>}
       <div className="mt-3">{children}</div>
@@ -59,6 +59,13 @@ function Choices({ settings }: { settings: Kept }) {
       </Section>
       <Section title="New windows" hint="The folder a window's agent works in when the window is opened.">
         <Folder kept={settings.cwd} />
+      </Section>
+      {/* Only the desktop app can keep the Mac awake: in a browser there is nothing to turn on. */}
+      <Section title="While agents work" className="hidden in-data-shell:block">
+        <div className="flex items-center justify-between gap-4 text-sm">
+          <span>Keep the Mac awake<span className="block text-muted-foreground">It does not fall asleep under a long job. The screen may still turn off.</span></span>
+          <Switch label="Keep the Mac awake while agents work" checked={settings.awake} onChange={awake => void app.saveSettings({ awake })} />
+        </div>
       </Section>
     </>
   );

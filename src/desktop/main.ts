@@ -1,9 +1,10 @@
-import { app, BrowserWindow, clipboard, dialog, Menu, screen, shell, type MessageBoxOptions } from 'electron';
+import { app, BrowserWindow, clipboard, dialog, Menu, powerSaveBlocker, screen, shell, type MessageBoxOptions } from 'electron';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { startServer } from '../server/server.ts';
 import { terminal } from '../server/setup.ts';
+import { awake } from './awake.ts';
 import { loginEnvironment } from './environment.ts';
 import { destination } from './links.ts';
 import { quitter } from './quit.ts';
@@ -25,6 +26,13 @@ else {
   const options = { ui: join(import.meta.dirname, '../ui'), cwd: homedir(), opener: terminal() };
   const server = await startServer({ ...options, port: PORT }).catch(() => startServer(options));
   let updates: ReturnType<typeof updater> | undefined;
+  // The Mac does not fall asleep under agents at work (awake.ts): looked at every ten seconds, which is soon enough for a
+  // Mac that takes minutes to sleep. The screen may still go dark.
+  const waking = awake({
+    wanted: () => server.settings().awake, working: () => server.working(),
+    blocker: { start: () => powerSaveBlocker.start('prevent-app-suspension'), stop: id => powerSaveBlocker.stop(id) },
+  });
+  setInterval(() => void waking.look(), 10_000);
   /** A quit that is not asked about: a restart into an update, which its own question was about, or a signal, which nobody
    * may be there to answer. */
   let sure = false, leaving = false;
@@ -113,7 +121,7 @@ else {
   const quitting = quitter({
     working: () => server.working(),
     ask: working => ask({ type: 'question', message: `${count(working)} working. Quit and stop ${working === 1 ? 'it' : 'them'}?`, buttons: ['Quit', 'Cancel'], defaultId: 0, cancelId: 1 }),
-    close: () => { leaving = true; for (const window of BrowserWindow.getAllWindows()) window.hide(); return server.close(); },
+    close: () => { leaving = true; for (const window of BrowserWindow.getAllWindows()) window.hide(); return server.close().finally(() => waking.release()); },
     quit: () => app.quit(),
   });
   app.on('before-quit', event => { if (!quitting.request(sure)) event.preventDefault(); });

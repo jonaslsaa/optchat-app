@@ -52,9 +52,7 @@ Decided, and named in the README as if they were there. Take one off this list w
 - Bars for a provider's usage limits, and a notice when one is hit.
 - Pi's notices shown in the chat, and a message Pi refuses put back in the composer.
 - A `/` menu of commands in the composer.
-- Keeping the Mac awake while agents work: a pi-optchat setting, on by default.
 - Images in the composer: paste, drop or attach.
-- Desktop basics: a right-click menu, a window that remembers its size and place, and a question before quitting while agents work.
 - ↑ to recall earlier messages, and ⌘F to find in the chat.
 - Quoting a selection into the composer.
 

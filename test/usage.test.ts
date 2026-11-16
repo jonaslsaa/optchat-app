@@ -56,11 +56,18 @@ test('the bars cover the range from its first spending to now, add up to its tot
   // The night the clocks go back an hour comes twice (here 01:00 to 02:00 in New York, at 05:00 and at 06:00 UTC): the bars go on
   // through both, five minutes each, and an answer in the second is in its own bar, not in the first hour's.
   const night = createProfile(home, 'night'), at = (time: string) => `2026-11-01T${time}:00.000Z`;
-  writeFileSync(join(night, 'usage.jsonl'), [at('05:50'), at('06:35')].map(date => `${JSON.stringify({ date, role: 'main', model: 'claude-opus-5-5', usage: { input: 1, output: 1, cacheRead: 0, cacheWrite: 0, totalTokens: 2, cost: { input: 0, output: 1, cacheRead: 0, cacheWrite: 0, total: 1 } } })}\n`).join(''));
+  const spent = (date: string) => `${JSON.stringify({ date, role: 'main', model: 'claude-opus-5-5', usage: { input: 1, output: 1, cacheRead: 0, cacheWrite: 0, totalTokens: 2, cost: { input: 0, output: 1, cacheRead: 0, cacheWrite: 0, total: 1 } } })}\n`;
+  writeFileSync(join(night, 'usage.jsonl'), [at('05:50'), at('06:35')].map(spent).join(''));
   process.env.TZ = 'America/New_York';
   try {
     assert.deepEqual(usage(night, 'Last hour', Date.parse(at('06:45'))).bars.map(bar => [bar.start.slice(11, 16), bar.tokens]),
       [['05:50', 2], ...['05:55', '06:00', '06:05', '06:10', '06:15', '06:20', '06:25', '06:30'].map(time => [time, 0]), ['06:35', 2], ['06:40', 0], ['06:45', 0]]);
+    // Where the clocks go forward at midnight (Santiago, 6 September) that day begins at one, and the next at midnight again:
+    // an answer half an hour into the 7th is the 7th's.
+    process.env.TZ = 'America/Santiago';
+    const spring = createProfile(home, 'spring');
+    writeFileSync(join(spring, 'usage.jsonl'), ['2026-09-04T16:00:00.000Z', '2026-09-07T03:30:00.000Z'].map(spent).join(''));
+    assert.deepEqual(usage(spring, 'Last 7 days', Date.parse('2026-09-08T12:00:00.000Z')).bars.map(bar => [bar.start.slice(5, 16), bar.tokens]), [['09-04T04:00', 2], ['09-05T04:00', 0], ['09-06T04:00', 0], ['09-07T03:00', 2], ['09-08T03:00', 0]]);
   } finally { process.env.TZ = 'UTC'; }
   const [main, subagents] = breakdown(today);
   assert.deepEqual([main.name, main.cost, main.share, main.out, main.cached, subagents.name, subagents.cost, subagents.share, subagents.out, subagents.cached], ['Main chat', '$0.31', '34%', '3.9k', '98%', 'Subagents', '$0.55', '60%', '11.8k', '90%']);

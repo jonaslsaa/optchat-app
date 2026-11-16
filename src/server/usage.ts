@@ -11,13 +11,14 @@ const RANGES = USAGE_RANGES.filter(range => range !== 'This session');
 const HOUR = 3600_000, DAY = 24 * HOUR;
 /** The bars a stretch of time is drawn with: up to how long a stretch (at most some 90 bars), where the bar a moment is in
  * begins, and where the next one does. By the clock on the wall, as a day and "Today" are. Minutes and hours are counted in
- * time gone by, not set on the clock: in the night the clocks go back an hour comes twice, and each has its own bars. */
+ * time gone by, not set on the clock: in the night the clocks go back an hour comes twice, and each has its own bars.
+ * A day begins at its first moment, which is one o'clock where the clocks go forward at midnight, and the day after at midnight again. */
 const back = (at: Date, minutes: number) => at.setTime(at.getTime() - (at.getMinutes() % minutes) * 60_000 - at.getSeconds() * 1000 - at.getMilliseconds());
 const STEPS: { step: Usage['step']; within: number; begin: (at: Date) => void; next: (at: Date) => void }[] = [
   { step: 'minutes', within: 3 * HOUR, begin: at => back(at, 5), next: at => at.setTime(at.getTime() + 5 * 60_000) },
   { step: 'hour', within: 3 * DAY, begin: at => back(at, 60), next: at => at.setTime(at.getTime() + HOUR) },
-  { step: 'day', within: 92 * DAY, begin: at => at.setHours(0, 0, 0, 0), next: at => at.setDate(at.getDate() + 1) },
-  { step: 'month', within: Infinity, begin: at => { at.setDate(1); at.setHours(0, 0, 0, 0); }, next: at => at.setMonth(at.getMonth() + 1) },
+  { step: 'day', within: 92 * DAY, begin: at => at.setHours(0, 0, 0, 0), next: at => { at.setDate(at.getDate() + 1); at.setHours(0, 0, 0, 0); } },
+  { step: 'month', within: Infinity, begin: at => { at.setDate(1); at.setHours(0, 0, 0, 0); }, next: at => { at.setMonth(at.getMonth() + 1); at.setHours(0, 0, 0, 0); } },
 ];
 /** The spending of `entries` over time: bars from the first of them to `now` (or the last, if the ledger has one dated later),
  * those with nothing in them too. */

@@ -9,6 +9,7 @@ import { WebSocket } from 'ws';
 import { connect } from '../src/client.ts';
 import type { Push, WindowState } from '../src/protocol.ts';
 import { startServer, type ServerOptions } from '../src/server/server.ts';
+import { Windows } from '../src/server/windows.ts';
 import { isMessage, isObject } from '../src/ui/transcript.ts';
 import { canComplete, current } from '../src/window.ts';
 import { createProfile, temporaryHome } from './support.ts';
@@ -127,24 +128,53 @@ test('a Pi that dies in a run leaves its window stopped with the reason, and the
   assert.deepEqual(await request('prompt', { window: window.id, text: 'hello' }), { disposition: 'started' });
 });
 
+/** The windows themselves, with a Pi that is found when the test says: a start is held where it looks for its Pi, so what the
+ * test does meanwhile comes in the middle of it whatever else the machine is doing. `again` holds the next start the same way. */
+function held(t: TestContext) {
+  const pushes: Push[] = [], cwd = mkdtempSync(join(home, 'cwd-'));
+  let looking = Promise.withResolvers<void>(), found = Promise.withResolvers<typeof fake>();
+  const windows = new Windows({ home, grace: 2000, cwd: () => cwd, push: push => pushes.push(push), catalog: async () => ({ models: [] }), pi: () => { looking.resolve(); return found.promise; } });
+  t.after(() => windows.shutdown());
+  const statuses = (id: string) => pushes.flatMap(push => push.push === 'window' && push.window.id === id ? [push.window.status] : []).filter((status, k, all) => status !== all[k - 1]);
+  return { windows, statuses, looking: () => looking.promise, find: () => found.resolve(fake), again: () => { looking = Promise.withResolvers(); found = Promise.withResolvers(); } };
+}
+
 test('a main window closed while its start is still finding its Pi starts none, and starts on the next prompt', async t => {
-  const { request, statuses } = await setup(t);
-  const { window } = await request('open', { profile: 'work' });
-  // The first prompt on a server looks for Pi, which takes a moment: the close comes in the middle of that.
-  const prompt = request('prompt', { window: window.id, text: 'hello' });
-  await request('close', { window: window.id });
-  await assert.rejects(prompt, /was closed before it started/);
+  const { windows, statuses, looking, find } = held(t);
+  const { window } = await windows.open({ profile: 'work' });
+  const refused = assert.rejects(windows.prompt({ window: window.id, text: 'hello' }), /was closed before it started/);
+  await looking();
+  await windows.close({ window: window.id });
+  find();
+  await refused;
   assert.deepEqual(statuses(window.id), ['stopped']);
-  assert.deepEqual(await request('prompt', { window: window.id, text: 'hello' }), { disposition: 'started' });
+  assert.deepEqual(await windows.prompt({ window: window.id, text: 'hello' }), { disposition: 'started' });
 });
 
-test('a connected window closed while its start is still finding out who holds the profile starts no Pi, not the main window\'s either', async t => {
-  const { request, statuses } = await setup(t);
-  const { window } = await request('open', { profile: 'work', role: 'connected' });
-  const prompt = request('prompt', { window: window.id, text: 'hello' });
-  await request('close', { window: window.id });
-  await assert.rejects(prompt, /was closed before it started/);
+test('a connected window closed before a Pi was spawned for it starts none, not the main window\'s either unless that is wanted too', async t => {
+  const { windows, statuses, looking, find, again } = held(t);
+  /** A connected window that is sent a message and closed while the main window's start, which it waits for, looks for its
+   * Pi. `refused`: its message was. */
+  const closed = async () => {
+    const { window } = await windows.open({ profile: 'work', role: 'connected' });
+    const refused = assert.rejects(windows.prompt({ window: window.id, text: 'hello' }), new RegExp(`${window.id} was closed before it started`));
+    await looking();
+    await windows.close({ window: window.id });
+    return { refused };
+  };
+  const first = await closed();
+  find();
+  await first.refused;
   assert.deepEqual(statuses('work/main'), ['stopped']);
+  assert.deepEqual(windows.list().windows.map(({ id, status }) => [id, status]), [['work/main', 'stopped']]);
+
+  // A message to the main chat meanwhile waits for the same start, and gets its Pi: one that still wants it is enough.
+  again();
+  const second = await closed(), wanted = windows.prompt({ window: 'work/main', text: 'hello' });
+  find();
+  await second.refused;
+  assert.deepEqual(await wanted, { disposition: 'started' });
+  assert.deepEqual(statuses('work/main').slice(0, 3), ['stopped', 'starting', 'idle']);
 });
 
 test('a Pi that never answers its start can still be closed', async t => {

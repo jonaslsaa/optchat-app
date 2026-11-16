@@ -35,6 +35,8 @@ interface Opened {
   closed?: boolean;
   /** Asked to stop while its start had no Pi yet: that start spawns none. */
   stopping?: boolean;
+  /** Who a start under way is for, each as whether it still wants the Pi. A start nobody wants any more spawns none. */
+  wanted?: (() => boolean)[];
   /** Its conversation is being handed off: Complete has not answered yet. */
   completing?: boolean;
   /** The model picked for it while it had no Pi: its Pi is given it as it starts, and it is kept until a Pi has taken it. */
@@ -214,20 +216,25 @@ export class Windows {
     return pi;
   }
   private changed({ state }: Opened) { this.options.push({ push: 'window', window: { ...state } }); }
-  /** The window's Pi, started first if it has none; a start under way is shared. */
-  private started(opened: Opened) {
+  /** The window's Pi, started first if it has none; a start under way is shared. `wanted`: whether the one that asks still
+   * wants the Pi, which a start asks before it spawns one: a connected window that was closed no longer wants the main
+   * window's. */
+  private started(opened: Opened, wanted = () => true) {
     if (opened.pi && !opened.starting) return Promise.resolve(opened.pi);
-    return opened.starting ??= this.start(opened).finally(() => { opened.starting = undefined; opened.stopping = false; });
+    (opened.wanted ??= []).push(wanted);
+    return opened.starting ??= this.start(opened).finally(() => { opened.starting = undefined; opened.stopping = false; opened.wanted = undefined; });
   }
   private async start(opened: Opened) {
     const { state } = opened, { home, grace } = this.options, joins = !isMain(opened), main = this.window(state.profile);
     // The first Pi on a profile owns it and a connected window is a later one, so the main window's Pi goes first. On a profile
     // a Pi outside the app holds, that one is the owner: a connected window joins it, and the main window does not start.
-    // A window closed while its start was finding something out starts nothing: not its own Pi, and not the main window's.
-    const closed = () => { if (this.closing || opened.closed || opened.stopping) throw new Error(`${state.id} was closed before it started.`); };
+    // A window closed while its start was finding something out starts nothing: not its own Pi, and not the main window's,
+    // whose start is for this window and spawns no Pi either once nobody else waits for it. A Pi that is spawned stays.
+    const gone = () => this.closing || opened.closed === true || opened.stopping === true;
+    const closed = () => { if (gone() || !opened.wanted?.some(wants => wants())) throw new Error(`${state.id} was closed before it started.`); };
     await this.look(main);
     closed();
-    if (joins && !main.state.outside) await this.started(main);
+    if (joins && !main.state.outside) await this.started(main, () => !gone()).catch(error => { closed(); throw error; });
     if (!joins && state.outside) throw new Error('This chat is running outside the app.');
     const { command, args } = await this.options.pi();
     closed();

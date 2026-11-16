@@ -414,8 +414,11 @@ test('your message is in the chat the moment it is sent: Pi\'s copy takes its pl
   const window = 'work/main', said = () => chat([], app.state.live[window]).filter(item => item.kind === 'user').map(item => [item.key, item.text]);
 
   // Before the server has answered, and before its Pi has started: the message is the chat's next line.
-  const sending = app.send(window, 'Please wait here');
-  assert.deepEqual([said(), app.state.windows.find(w => w.id === window)?.status], [[[0, 'Please wait here']], 'stopped']);
+  const sending = app.send(window, 'Please wait here'), stopped = app.state.windows.find(w => w.id === window);
+  assert.deepEqual([said(), stopped?.status], [[[0, 'Please wait here']], 'stopped']);
+  // The window is said again before its Pi starts, stopped as it was (the server looked at its model): the message stays.
+  if (stopped) app.receive({ push: 'window', window: { ...stopped } });
+  assert.deepEqual(said(), [[0, 'Please wait here']]);
   assert.equal(await sending, true);
   // Pi's own copy is the same line under the same key, once: the row is not drawn anew.
   await until(state => state.live[window].messages.some(message => message.role === 'user'));
@@ -425,6 +428,12 @@ test('your message is in the chat the moment it is sent: Pi\'s copy takes its pl
   assert.equal(app.state.live[window].sent, undefined);
   await steering;
   assert.deepEqual(app.state.live[window].queued.steering, ['And this']);
+  // A run that began before the page knew of it has the message waiting too: Pi says so, and it is not in the chat as well.
+  const running = app.state.windows.find(w => w.id === window);
+  if (running) app.receive({ push: 'window', window: { ...running, status: 'idle' } });
+  const late = app.send(window, 'And that');
+  assert.equal(said().at(-1)?.[1], 'And that');
+  assert.deepEqual([await late, app.state.live[window].sent, app.state.live[window].queued.steering], [true, undefined, ['And this', 'And that']]);
 
   // One that pi-optchat does not take is in the chat until that is known, and then it is gone from it.
   await app.openProfile('importing');
@@ -433,4 +442,10 @@ test('your message is in the chat the moment it is sent: Pi\'s copy takes its pl
   assert.deepEqual([await refused, chat([], app.state.live['importing/main'])], [false, []]);
   void app.send('importing/main', '/optchat');
   assert.equal(app.state.live['importing/main'].sent, undefined);
+  // A Pi that dies with a message on its way never says so: the window does, and the message is not left in the chat.
+  const idle = app.state.windows.find(w => w.id === 'importing/main');
+  void app.send('importing/main', 'One more');
+  assert.equal(chat([], app.state.live['importing/main']).at(-1)?.text, 'One more');
+  if (idle) app.receive({ push: 'window', window: { ...idle, status: 'stopped' } });
+  assert.deepEqual([idle?.status, chat([], app.state.live['importing/main'])], ['idle', []]);
 });

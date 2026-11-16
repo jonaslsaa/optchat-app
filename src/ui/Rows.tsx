@@ -73,12 +73,14 @@ export const NoteRow = memo(function NoteRow({ part }: { part: Of<'note'> }) {
 });
 
 const ICONS: [RegExp, LucideIcon][] = [[/bash|shell|exec/, TerminalIcon], [/read|view|cat/, EyeIcon], [/write|edit|patch/, SquarePenIcon], [/grep|find|search|ls|glob/, SearchIcon], [/web|fetch|http/, GlobeIcon], [/spawn|tell|agent/, BotIcon], [/zoom|date/, HistoryIcon]];
-const Output = ({ children }: { children: ReactNode }) => <pre className="max-h-64 cursor-text select-text overflow-auto whitespace-pre-wrap break-words rounded-md border border-border/60 bg-secondary px-2.5 py-2 font-mono text-2xs text-secondary-label leading-relaxed dark:border-transparent dark:bg-input/32">{children}</pre>;
+const Output = ({ children, className }: { children: ReactNode; className?: string }) => <pre className={cn('max-h-64 cursor-text select-text overflow-auto whitespace-pre-wrap break-words rounded-md border border-border/60 bg-secondary px-2.5 py-2 font-mono text-2xs text-secondary-label leading-relaxed dark:border-transparent dark:bg-input/32', className)}>{children}</pre>;
+/** A line of a diff, or of what an edit was given, in the colour of its change. */
+const CHANGES = { removed: 'bg-destructive/8 text-destructive-foreground dark:bg-destructive/14', added: 'bg-success-foreground/8 text-success-foreground dark:bg-success-foreground/12' };
 /** A tool call as one line saying what it did. Opened, the line is there whole and can be selected, with under it what it does
  * not say of the call (the lines an edit changed, the text of a file) and what the call printed. `live`: the agent is still at work; `running` is the call's output so far, while Pi runs it. */
 function ToolRow({ step, live, running }: { step: Tool; live: boolean; running?: string }) {
   const [open, setOpen] = useState(false);
-  const Icon = ICONS.find(([pattern]) => pattern.test(step.name))?.[1] ?? WrenchIcon, printed = step.output ?? running, { verb, subject, detail } = act(step, live);
+  const Icon = ICONS.find(([pattern]) => pattern.test(step.name))?.[1] ?? WrenchIcon, printed = step.output ?? running, { verb, subject, detail, stat } = act(step, live);
   return (
     <WorkLogRow
       role="button" tabIndex={0} aria-expanded={open}
@@ -86,7 +88,8 @@ function ToolRow({ step, live, running }: { step: Tool; live: boolean; running?:
       onClick={event => { const selected = document.getSelection(); if (!selected || selected.isCollapsed || !event.currentTarget.contains(selected.anchorNode)) setOpen(!open); }}
       onKeyDown={event => { if (event.target === event.currentTarget && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); setOpen(!open); } }}
       icon={<span className="flex size-4 items-center justify-center text-icon-muted"><Icon className="block size-4 shrink-0 stroke-2" /></span>}
-      label={<><span className={cn('font-medium', step.failed && 'text-destructive')}>{verb}</span> <span className={cn('opacity-80', step.name === 'bash' && 'font-mono')}>{subject}</span></>}
+      label={<><span className={cn('font-medium', step.failed && 'text-destructive')}>{verb}</span> <span className={cn('opacity-80', step.name === 'bash' && 'font-mono')}>{subject}</span>
+        {stat && <span className="ms-1.5 font-mono text-xs tabular-nums"><span className="text-success-foreground">+{stat.added}</span>{stat.removed > 0 && <span className="ms-1 text-destructive-foreground">−{stat.removed}</span>}</span>}</>}
       trailing={<span className="flex h-6 items-center gap-1 self-start">
         {running !== undefined && step.output === undefined && <Spinner className="text-icon-muted" />}
         {step.failed && <XIcon aria-label="Failed" className="size-3 shrink-0 text-tool-error-icon/60" />}
@@ -95,8 +98,10 @@ function ToolRow({ step, live, running }: { step: Tool; live: boolean; running?:
     >
       {open && (
         <WorkLogDetails followLive={step.output === undefined}>
-          {detail.length > 0 && <Output>{detail.map((shown, index) => <span key={index} className={cn('block', shown.change === 'removed' ? 'text-destructive-foreground' : shown.change === 'added' && 'text-success-foreground')}>{shown.text}</span>)}</Output>}
-          {printed ? <Output>{printed}</Output> : <p className="text-2xs text-secondary-label">{live && step.output === undefined ? 'No output yet.' : 'No output.'}</p>}
+          {/* A diff has the whole box to scroll in, its wrapped lines under their text, and what Pi printed under it ("Successfully
+              replaced…") says nothing the line does not. */}
+          {detail.length > 0 && <Output className={cn(stat && 'max-h-none shrink-0')}>{detail.map((shown, index) => <span key={index} className={cn('-mx-2.5 block px-2.5', stat && 'ps-[calc(0.625rem+2ch)] -indent-[2ch]', shown.change && CHANGES[shown.change])}>{shown.text}</span>)}</Output>}
+          {stat ? null : printed ? <Output>{printed}</Output> : <p className="text-2xs text-secondary-label">{live && step.output === undefined ? 'No output yet.' : 'No output.'}</p>}
         </WorkLogDetails>
       )}
     </WorkLogRow>

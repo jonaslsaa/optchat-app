@@ -177,15 +177,36 @@ test('a tool call is said in words: what it did or is doing, and to what', () =>
 
 test('an opened tool call shows what its line does not say, and no JSON for a call the app knows', () => {
   const shown = (name: string, args: Record<string, unknown>) => act({ key: 0, type: 'tool', name, args, failed: false, output: '' }, false).detail;
-  // An edit is the lines it took out and put in, one edit after the other. A line break at its end is a line too.
-  assert.deepEqual(shown('edit', { path: 'a.ts', edits: [{ oldText: 'let a = 1;\nlet b;', newText: 'const a = 1;' }, { oldText: 'unused();\n', newText: '' }] }), [
-    { change: 'removed', text: '− let a = 1;\n− let b;' }, { change: 'added', text: '+ const a = 1;' }, { text: '…' }, { change: 'removed', text: '− unused();\n− ' },
+  // An edit is the diff it made, one edit after the other: the lines it kept stay, so only what changed is marked.
+  assert.deepEqual(shown('edit', { path: 'a.ts', edits: [{ oldText: 'let a = 1;\nlet b;\nrun(a);', newText: 'const a = 1;\nrun(a);\ndone();' }, { oldText: 'unused();\n', newText: '' }] }), [
+    { change: 'removed', text: '− let a = 1;' }, { change: 'removed', text: '− let b;' }, { change: 'added', text: '+ const a = 1;' }, { text: '  run(a);' }, { change: 'added', text: '+ done();' },
+    { text: '…' }, { change: 'removed', text: '− unused();' },
   ]);
-  assert.deepEqual(shown('write', { path: 'notes.md', content: '# Notes\n\nOne.\n' }), [{ text: '# Notes\n\nOne.\n' }]);
+  // A file written is every line put in. The line break that ends a text begins no line.
+  assert.deepEqual(shown('write', { path: 'notes.md', content: '# Notes\n\nOne.\n' }), [{ change: 'added', text: '+ # Notes' }, { change: 'added', text: '+ ' }, { change: 'added', text: '+ One.' }]);
   // A command is said by its line, unless it is more than a line: then the line has its first.
   assert.deepEqual(act({ key: 0, type: 'tool', name: 'bash', args: { command: 'cd src\nls' }, failed: false, output: '' }, false), { verb: 'Ran', subject: 'cd src …', detail: [{ text: 'cd src\nls' }] });
   // What the line leaves out of a call is shown as it was given.
   assert.deepEqual(shown('grep', { pattern: 'retry', glob: '*.ts', limit: null }), [{ text: '{\n  "pattern": "retry",\n  "glob": "*.ts"\n}' }]);
+});
+
+test('a real edit and write are their diff, live and from the log alike, and a failed edit or one on its way is what it was given', () => {
+  // test/pi-edits.json is a real turn of Pi 1.5.2 with pi-optchat 0.11.13: a write, an edit of two lines and an edit that failed,
+  // as Pi's records (`records`) and as pi-optchat logged them (`log`). Pi's own diff in an edit's `details` is not logged.
+  const { records, log }: { records: PiRecord[]; log: Message[] } = JSON.parse(readFileSync(join(import.meta.dirname, 'pi-edits.json'), 'utf8'));
+  const tools = (items: Item[]) => parts(items).flatMap(part => part.type === 'reply' ? part.steps : []).filter(step => step.type === 'tool').map(step => act(step, false));
+  const shown = tools(logged(log));
+  assert.deepEqual(tools(chat([], run(...records))), shown);
+  assert.deepEqual(shown, [
+    { verb: 'Wrote', subject: 'hello.ts', detail: ['+ export const a = 1;', '+ export const b = 2;', '+ export const c = 3;'].map(text => ({ change: 'added', text })), stat: { added: 3, removed: 0 } },
+    { verb: 'Edited', subject: 'notes.txt', detail: [{ change: 'removed', text: '− gamma' }, { change: 'added', text: '+ GAMMA' }, { text: '…' }, { change: 'removed', text: '− zeta' }, { change: 'added', text: '+ ZETA' }], stat: { added: 2, removed: 2 } },
+    // Pi says no more than this when an edit fails, and the log does not keep that it did: it failed all the same.
+    { verb: 'Edited', subject: 'notes.txt', detail: [{ change: 'removed', text: '− nope-not-there' }, { change: 'added', text: '+ x' }] },
+  ]);
+  const edit = (output?: string): Tool => ({ key: 0, type: 'tool', name: 'edit', args: { path: 'a.ts', edits: [{ oldText: 'a\nb', newText: 'a\nc' }] }, failed: false, ...output !== undefined && { output } });
+  // While it runs, and before its arguments are whole, an edit is what it was given so far.
+  assert.deepEqual(act(edit(), true), { verb: 'Editing', subject: 'a.ts', detail: [{ change: 'removed', text: '− a\n− b' }, { change: 'added', text: '+ a\n+ c' }] });
+  assert.deepEqual(act({ ...edit(), args: { path: 'a.ts', edits: [{ oldText: 'a' }] } }, true).detail, [{ change: 'removed', text: '− a' }]);
 });
 
 test('how long a reply took is said in hours past an hour', () => {
@@ -209,6 +230,13 @@ test('a tool call that failed is marked so', () => {
   assert.partialDeepStrictEqual(ran('Command exited with code 1 is what I grep for\nfound'), { steps: [{ failed: false }] });
   const read = parts(logged([entry(0, 'tool', 0, 'read {"path":"ci.log"}'), entry(1, 'echo', 1, 'read: ✖ one test\n\nCommand exited with code 1')]))[0];
   assert.partialDeepStrictEqual(read, { steps: [{ failed: false }] }); // A file that says so was read all right.
+  // Pi's edit and write say what they did when it worked (Pi 1.5.2's words), and anything else when it did not.
+  const changed = (call: string, output: string) => parts(logged([entry(0, 'tool', 0, call), entry(1, 'echo', 1, output)]))[0];
+  const failed = [
+    changed('write {"path":"a.md","content":"x"}', 'write: Successfully wrote to a.md'), changed('write {"path":"a.md","content":"x"}', 'write: EACCES: permission denied, open \'a.md\''),
+    changed('edit {"path":"a.md","edits":[]}', 'edit: Successfully replaced 1 block(s) in a.md.'), changed('edit {"path":"a.md","edits":[]}', 'edit: Found 2 occurrences of the text in a.md.'),
+  ].map(part => part.type === 'reply' && part.steps[0].type === 'tool' && part.steps[0].failed);
+  assert.deepEqual(failed, [false, true, false, true]);
 });
 
 test('pi-optchat\'s status line and Pi\'s failures are said as news, not as they were written for a terminal', () => {

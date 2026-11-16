@@ -1,0 +1,228 @@
+{
+ "records": [
+  {
+   "type": "message_end",
+   "message": {
+    "role": "user",
+    "content": [
+     {
+      "type": "text",
+      "text": "Use your tools, no questions: 1) with the write tool, create hello.ts containing three lines: `export const a = 1;`, `export const b = 2;`, `export const c = 3;`. 2) with the edit tool, in notes.txt replace the line `gamma` with `GAMMA` and the line `zeta` with `ZETA` in one edit call with two edits. 3) with the edit tool, try to replace `nope-not-there` with `x` in notes.txt (it will fail, that is fine). Then reply \"done\"."
+     }
+    ],
+    "timestamp": 1794834971749
+   }
+  },
+  {
+   "type": "message_end",
+   "message": {
+    "role": "assistant",
+    "content": [
+     {
+      "type": "text",
+      "text": "I'll run the three steps now, starting with writing hello.ts and making the two notes.txt edits together."
+     },
+     {
+      "type": "toolCall",
+      "id": "toolu_01Vze8PCkz8EgJ6Tu9tDxBzw",
+      "name": "write",
+      "arguments": {
+       "path": "hello.ts",
+       "content": "export const a = 1;\nexport const b = 2;\nexport const c = 3;\n"
+      }
+     },
+     {
+      "type": "toolCall",
+      "id": "toolu_01DZ2eK4ssatkRkVLz23diAc",
+      "name": "edit",
+      "arguments": {
+       "path": "notes.txt",
+       "edits": [
+        {
+         "oldText": "gamma",
+         "newText": "GAMMA"
+        },
+        {
+         "oldText": "zeta",
+         "newText": "ZETA"
+        }
+       ]
+      }
+     }
+    ],
+    "stopReason": "toolUse",
+    "timestamp": 1794834971783,
+    "rawStopReason": "tool_use",
+    "durationMs": 2203,
+    "thinkingLevel": "off"
+   }
+  },
+  {
+   "type": "message_end",
+   "message": {
+    "role": "toolResult",
+    "toolCallId": "toolu_01Vze8PCkz8EgJ6Tu9tDxBzw",
+    "toolName": "write",
+    "content": [
+     {
+      "type": "text",
+      "text": "Successfully wrote to hello.ts"
+     }
+    ],
+    "isError": false,
+    "durationMs": 4,
+    "timestamp": 1794834974024
+   }
+  },
+  {
+   "type": "message_end",
+   "message": {
+    "role": "toolResult",
+    "toolCallId": "toolu_01DZ2eK4ssatkRkVLz23diAc",
+    "toolName": "edit",
+    "content": [
+     {
+      "type": "text",
+      "text": "Successfully replaced 2 block(s) in notes.txt."
+     }
+    ],
+    "details": {
+     "diff": " 1 alpha\n 2 beta\n-3 gamma\n+3 GAMMA\n 4 delta\n 5 epsilon\n-6 zeta\n+6 ZETA\n 7 eta\n 8 theta",
+     "patch": "--- notes.txt\n+++ notes.txt\n@@ -1,8 +1,8 @@\n alpha\n beta\n-gamma\n+GAMMA\n delta\n epsilon\n-zeta\n+ZETA\n eta\n theta\n",
+     "firstChangedLine": 3
+    },
+    "isError": false,
+    "durationMs": 5,
+    "timestamp": 1794834974033
+   }
+  },
+  {
+   "type": "message_end",
+   "message": {
+    "role": "assistant",
+    "content": [
+     {
+      "type": "text",
+      "text": "Both succeeded. Now the edit that should fail."
+     },
+     {
+      "type": "toolCall",
+      "id": "toolu_014HMDa3fBpkz1mXPXoR6Fon",
+      "name": "edit",
+      "arguments": {
+       "path": "notes.txt",
+       "edits": [
+        {
+         "oldText": "nope-not-there",
+         "newText": "x"
+        }
+       ]
+      }
+     }
+    ],
+    "stopReason": "toolUse",
+    "timestamp": 1794834974052,
+    "rawStopReason": "tool_use",
+    "durationMs": 1667,
+    "thinkingLevel": "off"
+   }
+  },
+  {
+   "type": "message_end",
+   "message": {
+    "role": "toolResult",
+    "toolCallId": "toolu_014HMDa3fBpkz1mXPXoR6Fon",
+    "toolName": "edit",
+    "content": [
+     {
+      "type": "text",
+      "text": "Could not find the exact text in notes.txt. The old text must match exactly including all whitespace and newlines."
+     }
+    ],
+    "details": {},
+    "isError": true,
+    "durationMs": 1,
+    "timestamp": 1794834975744
+   }
+  },
+  {
+   "type": "message_end",
+   "message": {
+    "role": "assistant",
+    "content": [
+     {
+      "type": "text",
+      "text": "done"
+     }
+    ],
+    "stopReason": "stop",
+    "timestamp": 1794834975754,
+    "rawStopReason": "end_turn",
+    "durationMs": 542,
+    "thinkingLevel": "off"
+   }
+  }
+ ],
+ "log": [
+  {
+   "i": 0,
+   "kind": "user",
+   "date": "2026-11-16T13:16:11.749Z",
+   "text": "Use your tools, no questions: 1) with the write tool, create hello.ts containing three lines: `export const a = 1;`, `export const b = 2;`, `export const c = 3;`. 2) with the edit tool, in notes.txt replace the line `gamma` with `GAMMA` and the line `zeta` with `ZETA` in one edit call with two edits. 3) with the edit tool, try to replace `nope-not-there` with `x` in notes.txt (it will fail, that is fine). Then reply \"done\"."
+  },
+  {
+   "i": 1,
+   "kind": "talk",
+   "date": "2026-11-16T13:16:11.783Z",
+   "text": "I'll run the three steps now, starting with writing hello.ts and making the two notes.txt edits together."
+  },
+  {
+   "i": 2,
+   "kind": "tool",
+   "date": "2026-11-16T13:16:11.783Z",
+   "text": "write {\"path\":\"hello.ts\",\"content\":\"export const a = 1;\\nexport const b = 2;\\nexport const c = 3;\\n\"}"
+  },
+  {
+   "i": 3,
+   "kind": "tool",
+   "date": "2026-11-16T13:16:11.783Z",
+   "text": "edit {\"path\":\"notes.txt\",\"edits\":[{\"oldText\":\"gamma\",\"newText\":\"GAMMA\"},{\"oldText\":\"zeta\",\"newText\":\"ZETA\"}]}"
+  },
+  {
+   "i": 4,
+   "kind": "echo",
+   "date": "2026-11-16T13:16:14.024Z",
+   "text": "write: Successfully wrote to hello.ts"
+  },
+  {
+   "i": 5,
+   "kind": "echo",
+   "date": "2026-11-16T13:16:14.033Z",
+   "text": "edit: Successfully replaced 2 block(s) in notes.txt."
+  },
+  {
+   "i": 6,
+   "kind": "talk",
+   "date": "2026-11-16T13:16:14.052Z",
+   "text": "Both succeeded. Now the edit that should fail."
+  },
+  {
+   "i": 7,
+   "kind": "tool",
+   "date": "2026-11-16T13:16:14.052Z",
+   "text": "edit {\"path\":\"notes.txt\",\"edits\":[{\"oldText\":\"nope-not-there\",\"newText\":\"x\"}]}"
+  },
+  {
+   "i": 8,
+   "kind": "echo",
+   "date": "2026-11-16T13:16:15.744Z",
+   "text": "edit: Could not find the exact text in notes.txt. The old text must match exactly including all whitespace and newlines."
+  },
+  {
+   "i": 9,
+   "kind": "talk",
+   "date": "2026-11-16T13:16:15.754Z",
+   "text": "done"
+  }
+ ]
+}

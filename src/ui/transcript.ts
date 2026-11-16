@@ -279,7 +279,9 @@ function steps(items: readonly Item[]): Step[] {
     else {
       const output = text.slice(text.indexOf(': ') + 2);
       const step = waiting.shift()!;
-      Object.assign(step, { output, failed: /^error\b/i.test(output) || step.name === 'bash' && COMMAND_FAILED.test(output) });
+      // Pi's edit and write say nothing else when they did their work, and the log does not keep that a call failed.
+      const changes = step.name === 'edit' || step.name === 'write';
+      Object.assign(step, { output, failed: /^error\b/i.test(output) || step.name === 'bash' && COMMAND_FAILED.test(output) || changes && !output.startsWith('Successfully') });
     }
   }
   return result;
@@ -317,15 +319,38 @@ const VERBS: Record<string, [doing: string, done: string]> = {
 const NAMED = ['command', 'pattern', 'query', 'path', 'file_path', 'url', 'title', 'id'];
 /** A piece of what an opened call shows of itself. `change`: text an edit took out of the file, or put in. */
 export type Shown = { text: string; change?: 'removed' | 'added' };
+const MARKS = { removed: '−', added: '+' };
 const changed = (change: 'removed' | 'added', text: unknown): Shown[] =>
-  typeof text === 'string' && text ? [{ change, text: text.split('\n').map(line => `${change === 'added' ? '+' : '−'} ${line}`).join('\n') }] : [];
+  typeof text === 'string' && text ? [{ change, text: text.split('\n').map(line => `${MARKS[change]} ${line}`).join('\n') }] : [];
+/** How many lines a change put in and took out. */
+export interface Stat { added: number; removed: number }
+const counted = (lines: Shown[]): Stat => ({ added: lines.filter(line => line.change === 'added').length, removed: lines.filter(line => line.change === 'removed').length });
+/** A line of a diff: one a change kept, or took out or put in. */
+const marked = (text: string, change?: Shown['change']): Shown => ({ text: `${change ? MARKS[change] : ' '} ${text}`, ...change && { change } });
+/** A text's lines. The line break that ends its last line begins none. */
+const linesOf = (text: string) => text ? text.replace(/\n$/, '').split('\n') : [];
+/** The lines `before` and `after` have in common, and those taken out and put in: around the longest run of lines both have, as the
+ * `diff` command finds it. Pi's edits are a few lines each; past a million pairs to compare, all go out and come in. */
+export function diff(before: string, after: string): Shown[] {
+  const a = linesOf(before), b = linesOf(after);
+  if (a.length * b.length > 1e6) return [...a.map(text => marked(text, 'removed')), ...b.map(text => marked(text, 'added'))];
+  // common[i][j]: how many lines a[i…] and b[j…] have in common.
+  const common = Array.from({ length: a.length + 1 }, () => new Uint32Array(b.length + 1)), lines: Shown[] = [];
+  for (let i = a.length - 1; i >= 0; i--) for (let j = b.length - 1; j >= 0; j--) common[i][j] = a[i] === b[j] ? common[i + 1][j + 1] + 1 : Math.max(common[i + 1][j], common[i][j + 1]);
+  for (let i = 0, j = 0; i < a.length || j < b.length;) {
+    if (i < a.length && j < b.length && a[i] === b[j]) { lines.push(marked(a[i])); i++; j++; }
+    else if (i < a.length && (j === b.length || common[i + 1][j] >= common[i][j + 1])) lines.push(marked(a[i++], 'removed'));
+    else lines.push(marked(b[j++], 'added'));
+  }
+  return lines;
+}
 /** A tool call in words: what it does (`Ran`, or `Running` while it does; a tool the app does not know goes by its name) and
  * to what, which is its command, pattern or path, the agents it starts, or else its first argument. `detail` is what the call
- * shows of itself when it is opened, which is only what the line (whole, once opened) does not say: an edit as the lines it
- * took out and put in, the text written to a file or told to an agent, a command of several lines (the line has its first),
- * and for anything else the arguments as given. */
-export function act({ name, args, output }: Tool, live: boolean): { verb: string; subject: string; detail: Shown[] } {
-  const pending = live && output === undefined;
+ * shows of itself when it is opened, which is only what the line (whole, once opened) does not say: an edit as the diff it
+ * made, a file written as the lines it put in (`stat` counts them, once the call is done), the text told to an agent, a command
+ * of several lines (the line has its first), and for anything else the arguments as given. */
+export function act({ name, args, output, failed }: Tool, live: boolean): { verb: string; subject: string; detail: Shown[]; stat?: Stat } {
+  const pending = live && output === undefined, done = output !== undefined && !failed;
   if (name === 'spawn' && Array.isArray(args.tasks)) {
     const tasks = args.tasks.filter(isObject), titles = tasks.flatMap(task => typeof task.title === 'string' ? [task.title] : []), many = args.tasks.length !== 1;
     return {
@@ -336,7 +361,7 @@ export function act({ name, args, output }: Tool, live: boolean): { verb: string
   // Pi gives null for an argument the agent left out.
   const given = Object.fromEntries(Object.entries(args).filter(([, value]) => value != null));
   const key = NAMED.find(key => key in given) ?? Object.keys(given)[0] ?? '', first = given[key], { path, offset, limit, n, edits, content, message } = given;
-  let subject = typeof first === 'string' ? first : first === undefined ? '' : JSON.stringify(first), detail: Shown[] | undefined;
+  let subject = typeof first === 'string' ? first : first === undefined ? '' : JSON.stringify(first), detail: Shown[] | undefined, stat: Stat | false = false;
   // How long a command may take is nobody's news.
   const said = [key, ...name === 'bash' ? ['timeout'] : []];
   if (name === 'read' && (typeof offset === 'number' || typeof limit === 'number')) {
@@ -345,12 +370,20 @@ export function act({ name, args, output }: Tool, live: boolean): { verb: string
     said.push('offset', 'limit');
   } else if ((name === 'grep' || name === 'find') && typeof path === 'string') { subject += ` in ${path}`; said.push('path'); }
   else if (name === 'zoom' && typeof n === 'number') { subject += `+${n}`; said.push('n'); }
-  else if (name === 'edit' && Array.isArray(edits)) detail = edits.filter(isObject).flatMap((edit, index) => [...index ? [{ text: '…' }] : [], ...changed('removed', edit.oldText), ...changed('added', edit.newText)]);
-  else if (name === 'write' && typeof content === 'string') detail = [{ text: content }];
+  // An edit or a write that was done is the diff it made, with how many lines it put in and took out; one that is still on its
+  // way or failed, the text it was given.
+  else if (name === 'edit' && Array.isArray(edits)) {
+    const pairs = edits.flatMap(edit => isObject(edit) && typeof edit.oldText === 'string' && typeof edit.newText === 'string' ? [[edit.oldText, edit.newText] as const] : []);
+    if (done && pairs.length === edits.length) stat = counted(detail = pairs.flatMap(([before, after], index) => [...index ? [{ text: '…' }] : [], ...diff(before, after)]));
+    else detail = edits.filter(isObject).flatMap((edit, index) => [...index ? [{ text: '…' }] : [], ...changed('removed', edit.oldText), ...changed('added', edit.newText)]);
+  } else if (name === 'write' && typeof content === 'string') {
+    detail = done ? diff('', content) : [{ text: content }];
+    if (done) stat = counted(detail);
+  }
   else if (name === 'tell' && typeof message === 'string') detail = [{ text: message }];
   const [line, ...more] = subject.split('\n');
   detail ??= Object.keys(given).some(key => !said.includes(key)) ? [{ text: JSON.stringify(given, null, 2) }] : more.length ? [{ text: subject }] : [];
-  return { verb: VERBS[name]?.[pending ? 0 : 1] ?? name, subject: more.length ? `${line} …` : subject, detail };
+  return { verb: VERBS[name]?.[pending ? 0 : 1] ?? name, subject: more.length ? `${line} …` : subject, detail, ...stat && { stat } };
 }
 /** What pi-optchat's status line says that is news. It is written for a terminal (`OptChat: work · 350 messages · 2 pending ·
  * 1 agents`, a window's `OptChat: work · connected window · main window not reachable`): the profile, the size of the log and

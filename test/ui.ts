@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { after, before, test } from 'node:test';
 import { chromium, type Browser, type Page } from 'playwright-core';
 import { build } from 'vite';
-import { agents, seed, TEAM } from '../scripts/seed.ts';
+import { agents, CHANGES, seed, TEAM } from '../scripts/seed.ts';
 import { connect } from '../src/client.ts';
 import { startServer } from '../src/server/server.ts';
 import { createProfile, temporaryHome, writeMemory, writeRun } from './support.ts';
@@ -26,6 +26,7 @@ for (const name of ['chat', 'beside', 'sheet', 'memory', 'rows', 'menus', 'field
   // More that ended than the list shows at first.
   for (let i = 0; i < 6; i++) writeRun(profile, { id: `e000000${i}`, title: `An older agent ${i}`, state: 'completed', started: Date.now() - 9_000_000 - i * 1000, ended: Date.now() - 8_000_000, report: 'Done.' });
 }
+seed(createProfile(home, 'diffs'), CHANGES.length, Date.now(), CHANGES);
 mkdirSync(join(home, 'new'));
 
 let server: Awaited<ReturnType<typeof startServer>>, fresh: typeof server, browser: Browser;
@@ -399,6 +400,23 @@ test('↑ in an empty composer brings back what you said, and ⌘F in the chat s
   await narrow.keyboard.press('ControlOrMeta+f');
   await narrow.waitForTimeout(300);
   assert.equal(await narrow.getByRole('heading', { name: 'Memory view' }).count(), 0);
+});
+
+test('a long edit opens as its diff, which scrolls in its box and does not make the page longer', async () => {
+  const page = await open('diffs');
+  await page.getByRole('button', { name: /Worked/ }).click();
+  const row = page.getByRole('button', { name: /Edited src\/server\/pi\.ts/ });
+  assert.match(await row.innerText(), /\+23\s*−4/);
+  await row.click();
+  // The box the details open in is the one that scrolls: no smaller box of the diff's own inside it.
+  const box = await row.evaluate(element => {
+    const diff = element.querySelector('pre'), details = diff?.parentElement;
+    return diff && details && { height: details.clientHeight, whole: details.scrollHeight, diff: diff.clientHeight, drawn: diff.scrollHeight, page: document.documentElement.scrollHeight - innerHeight };
+  });
+  assert.ok(box && box.height <= 384 && box.whole > box.height, `the details box scrolls: ${JSON.stringify(box)}`);
+  assert.equal(box.diff, box.drawn, 'the diff is drawn whole inside it');
+  assert.equal(box.page, 0, 'the page does not scroll');
+  await page.context().close();
 });
 
 test('a field keeps the focus when Enter saves it, and when what was typed is refused', async () => {

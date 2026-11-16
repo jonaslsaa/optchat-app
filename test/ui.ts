@@ -17,9 +17,9 @@ process.env.FAKE_PI_HOME = join(home, 'pi');
 mkdirSync(join(home, 'pi', 'pi-optchat'), { recursive: true });
 writeFileSync(join(home, 'pi', 'pi-optchat', 'package.json'), JSON.stringify({ name: 'pi-optchat', version: '0.11.12' }));
 writeFileSync(join(home, 'pi', 'state.json'), JSON.stringify({ version: '1.5.2', providers: ['anthropic', 'openai'], packages: { 'npm:pi-optchat': join(home, 'pi', 'pi-optchat') } }));
-for (const name of ['chat', 'beside', 'sheet', 'memory', 'rows', 'menus', 'fields', 'asks', 'windows', 'importing']) {
+for (const name of ['chat', 'beside', 'sheet', 'memory', 'rows', 'menus', 'fields', 'asks', 'windows', 'importing', 'keys']) {
   const profile = createProfile(home, name);
-  if (name === 'memory' || name === 'windows') { writeMemory(profile, 16); continue; }
+  if (name === 'memory' || name === 'windows' || name === 'keys') { writeMemory(profile, 16); continue; }
   seed(profile, TEAM.length, Date.now(), TEAM);
   agents(profile, Date.now());
   // More that ended than the list shows at first.
@@ -144,6 +144,9 @@ test('a message pi-optchat does not take is back in the box with what it said ab
   await box.focus();
   await page.keyboard.press('Escape');
   await said.waitFor({ state: 'detached', timeout: 5000 });
+  assert.equal(await box.inputValue(), 'Summarise the release notes');
+  // It was never said in the chat, so ↑ does not take it for one of the messages it goes through.
+  await page.keyboard.press('ArrowUp');
   assert.equal(await box.inputValue(), 'Summarise the release notes');
   // Sent again it is said again, once; its button takes it away and leaves the focus where you type.
   await page.keyboard.press('Enter');
@@ -334,6 +337,43 @@ test('the windows over a narrow chat are open for one pick: a window picked, a n
   assert.equal(await beside.count(), 0, 'a window made narrow has the windows closed');
   await page.setViewportSize(WIDE);
   await beside.waitFor({ timeout: 3000 }).catch(() => assert.fail('The windows did not come back beside the chat in a wide window.'));
+});
+
+test('↑ in an empty composer brings back what you said, and ⌘F in the chat searches the memory', async () => {
+  const page = await open('keys'), box = page.getByRole('textbox', { name: 'Message' });
+  const press = async (key: string) => { await page.keyboard.press(key); return box.inputValue(); };
+  assert.deepEqual([await press('ArrowUp'), await press('ArrowUp'), await press('ArrowDown'), await press('ArrowDown'), await press('ArrowDown')], ['message 14', 'message 12', 'message 14', '', '']);
+  // What you are typing is yours: the keys move in it, as in any box.
+  await box.fill('half a thought');
+  assert.equal(await press('ArrowUp'), 'half a thought');
+  // A message sent now is the first one back. It has two lines: ↑ on its second moves to its first, and goes on from there.
+  await box.fill('said just now,\nin two lines');
+  await page.keyboard.press('Enter');
+  await page.getByRole('main').getByText('said just now').waitFor();
+  assert.deepEqual([await press('ArrowUp'), await press('ArrowUp'), await press('ArrowUp'), await press('ArrowDown'), await press('ArrowDown')],
+    ['said just now,\nin two lines', 'said just now,\nin two lines', 'message 14', 'said just now,\nin two lines', '']);
+  // ⌘F is not the panel's key: from there the chat stays as it is.
+  await page.getByRole('button', { name: 'Agents and GitHub' }).click();
+  await page.getByRole('button', { name: 'Close the panel' }).focus();
+  await page.keyboard.press('ControlOrMeta+f');
+  await page.waitForTimeout(300);
+  assert.equal(await page.getByRole('heading', { name: 'Memory view' }).count(), 0);
+  await page.getByRole('button', { name: 'Close the panel' }).click();
+  await box.focus();
+  // From the chat it shows the memory view with the keys in its search box, and they stay there once the view has been read.
+  await page.keyboard.press('ControlOrMeta+f');
+  await page.getByRole('heading', { name: 'Memory view' }).waitFor();
+  await page.locator('[data-line]').first().waitFor();
+  assert.equal(await focused(page), 'Search the memory');
+  await page.keyboard.type('message 1');
+  await page.getByRole('region', { name: 'Messages found' }).waitFor();
+  // Nor from the panel as a sheet over a narrow page: the chat under it stays the chat.
+  const narrow = await open('keys', NARROW);
+  await narrow.getByRole('button', { name: 'Agents and GitHub' }).click();
+  await narrow.locator('dialog[open]').waitFor();
+  await narrow.keyboard.press('ControlOrMeta+f');
+  await narrow.waitForTimeout(300);
+  assert.equal(await narrow.getByRole('heading', { name: 'Memory view' }).count(), 0);
 });
 
 test('a field keeps the focus when Enter saves it, and when what was typed is refused', async () => {

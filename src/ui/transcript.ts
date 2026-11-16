@@ -292,6 +292,16 @@ export function worked({ from, to, stopped, steps }: Extract<Part, { type: 'repl
   const [verb, word] = stopped ? ['Stopped', 'after'] : steps.some(step => step.type === 'fault') ? ['Failed', 'after'] : ['Worked', 'for'], time = took(from, to);
   return time === '0s' ? verb : `${verb} ${word} ${time}`;
 }
+/** What ↑ (`back`) or ↓ in the composer brings back of what you said in the chat: the message before the one in the box or the
+ * one after it, and an empty box after the newest. Only while the box is empty or holds one of them as it was sent, so the
+ * key never takes what you are typing. A message sent twice is there once, where it was sent last. */
+export function recalled(chat: readonly Item[], text: string, back: boolean) {
+  // A picture you sent is not text to send again: the log names it, and a message as Pi has it says only that there was one.
+  const said = chat.flatMap(item => item.kind === 'user' ? item.text.replace(/\[image(?: [0-9a-f]{16})?\]/g, '').trim() || [] : []);
+  const past = [...new Set(said.reverse())], at = past.indexOf(text);
+  if (text ? at < 0 : !back) return;
+  return past[at + (back ? 1 : -1)] ?? (back ? undefined : '');
+}
 /** How long something took, as 42s, 3m 05s or 1h 15m. */
 export function took(from: string, to: string) {
   const seconds = Math.max(0, Math.round((Date.parse(to) - Date.parse(from)) / 1000)), minutes = Math.floor(seconds / 60), two = (count: number) => String(count).padStart(2, '0');

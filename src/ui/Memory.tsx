@@ -1,7 +1,7 @@
 import { ArrowLeftIcon, ChevronRightIcon, SearchIcon, XIcon } from 'lucide-react';
-import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
+import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type RefObject } from 'react';
 import type { Hit, Line, Message, WindowState } from '../protocol.ts';
-import { escapes, label, useShortcuts } from './keys.ts';
+import { escapes, label } from './keys.ts';
 import { isOpen, key, listed, polled, since, WHO, type Search, type Tree } from './memory.ts';
 import { NoteRow, ReplyRow, ReportRow, StepRow, UserRow } from './Rows.tsx';
 import { app } from './store.ts';
@@ -104,7 +104,7 @@ const Reading = () => <p className="flex items-center gap-1.5 px-1.5 py-1.5 text
 
 /** It is read again when the main chat changes (`pulse`), and every three seconds while that says too little (`polled`): the
  * server keeps what it read until the files change, so a look costs it a glance at them. */
-export const MemoryView = memo(function MemoryView({ tree, profile, window, pulse }: { tree: Tree; profile: string; window: WindowState; pulse: string }) {
+export const MemoryView = memo(function MemoryView({ tree, profile, window, pulse, box }: { tree: Tree; profile: string; window: WindowState; pulse: string; box: RefObject<HTMLInputElement | null> }) {
   const { view } = tree, scroller = useRef<HTMLDivElement>(null), shown = useRef(false), active = polled(tree, window);
   // Where the keys were before the view took them, which is the composer.
   const [before] = useState(() => document.activeElement);
@@ -114,23 +114,23 @@ export const MemoryView = memo(function MemoryView({ tree, profile, window, puls
     const timer = setInterval(() => void app.readMemory(profile), EVERY);
     return () => clearInterval(timer);
   }, [profile, active]);
-  // It opens at the newest line, as the chat does, and with the keys on it; after that it stays where you are.
+  // It opens at the newest line, as the chat does, and with the keys on it, unless it was opened to search (⌘F, which is the
+  // page's: `box` is the search box) and they are there; after that it stays where you are.
   useLayoutEffect(() => {
     if (!view || shown.current || !scroller.current) return;
     shown.current = true;
     scroller.current.scrollTop = scroller.current.scrollHeight;
-    [...scroller.current.querySelectorAll<HTMLElement>('[data-line]')].at(-1)?.focus({ preventScroll: true });
+    if (document.activeElement !== box.current) [...scroller.current.querySelectorAll<HTMLElement>('[data-line]')].at(-1)?.focus({ preventScroll: true });
   }, [view]);
   // They go back there when the chat is shown again.
   useEffect(() => () => { if (before instanceof HTMLElement && before.isConnected) before.focus(); }, [before]);
   // A message that was found is brought to the top of the page, with the keys on its line, once the tree is open down to it.
-  const { search, found } = tree, results = listed(tree), box = useRef<HTMLInputElement>(null);
+  const { search, found } = tree, results = listed(tree);
   useLayoutEffect(() => {
     const at = found === undefined ? null : scroller.current?.querySelector<HTMLElement>('[data-found]');
     at?.scrollIntoView({ block: 'start' });
     at?.focus({ preventScroll: true });
   }, [found]);
-  useShortcuts(() => ({ 'mod+f': () => { box.current?.focus(); box.current?.select(); } }), []);
   // Ending the search leaves the keys in its box: what they were on may be gone.
   const end = () => { void app.search(profile, ''); box.current?.focus(); };
   // Esc ends a search from anywhere in the view. From the first message found, ↑ goes back to the box.

@@ -1,5 +1,6 @@
 import { CheckIcon, PanelLeftIcon, PanelRightIcon, SettingsIcon, XIcon } from 'lucide-react';
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { flushSync } from 'react-dom';
 import { canComplete, current } from '../window.ts';
 import { busy } from './agents.ts';
 import { Composer } from './Composer.tsx';
@@ -46,6 +47,10 @@ function Profile({ state, profile, onSettings }: { state: State; profile: string
   const before = useMemo(() => own ? spoken(current({ since }, session ?? [])) : logged(log?.entries ?? []), [own, since, session, log?.entries]);
   const items = useMemo(() => chat(before, { ...live, messages: run }), [before, run, live.streaming]);
   const name = window && title(window, state);
+  // ⌘F searches the memory from the chat too: the view is on the page before the keys go to its search box. Not from the panel,
+  // whose keys are its own: as a sheet it lies over the view, and the box under it cannot take them.
+  const box = useRef<HTMLInputElement>(null), search = () => { setOver(false); flushSync(() => setMemory(true)); box.current?.focus(); box.current?.select(); };
+  useShortcuts((): Record<string, () => void> => own ? {} : { 'mod+f': search }, [own], 'chat', 'memory');
   useShortcuts(() => ({
     'mod+shift+o': () => { setOver(false); void app.newWindow(profile); },
     'mod+b': toggle,
@@ -89,7 +94,7 @@ function Profile({ state, profile, onSettings }: { state: State; profile: string
         </header>
         <Fragment key={window.id}>
           {/* An empty window says what it is, with the composer under it in the middle of the page, as T3 Code's new thread does. */}
-          {memory ? <MemoryView tree={state.memory[profile] ?? NO_TREE} profile={profile} window={window} pulse={turn} /> : fresh ? (
+          {memory ? <MemoryView tree={state.memory[profile] ?? NO_TREE} profile={profile} window={window} pulse={turn} box={box} /> : fresh ? (
             <div className="flex min-h-0 flex-1 flex-col items-center justify-end gap-2 px-6 pb-7 text-center">
               <h2 className="max-w-full truncate font-normal text-2xl tracking-tight sm:text-3xl">{!own ? profile : window.completed ? 'Completed' : 'New connected window'}</h2>
               <p className="max-w-xl text-balance text-muted-foreground text-sm">
@@ -97,7 +102,7 @@ function Profile({ state, profile, onSettings }: { state: State; profile: string
               </p>
             </div>
           ) : <Timeline items={items} live={live} running={window.status === 'running'} profile={profile} loading={log?.loading} older={more ? () => void app.older(profile) : undefined} onAgent={own ? undefined : openAgent} />}
-          {window.outside ? <Outside window={window} outside={window.outside} models={state.models[window.id]} /> : <Composer state={state} window={window} live={live} onSend={toChat} />}
+          {window.outside ? <Outside window={window} outside={window.outside} models={state.models[window.id]} /> : <Composer state={state} window={window} live={live} chat={items} onSend={toChat} />}
           {fresh && !memory && <div className="flex-[1.6]" />}
         </Fragment>
       </main>

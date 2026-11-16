@@ -1,5 +1,5 @@
 import { WrapTextIcon } from 'lucide-react';
-import { createContext, Fragment, isValidElement, lazy, memo, Suspense, use, useContext, useMemo, useState, type ComponentProps, type ReactNode } from 'react';
+import { createContext, Fragment, isValidElement, lazy, memo, Suspense, use, useContext, useEffect, useMemo, useRef, useState, type ComponentProps, type ReactNode } from 'react';
 import ReactMarkdown, { type Components, type ExtraProps } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
@@ -10,6 +10,7 @@ import { fileTarget } from './paths.ts';
 import { link, safe } from './safe.ts';
 import { app } from './store.ts';
 import { csv } from './table.ts';
+import { closed, paced } from './transcript.ts';
 import { Button, cn, CopyButton, Picture } from './ui.tsx';
 
 const Line = memo(function Line({ tokens }: { tokens: Token[] }) {
@@ -113,10 +114,23 @@ const Block = memo(function Block({ source }: { source: string }) {
   return <Source value={source}><ReactMarkdown remarkPlugins={plugins} components={components}>{source}</ReactMarkdown></Source>;
 });
 
+const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
+/** What is shown of a reply while it streams: what has come, let out at a steady pace (`paced`), one step a frame, without what
+ * its end has opened and not closed (`closed`). What there was when it was first drawn shows at once, and so does all of it once
+ * the reply has ended or was stopped. With reduced motion there is no pace. */
+function useShown(text: string, streaming: boolean) {
+  const [shown, setShown] = useState(text.length), stepped = useRef(0), behind = streaming && !still && shown < text.length;
+  useEffect(() => {
+    if (!behind) { stepped.current = 0; return; }
+    const frame = requestAnimationFrame(now => { setShown(paced(text, shown, stepped.current ? now - stepped.current : 16)); stepped.current = now; });
+    return () => cancelAnimationFrame(frame);
+  }, [behind, text, shown]);
+  return streaming ? closed(still ? text : text.slice(0, shown)) : text;
+}
 /** The agent's Markdown. It is cut into blocks that do not depend on each other (T3 Code's `splitMarkdownBlocks`), so while a
  * reply streams only its last block is parsed again. */
-export function Markdown({ text, streaming = false, className }: { text: string; streaming?: boolean; className?: string }) {
-  const blocks = splitMarkdownBlocks(text) ?? [text];
+export function Markdown({ text: whole, streaming = false, className }: { text: string; streaming?: boolean; className?: string }) {
+  const text = useShown(whole, streaming), blocks = splitMarkdownBlocks(text) ?? [text];
   return (
     <div data-streaming={streaming || undefined} className={cn('chat-markdown w-full min-w-0 text-sm leading-relaxed text-foreground/90 [overflow-wrap:anywhere]', className)}>
       {blocks.map((source, index) => <Block key={index} source={source} />)}

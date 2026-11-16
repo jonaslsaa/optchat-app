@@ -152,6 +152,50 @@ export function thinking({ streaming }: Live) {
   return last?.type === 'thinking' ? last.thinking : undefined;
 }
 
+/** How long a reply that streams is let take to show what has come, in ms. */
+export const LAG = 200;
+/** How many letters of a reply that streams are shown `ms` after `shown` were. The network brings a reply in bursts (a real
+ * one: some 10 letters every 33 ms, then nothing for a quarter of a second, then 120 at once); the page lets them out at a
+ * steady pace instead, faster the further it is behind, so all that has come is out within about `LAG`, up to a word's end. */
+export function paced(text: string, shown: number, ms: number): number {
+  if (shown >= text.length) return text.length;
+  const to = shown + Math.ceil((text.length - shown) * Math.min(1, Math.max(1, ms) / LAG)), end = text.slice(to).search(/\s/);
+  return end < 0 ? to : to + end;
+}
+/** A reply that streams, without the Markdown its end has opened and not closed yet, so it never shows as it was written: a
+ * `**`, `` ` `` or `$` on its last line outside code, a `$$` formula, or a table's rows before the line under its head. What is
+ * held back is at most `HOLD` letters: a longer one is more likely a lone `$` than a formula, and shows as it is. Nothing is
+ * held in a code block, where all of it is code; fences close as in `markdownStreamBlocks.ts`. */
+const HOLD = 80;
+export function closed(text: string): string {
+  const lines = text.split('\n'), display: number[] = [];
+  let fence = '', offset = 0;
+  for (const line of lines) {
+    const opener = /^ {0,3}(`{3,}|~{3,})/.exec(line)?.[1];
+    if (fence) { if (opener?.[0] === fence[0] && opener.length >= fence.length && line.trim() === opener) fence = ''; }
+    else if (opener) fence = opener;
+    else if (line.trim() === '$$') display.push(offset);
+    offset += line.length + 1;
+  }
+  if (fence) return text;
+  // The last line with its code spans blanked out, up to a code span that is still open.
+  const last = lines.at(-1) ?? '', start = text.length - last.length, bare = last.replace(/(`+)(?:[^]*?[^`])?\1(?!`)/g, span => '\0'.repeat(span.length));
+  const tick = bare.indexOf('`'), prose = tick < 0 ? bare : bare.slice(0, tick), cuts = tick < 0 ? [] : [start + tick];
+  for (const mark of ['**', '$']) {
+    const at = prose.lastIndexOf(mark), run = mark === '**' ? prose.slice(0, at).match(/\**$/)![0].length : 0;
+    if (prose.split(mark).length % 2 === 0 && !(mark === '$' && /[\s\d]/.test(prose.charAt(at + 1)))) cuts.push(start + at - run);
+  }
+  if (display.length % 2) cuts.push(display.at(-1) ?? 0);
+  // The table rows the text ends in (the last may be half written, or the empty line after a row), read from the end.
+  const end = lines.length - (last === '' ? 1 : 0);
+  let row = end;
+  while (row > 0 && /^[ \t]*\|/.test(lines[row - 1])) row--;
+  const table = lines.slice(row);
+  if (row < end && !table.slice(0, -1).some(line => /^[ \t|:-]*-[ \t|:-]*$/.test(line))) cuts.push(text.length - table.join('\n').length);
+  const cut = Math.min(...cuts.filter(cut => text.length - cut <= HOLD));
+  return cut < text.length ? text.slice(0, cut) : text;
+}
+
 /** pi-optchat's request for a handoff (its `rpc-window.ts`): Complete has a connected window's agent say one thing more, which is
  * for the main chat and no answer to you. */
 const asksHandoff = (message: PiMessage) => message.role === 'custom' && message.customType === 'optchat-handoff-request';

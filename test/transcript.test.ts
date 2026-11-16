@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import type { Message, PiRecord } from '../src/protocol.ts';
-import { act, apply, chat, failure, idle, logged, merged, news, parts, quiet, quoted, recalled, replay, spoken, stopped, took, without, worked, type Item, type PiMessage, type Tool } from '../src/ui/transcript.ts';
+import { act, apply, chat, closed, failure, idle, logged, merged, news, paced, parts, quiet, quoted, recalled, replay, spoken, stopped, took, without, worked, LAG, type Item, type PiMessage, type Tool } from '../src/ui/transcript.ts';
 
 const T = Date.UTC(2026, 0, 1), at = (seconds: number) => new Date(T + seconds * 1000).toISOString();
 const user = (seconds: number, text: string): PiMessage => ({ role: 'user', timestamp: T + seconds * 1000, content: [{ type: 'text', text }] });
@@ -330,4 +330,53 @@ test('what Pi says in passing stands once, in its kind, until it is dismissed, a
   assert.deepEqual(quiet(said).notices, []);
   // A run does not take them away: only you do.
   assert.deepEqual(apply(said, { type: 'agent_start' }).notices, said.notices);
+});
+
+test('a reply that streams is let out at a steady pace, catches up within LAG, and keeps words whole', () => {
+  // A burst of 120 letters lands at once: a frame (16 ms) shows a part of it, not all, and up to a word's end.
+  const burst = 'word '.repeat(24), frame = (shown: number) => paced(burst, shown, 16);
+  const first = frame(0);
+  assert.ok(first > 0 && first < 30, `${first}`);
+  assert.equal(burst[first], ' ');
+  // Frame by frame it is all out within about LAG, each frame showing some of it.
+  let shown = 0, frames = 0;
+  while (shown < burst.length) { const next = frame(shown); assert.ok(next > shown); shown = next; frames++; }
+  assert.ok(frames * 16 <= LAG * 2.5, `${frames} frames`);
+  // A frame that came late (the tab was hidden) shows all there is.
+  assert.equal(paced(burst, 10, LAG), burst.length);
+  // A word still being written is shown as far as it has come, and nothing is shown twice.
+  assert.equal(paced('Hello wor', 6, 16), 7);
+  assert.equal(paced('Hello', 5, 16), 5);
+});
+
+test('what a streaming reply has opened and not closed on its end is held back, and nothing else', () => {
+  assert.equal(closed('It is **very'), 'It is ');
+  assert.equal(closed('It is **very** big'), 'It is **very** big');
+  assert.equal(closed('Run `npm te'), 'Run ');
+  assert.equal(closed('So $E=mc'), 'So ');
+  assert.equal(closed('So $E=mc^2$ and'), 'So $E=mc^2$ and');
+  // A price is no formula.
+  assert.equal(closed('It costs $5 a month'), 'It costs $5 a month');
+  assert.equal(closed('Then:\n\n$$\nE = m'), 'Then:\n\n');
+  // A table shows once the line under its head has come, and only then.
+  assert.equal(closed('Zones:\n\n| Zone | Exposure |\n|---'), 'Zones:\n\n');
+  assert.equal(closed('Zones:\n\n| Zone | Exposure |\n|---|---|\n| High | Dr'), 'Zones:\n\n| Zone | Exposure |\n|---|---|\n| High | Dr');
+  assert.equal(closed('It is ***very'), 'It is ');
+  assert.equal(closed('Zones:\n| Zone |\n'), 'Zones:\n');
+  // Many rows that are no table are read once, not once for each row.
+  const rows = `${'| a |\n'.repeat(20_000)}done`, from = performance.now();
+  assert.equal(closed(rows), rows);
+  assert.ok(performance.now() - from < 100);
+  // In a code block all of it is code.
+  assert.equal(closed('Run `echo $HOME` and `a ** b` here'), 'Run `echo $HOME` and `a ** b` here');
+  assert.equal(closed('Run `echo $HO'), 'Run ');
+  assert.equal(closed('Run ``a ` b`` and **so'), 'Run ``a ` b`` and ');
+  assert.equal(closed('````md\n```js\nx\n```\nIt is **so'), '````md\n```js\nx\n```\nIt is **so');
+  assert.equal(closed('````md\n```js\nx\n```\n````\nIt is **so'), '````md\n```js\nx\n```\n````\nIt is ');
+  assert.equal(closed('```\n$$\n```\nAfter it'), '```\n$$\n```\nAfter it');
+  assert.equal(closed('```py\nx = a ** b'), '```py\nx = a ** b');
+  assert.equal(closed('```py\nx = 1\n```\nIt is **so'), '```py\nx = 1\n```\nIt is ');
+  // More than a short stretch is more likely a lone mark than an opened one, and shows as written.
+  const long = `A lone * or $HOME ${'and on '.repeat(15)}`;
+  assert.equal(closed(long), long);
 });

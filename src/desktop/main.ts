@@ -131,7 +131,8 @@ else {
       setInterval(look, 4 * 3_600_000);
       const say = (message: string, detail?: string) => void ask({ type: 'info', message, detail, buttons: ['OK'] });
       check = () => void updates?.look(true).then(found => {
-        if (found === 'none') say(`OptChat ${app.getVersion()} is the newest`);
+        // Not "the newest": a newer release whose app is not there for this Mac yet is no update either.
+        if (found === 'none') say(`There is no update for OptChat ${app.getVersion()}`);
         if (found === 'busy') say('OptChat is looking for an update already', 'If there is one it is downloaded now, and you are asked when it is ready.');
       }, (error: unknown) => say('OptChat could not look for an update', error instanceof Error ? error.message : String(error)));
     }

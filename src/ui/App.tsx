@@ -129,14 +129,18 @@ export function App() {
   const toSettings = () => setPage(page => page === 'settings' ? undefined : 'settings'), chat = useRef<InProfile>(null);
   // Such a page is in place of the chat, so Esc there closes it: a run is stopped from the chat, where it can be seen.
   useShortcuts(() => ({ 'mod+,': toSettings, ...page && { escape: () => setPage(undefined) } }), [page]);
-  // The desktop app's menu bar. What it asks of a profile's page is done there, with that page in front. Without a profile
-  // there is nothing to do it to: the first page is put in front, with the focus where a profile is named.
+  // The desktop app's menu bar. What it asks of a profile's page is done there, with that page in front, once the profile's
+  // chat is there to do it in: the menu may have opened the window to ask. Without a profile there is nothing to do it to:
+  // the first page is put in front, with the focus where a profile is named.
+  const connecting = state.connection === 'connecting', opening = state.profile !== undefined && !state.windows.some(window => window.profile === state.profile);
   useMenu(action => {
+    if (connecting) return false;
     if (action === 'settings') return toSettings();
+    if (opening) return false;
     if (action === 'usage' && state.profile) return setPage('usage');
     flushSync(() => setPage(undefined));
     if (action !== 'usage' && chat.current) chat.current[action](); else document.querySelector<HTMLElement>('[aria-label="Profile name"]')?.focus();
-  }, state.connection !== 'connecting', [state.profile]);
+  }, [connecting, opening, state.profile]);
   return (
     <div className="flex h-dvh flex-col">
       {state.tabs.length > 1 && <Tabs state={state} />}

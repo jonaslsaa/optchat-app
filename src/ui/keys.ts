@@ -68,15 +68,15 @@ if (typeof window !== 'undefined') addEventListener(MENU_EVENT, event => {
   asked = event instanceof CustomEvent ? MENU_ACTIONS.find(action => action === event.detail) : undefined;
   take?.();
 });
-/** Does what the desktop app's menu bar asks (`src/menu.ts`), with `does`, once the page is `ready` to: what was asked before
- * that is done then. `does` is made again when `deps` change. */
-export function useMenu(does: (action: MenuAction) => void, ready: boolean, deps: readonly unknown[]) {
+/** Does what the desktop app's menu bar asks (`src/menu.ts`), with `does`, which says `false` while the page cannot do it
+ * yet: it is asked again when `deps` change, with which `does` is made again. */
+export function useMenu(does: (action: MenuAction) => boolean | void, deps: readonly unknown[]) {
   useEffect(() => {
-    take = () => { if (ready && asked) { const action = asked; asked = undefined; does(action); } };
+    take = () => { if (asked && does(asked) !== false) asked = undefined; };
     // What waited is done after this, not in it: it may want the page drawn at once (`flushSync`), which an effect cannot have.
     const waited = setTimeout(take);
     return () => { clearTimeout(waited); take = undefined; };
-  }, [ready, ...deps]);
+  }, deps);
 }
 /** A menu or a list that lies over the page while it is `open`, under `root` with the button that opens it. Esc closes it and
  * nothing else, wherever the focus is (a click on a row of it leaves the focus with the page), so the key is heard on its way

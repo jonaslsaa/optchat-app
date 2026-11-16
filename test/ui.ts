@@ -20,7 +20,7 @@ process.env.FAKE_PI_HOME = join(home, 'pi');
 mkdirSync(join(home, 'pi', 'pi-optchat'), { recursive: true });
 writeFileSync(join(home, 'pi', 'pi-optchat', 'package.json'), JSON.stringify({ name: 'pi-optchat', version: '0.11.13' }));
 writeFileSync(join(home, 'pi', 'state.json'), JSON.stringify({ version: '1.5.2', providers: ['anthropic', 'openai'], packages: { 'npm:pi-optchat': join(home, 'pi', 'pi-optchat') } }));
-for (const name of ['bar', 'cold', 'colder', 'chat', 'beside', 'sheet', 'memory', 'rows', 'menus', 'fields', 'asks', 'windows', 'importing', 'keys', 'spend', 'commands', 'arrows', 'mute', 'said', 'images', 'tabs', 'slow']) {
+for (const name of ['bar', 'cold', 'colder', 'chat', 'beside', 'sheet', 'memory', 'rows', 'menus', 'fields', 'asks', 'windows', 'importing', 'keys', 'spend', 'commands', 'arrows', 'mute', 'said', 'images', 'tabs', 'slow', 'inline']) {
   const profile = createProfile(home, name);
   if (['bar', 'cold', 'colder', 'memory', 'windows', 'keys', 'spend', 'arrows'].includes(name)) { writeMemory(profile, 16); continue; }
   seed(profile, TEAM.length, Date.now(), TEAM);
@@ -375,6 +375,34 @@ test('Esc in the panel as a sheet goes back from an agent to the list, then clos
   await goesOn(page, 'on the lists');
   assert.equal(await page.locator('dialog[open]').count(), 0, 'the sheet has closed');
   assert.equal(await focused(page), 'Agents and GitHub');
+});
+
+test('with the panel closed the agents a call started are under it, and over the composer while they work: a line opens one, the line over the composer opens the list, and each keeps up', async () => {
+  const page = await open('inline'), profile = join(home, 'profiles', 'inline');
+  const started = page.getByRole('list', { name: 'The agents it started' }), working = page.getByRole('button', { name: /agents? working/ });
+  // The main agent at work holds the profile, so its agents are at work; its status line counts them, and that is when the
+  // line over the composer is there.
+  await run(page);
+  await working.filter({ hasText: '2 agents working' }).waitFor();
+  // The reply that started them is folded, and while one of them works they are under it. A line opens that agent's chat.
+  await started.getByRole('button', { name: /Run the shutdown test on Windows/ }).click();
+  await panel(page).getByRole('heading', { name: 'Run the shutdown test on Windows' }).waitFor();
+  assert.equal(await working.count(), 0, 'the panel says it: no line over the composer while it is open');
+  await page.getByRole('button', { name: 'Close the panel' }).click();
+  await working.waitFor();
+  // Read again every two seconds with the panel closed: an agent that ends is seen to end.
+  writeRun(profile, { id: 'a41f09c2', title: 'Run the shutdown test on Windows', state: 'completed', started: Date.now() - 60_000, ended: Date.now(), report: 'Green on Windows.' });
+  await working.filter({ hasText: '1 agent working' }).waitFor({ timeout: 5000 });
+  // Both that call started have ended, so they are folded away with its work, and there when it is opened.
+  assert.equal(await started.count(), 0);
+  await page.getByRole('button', { name: /Worked for/ }).nth(1).click();
+  await started.getByRole('button', { name: /completed Run the shutdown test on Windows.*Green on Windows\./ }).waitFor();
+  // The line over the composer opens the list, and is the chat's like the rest of it: Esc there stops the run.
+  await working.focus();
+  await stops(page, 'on the line over the composer');
+  await working.click();
+  await agent(page, 'Draft the release notes').waitFor();
+  assert.equal(await working.count(), 0);
 });
 
 test('Esc in the memory view does nothing to the run; in the composer under it, it stops it', async () => {

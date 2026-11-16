@@ -3,6 +3,7 @@ import { Fragment, useCallback, useEffect, useImperativeHandle, useMemo, useRef,
 import { flushSync } from 'react-dom';
 import { canComplete, current } from '../window.ts';
 import { busy } from './agents.ts';
+import { AtWork, useAgents } from './Agents.tsx';
 import type { Cite, Place } from './cite.ts';
 import { Composer } from './Composer.tsx';
 import type { MenuAction } from '../menu.ts';
@@ -83,7 +84,8 @@ function Profile({ state, profile, onSettings, onUsage, onNewProfile, ref }: { s
   // What says a turn of it began or ended, for what reads the whole log: that is too much to do at every message.
   const turn = [window?.status, log?.total, state.connection].join(' ');
   // A Pi that has stopped counts nothing: its last status line still stands, and is about agents that went with it.
-  const agentsWork = busy(window?.status === 'stopped' ? undefined : live.status.optchat, panel && state.agents[profile]?.agents);
+  const agents = state.agents[profile]?.agents, agentsWork = busy(window?.status === 'stopped' ? undefined : live.status.optchat, panel && agents);
+  useAgents(profile, { closed: !panel && !own, pulse, busy: agentsWork, connected: state.connection === 'open' });
   if (!window) return <p className="m-auto text-muted-foreground text-sm">Opening {profile}…</p>;
   const more = !own && log && log.entries.length > 0 && log.entries[0].i > 0;
   // Nothing has been said here, as far as is known: a window that may have a conversation waits for it rather than say so.
@@ -127,7 +129,8 @@ function Profile({ state, profile, onSettings, onUsage, onNewProfile, ref }: { s
                 {!own ? 'One chat that remembers everything.' : window.completed ? 'The main chat has this conversation. Your next message starts a new one.' : 'Its own conversation, with this profile\'s memory. Complete hands it to the main chat.'}
               </p>
             </div>
-          ) : <Timeline ref={timeline} items={items} live={live} running={window.status === 'running'} starting={window.status === 'starting'} profile={profile} loading={log?.loading} older={more ? () => void app.older(profile) : undefined} onAgent={own ? undefined : openAgent} onCite={cite} logged={own ? undefined : log?.entries.at(-1)?.i} onPlace={recall} onMemory={search} />}
+          ) : <Timeline ref={timeline} items={items} live={live} running={window.status === 'running'} starting={window.status === 'starting'} profile={profile} loading={log?.loading} older={more ? () => void app.older(profile) : undefined} onAgent={own ? undefined : openAgent} onCite={cite} logged={own ? undefined : log?.entries.at(-1)?.i} onPlace={recall} onMemory={search} agents={own ? undefined : agents} />}
+          {!own && !panel && agentsWork && agents && <AtWork agents={agents} onOpen={() => setPanel({})} />}
           {window.outside ? <Outside window={window} outside={window.outside} models={state.models[window.id]} /> : <Composer ref={composer} state={state} window={window} live={live} chat={items} onSend={toChat} />}
           {fresh && !memory && <div className="flex-[1.6]" />}
         </Fragment>

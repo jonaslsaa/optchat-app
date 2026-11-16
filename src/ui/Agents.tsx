@@ -1,30 +1,18 @@
-import { ArrowLeftIcon, CheckIcon, CircleSlashIcon, XIcon } from 'lucide-react';
+import { ArrowLeftIcon } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { working } from '../agent.ts';
 import type { Agent } from '../protocol.ts';
-import { controls, doing, listed, named, polled, stood, transcript } from './agents.ts';
+import { atWork, controls, doing, listed, named, polled, stood, transcript } from './agents.ts';
 import { Queued, SendButton } from './Composer.tsx';
-import { Timer } from './Rows.tsx';
+import { Mark, Took, TONES } from './Rows.tsx';
 import { escapes } from './keys.ts';
 import { app, type State } from './store.ts';
 import { Timeline } from './Timeline.tsx';
-import { idle, took } from './transcript.ts';
+import { idle } from './transcript.ts';
 import { Button, cn, More, Section, StatusDot } from './ui.tsx';
 
 /** `SHOWN` is how many agents that ended are listed until more are asked for: few, because the GitHub list is under them. */
 const NOTHING = idle(), SHOWN = 8, EVERY = 2000;
-const iso = (time: number) => new Date(time).toISOString();
-/** How long an agent has worked, counting while it does. */
-const Took = ({ agent }: { agent: Agent }) => working(agent) ? <Timer from={iso(agent.started)} /> : agent.ended !== undefined ? <>{took(iso(agent.started), iso(agent.ended))}</> : null;
-
-/** The colours an agent's state is said in, and the only ones in the panel: at work (the dot's blue), done, failed. */
-const TONES = { working: 'text-info-foreground', done: 'text-success-foreground', failed: 'text-error-foreground' };
-/** How an agent stands: a dot while it works, a mark for how it ended. */
-function Mark({ agent }: { agent: Agent }) {
-  if (working(agent)) return <StatusDot tone="working" pulse={agent.state !== 'paused'} />;
-  const Icon = agent.state === 'completed' ? CheckIcon : agent.state === 'failed' ? XIcon : CircleSlashIcon, { tone } = stood(agent);
-  return <Icon role="img" aria-label={agent.state} className={cn('size-3.5 shrink-0 text-muted-foreground/70', tone && TONES[tone])} />;
-}
 /** An agent in the list: what it is called, how long it has worked, and under that what it is doing now or how it ended.
  * `back`: its chat was open until now, so the focus comes back to it. */
 function Row({ agent, depth, back, onOpen }: { agent: Agent; depth: number; back: boolean; onOpen: () => void }) {
@@ -134,10 +122,39 @@ export function Agents({ state, profile, agent: id, pulse, outside, onAgent }: {
   );
   return (
     <>
-      {items.length > 0 ? <Timeline key={id} narrow items={items} live={NOTHING} running={agent !== undefined && working(agent) && agent.state !== 'paused'} profile={profile} onAgent={onAgent} />
+      {items.length > 0 ? <Timeline key={id} narrow items={items} agents={agents} live={NOTHING} running={agent !== undefined && working(agent) && agent.state !== 'paused'} profile={profile} onAgent={onAgent} />
         : <p className="flex-1 px-6 pt-16 text-center text-muted-foreground text-sm">{!chat ? '' : agent && working(agent) ? 'It has not said anything yet.' : 'There is no chat to show for this agent.'}</p>}
       {agent ? <Control key={id} profile={profile} agent={agent} owner={agents.find(other => other.id === agent.parent)} queued={chat?.queued} onDone={read} />
         : <p className="shrink-0 truncate border-border/70 border-t px-4 py-2.5 text-center text-muted-foreground text-xs">An agent of the main chat</p>}
     </>
+  );
+}
+/** The main chat's agents while the panel is closed: read when the chat changes (`pulse`), as the open panel reads them, and
+ * every two seconds while the status line counts agents at work (`busy`), for the lines under the calls that started them and
+ * the line over the composer. Then the panel is the one that reads them. */
+export function useAgents(profile: string, { closed, pulse, busy, connected }: { closed: boolean; pulse: string; busy: boolean; connected: boolean }) {
+  useEffect(() => { if (closed && connected) void app.readAgents(profile, SHOWN); }, [profile, closed, pulse, connected]);
+  useEffect(() => {
+    if (!closed || !busy) return;
+    const timer = setInterval(() => void app.readAgents(profile, SHOWN), EVERY);
+    return () => clearInterval(timer);
+  }, [profile, closed, busy]);
+}
+/** Over the composer while the main chat's agents work and the panel is closed: how many, and each one's title and how long it
+ * has worked, on one line, cut short where it is full. A click opens the panel's list. Quiet, as the line under the box is. */
+export function AtWork({ agents, onOpen }: { agents: readonly Agent[]; onOpen: () => void }) {
+  const shown = atWork(agents);
+  if (!shown.length) return null;
+  return (
+    <div data-no-find className="shrink-0 px-3 sm:px-12">
+      <button type="button" title="Open the agents" onClick={onOpen}
+        className="enter mx-auto flex h-6 w-full min-w-0 max-w-(--chat-content-max-width) cursor-pointer items-center gap-2 rounded-md px-2 text-left text-muted-foreground text-xs outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/70">
+        <StatusDot tone="working" pulse />
+        <span className="min-w-0 flex-1 truncate tabular-nums">
+          <span className="text-secondary-label">{shown.length === 1 ? '1 agent working' : `${shown.length} agents working`}</span>
+          {shown.map(agent => <span key={agent.id}> · {named(agent)} <Took agent={agent} /></span>)}
+        </span>
+      </button>
+    </div>
   );
 }

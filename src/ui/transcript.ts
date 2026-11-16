@@ -282,12 +282,12 @@ export function parts(items: readonly Item[], previous: readonly Part[] = []): P
     return part.type === 'work' && title !== undefined ? { ...part, title } : part;
   });
 }
-/** The agents a `spawn` call started, each with the title it was given: pi-optchat answers `Started: <id>, <id>.`, in the order
- * of the call's tasks. */
+/** The agents a `spawn` call started, in the order of its tasks: pi-optchat answers `Started: <id>, <id>.`. */
+export const started = (step: Step): string[] => step.type === 'tool' && step.name === 'spawn' ? /^Started: ([^.]+)\./.exec(step.output ?? '')?.[1].split(', ') ?? [] : [];
+/** The agents a `spawn` call started, each with the title it was given. */
 function spawned(step: Step): [id: string, title: string][] {
   const tasks = step.type === 'tool' && step.name === 'spawn' && Array.isArray(step.args.tasks) ? step.args.tasks : [];
-  const ids = step.type === 'tool' ? /^Started: ([^.]+)\./.exec(step.output ?? '')?.[1].split(', ') ?? [] : [];
-  return ids.flatMap((id, at): [string, string][] => { const task: unknown = tasks[at]; return isObject(task) && typeof task.title === 'string' ? [[id, task.title]] : []; });
+  return started(step).flatMap((id, at): [string, string][] => { const task: unknown = tasks[at]; return isObject(task) && typeof task.title === 'string' ? [[id, task.title]] : []; });
 }
 /** The text a message ended on: pi-optchat logs each block of it as an entry of its own, under the message's date. */
 function closing(items: readonly Item[]): Item[] {
@@ -454,11 +454,11 @@ export function act({ name, args, output, failed }: Tool, live: boolean): { verb
 }
 /** What pi-optchat's status line says that is news. It is written for a terminal (`OptChat: work · 350 messages · 2 pending ·
  * 1 agents`, a window's `OptChat: work · connected window · main window not reachable`): the profile, the size of the log and
- * what the window is are on the page already, a count of nothing says nothing, and the rest is said in words. */
+ * what the window is are on the page already, and so are the agents at work (over the composer, and in the panel), a count of
+ * nothing says nothing, and the rest is said in words. */
 export function news(status = ''): string[] {
   return status.split(' · ').slice(1).flatMap(part => {
     const [, count, what] = /^(\d+) (messages|pending|agents)$/.exec(part) ?? [];
-    if (what === 'agents') return count === '0' ? [] : [`${count} ${count === '1' ? 'agent' : 'agents'} working`];
     if (what === 'pending') return count === '0' ? [] : [`${count} ${count === '1' ? 'summary' : 'summaries'} to write`];
     return what || part === 'connected window' || part === 'completed' ? [] : [part];
   });

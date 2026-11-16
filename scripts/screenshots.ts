@@ -6,7 +6,7 @@ import { connect, type Client } from '../src/client.ts';
 import { startServer } from '../src/server/server.ts';
 // pi-optchat's own lock, which only Pi takes: here it stands for a Pi in a terminal.
 import { defaults, describeOwner, lockProfile } from 'pi-optchat/files';
-import { createProfile, give, png } from '../test/support.ts';
+import { createProfile, give, png, writeRun } from '../test/support.ts';
 import { agents, CHANGES, demo, FILES, FORMULAS, limited, NAMED, remember, seed, SHIPPED, SHIPPING, spend, TEAM } from './seed.ts';
 
 /** `npm run screenshots [directory] [--dark]`: a PNG of every main state of the UI, in /tmp/optchat-app-shots unless a directory
@@ -32,6 +32,11 @@ writeFileSync(join(team, 'config.json'), JSON.stringify({ ...JSON.parse(readFile
 seed(team, TEAM.length, NOW, TEAM);
 seed(createProfile(home, 'changes'), CHANGES.length, NOW, CHANGES);
 agents(team, NOW + 42_000);
+// The same chat once both its agents have reported, and no Pi has it.
+const reported = createProfile(home, 'reported');
+seed(reported, TEAM.length, NOW, TEAM);
+agents(reported, NOW + 42_000);
+writeRun(reported, { id: 'a41f09c2', title: 'Run the shutdown test on Windows', task: 'Run test/pi.test.ts on the Windows runner.', state: 'failed', started: NOW - 54_000, ended: NOW + 12_000, model: 'anthropic/claude-sonnet-5', report: 'The Windows runner is offline: no run could start.' });
 const terminal = createProfile(home, 'terminal');
 seed(terminal, 2, NOW);
 // The models a profile keeps, as pi-optchat does: its main chat's, and its agents'.
@@ -433,6 +438,25 @@ async function pictures(browser: Browser, control: Client) {
   await tell(crew, 'Try again, the API is back.');
   await crew.getByRole('alert').waitFor();
   await shot(crew, '50-agent-refused');
+  // The agents in the chat that started them, with the panel closed: while one works, a line each under the reply that started
+  // them, and a line over the composer, which opens the list. Light, dark and narrow; and in the reply opened, under the call.
+  for (const [name, options] of [['156-agents-in-chat', {}], ['157-agents-in-chat-dark', { dark: true }], ['158-agents-in-chat-narrow', { width: 420, height: 800 }]] as const) {
+    const page = await open(['team'], options);
+    await page.getByRole('button', { name: /agents working/ }).waitFor();
+    await shot(page, name);
+    if (name !== '156-agents-in-chat') continue;
+    await page.getByRole('button', { name: /Worked for/ }).nth(1).click();
+    await page.getByText('Started 2 agents:').waitFor();
+    await shot(page, '159-agents-in-chat-opened');
+    await page.getByRole('button', { name: /agents working/ }).click();
+    await page.getByRole('complementary').getByText('Draft the release notes').waitFor();
+    await shot(page, '160-agents-from-the-composer');
+  }
+  // Once they have ended the reply folds them away with its work, and opened it says how each ended.
+  const reports = await open(['reported']);
+  await reports.getByRole('button', { name: /Worked for/ }).nth(1).click();
+  await reports.getByText('Started 2 agents:').waitFor();
+  await shot(reports, '161-agents-in-chat-ended');
 
   // The model a chat runs on, picked in its composer: the list, a search, the model of the profile's agents, dark and narrow.
   const pick = await open(['picks']);

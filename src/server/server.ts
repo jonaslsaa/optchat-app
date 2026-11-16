@@ -127,6 +127,8 @@ export async function startServer({ port = 0, origins = [], ui = join(import.met
   const address = server.address() as AddressInfo;
   return {
     port: address.port, url: `ws://127.0.0.1:${address.port}/ws`, page: `http://127.0.0.1:${address.port}/`,
+    /** How many chats have an agent at work now: what stopping the server would cut short. */
+    working: () => windows.list().windows.filter(window => window.status === 'running').length,
     /** No request is taken from here on; one already under way ends with its Pi. */
     async close() {
       closing = true;

@@ -12,6 +12,8 @@ gh release download --repo jonaslsaa/optchat-app --pattern '*.dmg' --dir ~/Downl
 
 Open the dmg and drag OptChat to Applications. Downloaded this way it opens like any other app. Downloaded with a browser, macOS stops the first open ("OptChat Not Opened"): press Done, then System Settings → Privacy & Security → **Open Anyway**. The app is not notarized (there is no Apple Developer ID), so a company Mac with endpoint security may flag it. More in [docs/desktop.md](docs/desktop.md#the-first-open).
 
+From then on the app updates itself from the releases here: it downloads a new one in the background, and asks before it restarts ([docs/desktop.md](docs/desktop.md#updates)).
+
 ## Layout
 
 - **Top: profile tabs.** A profile is the thing you pick once and then stop thinking about. The tab bar is hidden while only one profile is open; opening a second profile shows two tabs.
@@ -44,7 +46,7 @@ Open the dmg and drag OptChat to Applications. Downloaded this way it opens like
 5. ~~The agents panel: the main chat's agents, live, each one's chat to read, and telling, interrupting, stopping and resuming one from there.~~ Done ([docs/ui.md](docs/ui.md#agents)). An agent's words as it writes them are next.
 6. The clickable memory tree. Reading it is done: the main chat as the agent reads it, every line opening down to its messages, and a search that finds a message and opens the tree at it ([docs/ui.md](docs/ui.md#memory-view)). Changing it is next.
 7. The GitHub list. Its first part is done: the issues and pull requests the main chat named by link, with how they stand ([docs/ui.md](docs/ui.md#github)). Tracking them is next.
-8. ~~The Electron shell around the same page.~~ Done for macOS ([docs/desktop.md](docs/desktop.md)): `npm run dist` builds the app and a dmg.
+8. ~~The Electron shell around the same page.~~ Done for macOS ([docs/desktop.md](docs/desktop.md)): `npm run dist` builds the app and a dmg, and the app updates itself from the releases ([docs/desktop.md](docs/desktop.md#updates)).
 
 ## Open
 

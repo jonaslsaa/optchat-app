@@ -1,7 +1,8 @@
 name: Release
 
-# Builds the macOS app (Apple Silicon) and attaches its dmg to a GitHub release. A tag `v<version>` releases; a run started by
-# hand only builds, also when it is started on a tag, and keeps the dmg as an artifact of the run. Nothing builds on a push or a pull request: a macOS runner's
+# Builds the macOS app (Apple Silicon) and attaches it to a GitHub release twice: as the dmg you download, and as the zip the
+# app updates itself from (docs/desktop.md). A tag `v<version>` releases; a run started by hand only builds, also when it is
+# started on a tag, and keeps both as an artifact of the run. Nothing builds on a push or a pull request: a macOS runner's
 # minutes count ten times in a private repository.
 on:
   push:
@@ -40,15 +41,26 @@ jobs:
           codesign -dv /tmp/optchat-dmg/OptChat.app
           spctl --assess --type execute -vv /tmp/optchat-dmg/OptChat.app || true
           hdiutil detach /tmp/optchat-dmg
+      # What a running app downloads to update itself: the app alone, zipped as the Finder does it. The app looks for a file
+      # named `-arm64.zip` in the latest release and checks it against the sha256 GitHub takes of it (src/desktop/update.ts).
+      # It is unpacked here the way the app unpacks it, and has to come out signed and whole.
+      - name: The zip the app updates itself from
+        run: |
+          zip="release/OptChat-$(node -p "require('./package.json').version")-arm64.zip"
+          ditto -c -k --sequesterRsrc --keepParent release/mac-arm64/OptChat.app "$zip"
+          ditto -x -k "$zip" /tmp/optchat-zip
+          codesign --verify --deep --strict /tmp/optchat-zip/OptChat.app
       - name: Release
         if: github.event_name == 'push'
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" release/*.dmg --generate-notes --verify-tag
+        run: gh release create "$GITHUB_REF_NAME" release/*.dmg release/*.zip --generate-notes --verify-tag
       - uses: actions/upload-artifact@v7
         if: github.event_name != 'push'
         with:
           name: OptChat-dmg
-          path: release/*.dmg
+          path: |
+            release/*.dmg
+            release/*.zip
           if-no-files-found: error
           retention-days: 7

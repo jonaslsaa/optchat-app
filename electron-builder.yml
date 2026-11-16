@@ -18,6 +18,7 @@ mac:
   # notarization, which needs one, and ad hoc it would refuse Electron's own libraries.
   identity: "-"
   hardenedRuntime: false
-# Nothing updates itself, so nothing needs a block map.
+# The app updates itself from a zip of the app that the release workflow makes, not through electron-builder's updater
+# (docs/desktop.md), so nothing needs a block map.
 dmg:
   writeUpdateInfo: false

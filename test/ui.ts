@@ -19,9 +19,9 @@ process.env.FAKE_PI_HOME = join(home, 'pi');
 mkdirSync(join(home, 'pi', 'pi-optchat'), { recursive: true });
 writeFileSync(join(home, 'pi', 'pi-optchat', 'package.json'), JSON.stringify({ name: 'pi-optchat', version: '0.11.13' }));
 writeFileSync(join(home, 'pi', 'state.json'), JSON.stringify({ version: '1.5.2', providers: ['anthropic', 'openai'], packages: { 'npm:pi-optchat': join(home, 'pi', 'pi-optchat') } }));
-for (const name of ['chat', 'beside', 'sheet', 'memory', 'rows', 'menus', 'fields', 'asks', 'windows', 'importing', 'keys', 'spend', 'commands', 'arrows', 'mute', 'said', 'images', 'tabs', 'slow']) {
+for (const name of ['bar', 'cold', 'chat', 'beside', 'sheet', 'memory', 'rows', 'menus', 'fields', 'asks', 'windows', 'importing', 'keys', 'spend', 'commands', 'arrows', 'mute', 'said', 'images', 'tabs', 'slow']) {
   const profile = createProfile(home, name);
-  if (['memory', 'windows', 'keys', 'spend', 'arrows'].includes(name)) { writeMemory(profile, 16); continue; }
+  if (['bar', 'cold', 'memory', 'windows', 'keys', 'spend', 'arrows'].includes(name)) { writeMemory(profile, 16); continue; }
   seed(profile, TEAM.length, Date.now(), TEAM);
   agents(profile, Date.now());
   // More that ended than the list shows at first.
@@ -786,4 +786,73 @@ test('with motion on, a reply that streamed at a pace is all there once it has e
   await page.getByRole('button', { name: 'Copy reply' }).waitFor();
   assert.equal(await page.locator('[data-quote] .chat-markdown').last().innerText(), 'reply');
   await page.context().close();
+});
+
+test('the desktop app\'s menu bar asks the page for what its keys run: each is done once, from whatever page is in front, and also when it asks before the page is ready', async () => {
+  const page = await open('bar'), box = page.getByRole('textbox', { name: 'Message' }), theme = page.getByRole('radiogroup', { name: 'Theme' });
+  const ask = (page: Page, action: string) => page.evaluate(action => { dispatchEvent(new CustomEvent('optchat-menu', { detail: action })); }, action);
+  const client = await connect(server.url), memory = page.getByRole('heading', { name: 'Memory view' }), beside = page.getByRole('navigation', { name: 'Windows' });
+  const connected = async () => (await client.request('windows', {})).windows.filter(window => window.profile === 'bar' && window.role === 'connected').length;
+  /** What a key or the menu did is there, and is still there a moment later: done once, not undone by a second time. */
+  const once = async (what: string, there: () => Promise<boolean>) => {
+    for (let waited = 0; !await there(); waited += 100) { assert.ok(waited < 3000, `${what}: not done.`); await page.waitForTimeout(100); }
+    await page.waitForTimeout(400);
+    assert.ok(await there(), `${what}: done and undone.`);
+  };
+  try {
+    // The settings, by the menu and by its key from a text field: opened, and closed by the same again.
+    await ask(page, 'settings');
+    await once('Settings… in the menu', () => theme.isVisible());
+    await ask(page, 'settings');
+    await once('Settings… again', async () => !await theme.isVisible());
+    await box.focus();
+    await page.keyboard.press('ControlOrMeta+,');
+    await once('⌘, in the composer', () => theme.isVisible());
+    // What is the chat's is done in the chat, which the settings give way to: one new window for one asking, and one for the key.
+    await ask(page, 'newWindow');
+    await page.getByRole('heading', { name: 'New connected window' }).waitFor();
+    await once('New Connected Window in the menu', async () => await connected() === 1 && !await theme.isVisible());
+    await page.keyboard.press('ControlOrMeta+Shift+o');
+    await once('⇧⌘O', async () => await connected() === 2);
+    // The memory is the main chat's: asked for from a connected window it is shown there, with the keys in its search box.
+    await ask(page, 'search');
+    await memory.waitFor();
+    assert.equal(await focused(page), 'Search the memory');
+    await ask(page, 'memory');
+    await once('Chat or Memory in the menu', async () => !await memory.isVisible());
+    // From the usage page, which the menu opens too, the windows at the left are hidden once, and shown once by the key.
+    await ask(page, 'usage');
+    await page.getByRole('button', { name: 'Close the usage' }).waitFor();
+    await ask(page, 'sidebar');
+    await once('Show or Hide Sidebar in the menu', async () => await box.isVisible() && !await beside.isVisible());
+    await page.keyboard.press('ControlOrMeta+b');
+    await once('⌘B', () => beside.isVisible());
+
+    // The panel as a sheet lies over the chat and has the keys: ⌘F does nothing there, and the menu closes it to search.
+    const narrow = await open('bar', NARROW);
+    await narrow.getByRole('button', { name: 'Agents and GitHub' }).click();
+    await narrow.locator('dialog[open]').waitFor();
+    await ask(narrow, 'search');
+    await narrow.getByRole('heading', { name: 'Memory view' }).waitFor();
+    assert.deepEqual([await narrow.locator('dialog[open]').count(), await focused(narrow)], [0, 'Search the memory']);
+
+    // The menu opens the window for what it asks, and asks as soon as the page has loaded, which is before it has the
+    // profile, and its chat when nothing has opened that yet: it waits, and is done when the chat is there.
+    const context = await browser.newContext({ viewport: WIDE, reducedMotion: 'reduce' });
+    await context.addInitScript(saved => {
+      localStorage.setItem('optchat-app', saved);
+      document.addEventListener('DOMContentLoaded', () => dispatchEvent(new CustomEvent('optchat-menu', { detail: 'search' })));
+    }, JSON.stringify({ tabs: ['cold'], profile: 'cold', selected: {} }));
+    const early = await context.newPage();
+    await early.goto(server.page);
+    await early.getByRole('heading', { name: 'Memory view' }).waitFor({ timeout: 5000 }).catch(() => assert.fail('What the menu asked before the page was ready was not done.'));
+    await early.locator('[data-line]').first().waitFor();
+    assert.equal(await focused(early), 'Search the memory');
+
+    // With no profile there is no chat to do it in: the keys go to where the first one is named.
+    const first = await open();
+    await first.getByRole('textbox', { name: 'Profile name' }).waitFor();
+    await ask(first, 'newWindow');
+    assert.equal(await focused(first), 'Profile name');
+  } finally { client.close(); }
 });

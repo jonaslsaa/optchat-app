@@ -96,12 +96,12 @@ const Installed = Type.Enum(['pi', 'optchat']);
 const Account = Type.Enum(['anthropic', 'openai-codex', 'github-copilot']);
 /** What the app needs, and whether it is there: Pi (`shell`: for the Pi the app installed
  * into its own folder, the line that puts it on your PATH), pi-optchat in that Pi, and a model provider that is logged in
- * (`providers`: those that are; `models`: the models Pi lists for them, each as `provider/id`; `terminal`: the app can open a terminal here for Pi's sign-in, `signIn`). `job` is an install the app is running, or the last one it ran: `line` is the latest line it
+ * (`providers`: those that are; `terminal`: the app can open a terminal here for Pi's sign-in, `signIn`). `job` is an install the app is running, or the last one it ran: `line` is the latest line it
  * printed, and `output` the end of everything it printed once it has failed. */
 export const Setup = Type.Object({
   pi: Type.Intersect([Need, Type.Object({ shell: Type.Optional(Type.String()) })]),
   optchat: Need,
-  login: Type.Intersect([Need, Type.Object({ providers: Type.Array(Type.String()), models: Type.Array(Type.String()), terminal: Type.Optional(Type.Boolean()) })]),
+  login: Type.Intersect([Need, Type.Object({ providers: Type.Array(Type.String()), terminal: Type.Optional(Type.Boolean()) })]),
   job: Type.Optional(Type.Object({ what: Installed, state: Type.Enum(['running', 'done', 'failed']), line: Type.String(), output: Type.Optional(Type.String()) })),
 });
 export type Setup = Static<typeof Setup>;

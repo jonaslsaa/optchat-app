@@ -2,8 +2,8 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { percent, THINKING } from 'pi-optchat/files';
 import { THINKING as APP } from '../src/models.ts';
-import type { Setting } from '../src/protocol.ts';
-import { field, LEVELS, model, named, said, typed } from '../src/ui/config.ts';
+import type { Offered, Setting } from '../src/protocol.ts';
+import { asked, field, LEVELS, model, named, offered, said, typed } from '../src/ui/config.ts';
 
 const setting = (kind: Setting['kind'], more: Partial<Setting> = {}): Setting => ({ key: 'k', kind, label: 'A setting', description: '', applies: '', value: 1, default: 1, ...more });
 
@@ -22,6 +22,21 @@ test('a model is written provider/id, and its id may have a slash in it', () => 
   assert.deepEqual(model(' openrouter/anthropic/claude-sonnet-5-5 '), { provider: 'openrouter', model: 'anthropic/claude-sonnet-5-5' });
   assert.equal(named({ provider: 'openrouter', model: 'anthropic/claude-sonnet-5-5' }), 'openrouter/anthropic/claude-sonnet-5-5');
   for (const text of ['', 'claude-sonnet-5-5', '/claude', 'anthropic/']) assert.equal(model(text), undefined, text);
+});
+
+test('a model is asked for at a level it has, since a running Pi refuses one at a level it has not as if it did not list the model', () => {
+  const models: Offered[] = [{ provider: 'anthropic', id: 'claude-sonnet-5-5', name: 'Claude Sonnet 5.5', levels: ['low', 'medium', 'high'] }, { provider: 'anthropic', id: 'claude-haiku-4-5', name: 'Claude Haiku 4.5', levels: ['off'] }];
+  // Off is not among its levels: the nearest above is.
+  assert.deepEqual(asked(models, 'anthropic/claude-sonnet-5-5', 'off'), { provider: 'anthropic', model: 'claude-sonnet-5-5', thinking: 'low' });
+  assert.deepEqual(asked(models, 'anthropic/claude-sonnet-5-5', 'high'), { provider: 'anthropic', model: 'claude-sonnet-5-5', thinking: 'high' });
+  assert.deepEqual(asked(models, 'anthropic/claude-haiku-4-5', 'high'), { provider: 'anthropic', model: 'claude-haiku-4-5', thinking: 'off' });
+  // A model Pi does not list is asked for as it was written, for pi-optchat to judge; what names no model is not asked for.
+  assert.deepEqual(asked(models, 'local/llama', 'off'), { provider: 'local', model: 'llama', thinking: 'off' });
+  assert.equal(asked(models, 'sonnet', 'off'), undefined);
+  // Its levels are the ones to choose from, with the one it is kept at when a file says one it has not.
+  assert.deepEqual(offered(models, { provider: 'anthropic', model: 'claude-sonnet-5-5', thinking: 'medium' }), ['low', 'medium', 'high']);
+  assert.deepEqual(offered(models, { provider: 'anthropic', model: 'claude-sonnet-5-5', thinking: 'off' }), ['off', 'low', 'medium', 'high']);
+  assert.deepEqual(offered(models, { provider: 'local', model: 'llama', thinking: 'off' }), LEVELS);
 });
 
 test('what the page mirrors of pi-optchat is what pi-optchat has: the page cannot load it, so this fails when they differ', () => {

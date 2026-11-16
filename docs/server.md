@@ -116,7 +116,7 @@ They are pi-optchat's, and so is every rule about them (`config`, `configure` an
 - **pi-optchat is the judge.** The server checks only that a value is a number, a truth value or a model, and passes it on. What pi-optchat refuses, it refuses in its own words, which the page shows as they are: a number out of its range, a model the running Pi does not offer, a Pi that takes no changes (one that is still starting, or runs headless).
 - **The main model is not among them.** It follows what is picked in Pi (`set_model`, which is what the app's `setModel` sends: [The model](#the-model)), and pi-optchat refuses it here.
 - **Instructions** are written with pi-optchat's `saveInstructions`. Pi reads them again each turn, so no Pi has to be told.
-- **The models to choose from** are in the setup (`login.models`, each `provider/id`): what Pi lists for the providers it is logged in to, asked once of a Pi without extensions when the server looks at what a chat needs, so they are there with no chat running. A model a Pi extension adds is not in that list; it can be typed.
+- **The models to choose from** are the ones the profile's main chat can run on (`models`, [The model](#the-model)): its Pi's while it runs, and else those of a Pi started for the question, so they are there with no chat running. Each comes with the levels it thinks at, which is how the page asks for a model only at a level it has: a running Pi refuses a model at a level it has not in the same words as a model it does not list. A model that is not in the list can be typed; pi-optchat says whether it will do.
 
 ## GitHub
 

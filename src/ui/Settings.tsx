@@ -3,7 +3,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import type { Settings as Kept } from '../protocol.ts';
 import { Config, Instructions } from './Config.tsx';
 import { Setup } from './Setup.tsx';
-import { app, type State } from './store.ts';
+import { app, mainOf, type State } from './store.ts';
 import { Button, cn } from './ui.tsx';
 
 /** The settings page, in place of the chat: how the app looks, where new windows run, the settings and instructions of the
@@ -67,15 +67,16 @@ const Needs = ({ state }: { state: State }) => <Section title="Setup" hint="What
 
 export function Settings({ state, onClose }: { state: State; onClose: () => void }) {
   const { profile } = state, config = profile === undefined ? undefined : state.config[profile];
-  // Read each time the page is opened: a terminal may have changed them since.
-  useEffect(() => { if (profile !== undefined) void app.readConfig(profile); }, [profile]);
+  // Read each time the page is opened: a terminal may have changed them since. The models are those the profile's chat can
+  // run on, which its Pi lists while it runs.
+  useEffect(() => { if (profile !== undefined) { void app.readConfig(profile); void app.readModels(mainOf(profile)); } }, [profile]);
   return (
     <Page title="Settings" action={<Button variant="ghost-muted" size="icon-sm" aria-label="Close the settings" onClick={onClose}><XIcon /></Button>}>
       {state.settings && <Choices settings={state.settings} />}
       {profile !== undefined && config && (
         <>
           <Section title={`Profile: ${profile}`} hint="pi-optchat's settings for this profile. A change is saved when you leave its field, and a chat that is running picks it up without a restart.">
-            <Config key={profile} profile={profile} config={config} models={state.setup?.login.models ?? []} />
+            <Config key={profile} profile={profile} config={config} models={state.models[mainOf(profile)]?.models ?? []} />
           </Section>
           <Section title="Instructions" hint={`What the agents of ${profile} are told every turn: the profile's AGENTS.md.`}>
             <Instructions key={profile} profile={profile} kept={config.instructions} />

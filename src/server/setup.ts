@@ -205,7 +205,7 @@ export class Setup {
   }
   private async check(): Promise<Checked> {
     const found = await this.find(), unknown = { state: 'unknown' as const };
-    if (!found) return { state: { pi: { state: 'missing', installable: true, message: 'Not installed. The app can install it into its own folder, where it changes nothing else on this machine.' }, optchat: unknown, login: { ...unknown, providers: [], models: [] } } };
+    if (!found) return { state: { pi: { state: 'missing', installable: true, message: 'Not installed. The app can install it into its own folder, where it changes nothing else on this machine.' }, optchat: unknown, login: { ...unknown, providers: [] } } };
     // In a terminal, a Pi on your PATH goes by its name; the app's own, while it is not on it, by where it is.
     const { path, managed, listed, version } = found, named = { command: listed ? this.options.pi.command : path, args: found.args };
     const pi: State['pi'] = {
@@ -217,10 +217,10 @@ export class Setup {
         : { state: 'old', message: `Older than ${MINIMUM_PI}, which this app is tested with. It is a Pi of yours, so the app leaves it alone: update it in a terminal.`, command: shown(named, ['update', 'self']) },
     };
     const [optchat, offered] = await Promise.all([this.optchat(found, named), this.models(found)]), terminal = this.options.opener !== undefined;
-    const providers = [...new Set(offered?.map(model => model.provider))].sort(), models = offered?.map(model => `${model.provider}/${model.id}`).sort() ?? [];
-    const login: State['login'] = !offered ? { state: 'unknown', providers, models, message: 'Pi did not say which models it can use.' }
-      : providers.length ? { state: 'ok', providers, models, terminal }
-      : { state: 'missing', providers, models, terminal, message: `No model provider is logged in. Log in ${terminal ? 'with your account here, or ' : 'to one '}in a terminal (anthropic, openai-codex, github-copilot or another), then check again:`, command: shown(named, ['auth', 'login', 'anthropic']) };
+    const providers = [...new Set(offered?.map(model => model.provider))].sort();
+    const login: State['login'] = !offered ? { state: 'unknown', providers, message: 'Pi did not say which models it can use.' }
+      : providers.length ? { state: 'ok', providers, terminal }
+      : { state: 'missing', providers, terminal, message: `No model provider is logged in. Log in ${terminal ? 'with your account here, or ' : 'to one '}in a terminal (anthropic, openai-codex, github-copilot or another), then check again:`, command: shown(named, ['auth', 'login', 'anthropic']) };
     return { found, state: { pi, optchat, login } };
   }
   /** pi-optchat as this Pi has it: `pi list` prints each package's source and under it the folder it is in. A package from npm

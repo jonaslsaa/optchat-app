@@ -34,16 +34,17 @@ function Row({ label, description, applies, outcome, children }: { label: string
     </li>
   );
 }
-/** A field that keeps what is typed in it when you leave it or press Enter, if that is not what it had (`onSame` when it is). */
+/** A field that keeps what is typed in it when you press Enter, or leave it having changed it, if that is not what it had
+ * (`onSame` when it is). Enter leaves the focus where it is. */
 function Typed({ label, kept, className, list, placeholder, unit, field, onKeep, onSame }: { label: string; kept: string; className: string; list?: string; placeholder?: string; unit?: string; field?: Ref<HTMLInputElement>; onKeep: (text: string) => void; onSame: () => void }) {
-  const [text, setText] = useState(kept);
+  const [text, setText] = useState(kept), changed = useRef(false);
   useEffect(() => setText(kept), [kept]);
   // A field left empty, or as it was, goes back to what it had.
-  const keep = () => { if (!text.trim() || text.trim() === kept) { setText(kept); onSame(); } else onKeep(text); };
+  const keep = () => { changed.current = false; if (!text.trim() || text.trim() === kept) { setText(kept); onSame(); } else onKeep(text); };
   return (
     <label className={cn(FIELD, 'flex items-center gap-1.5 focus-within:ring-2 focus-within:ring-ring', className)}>
-      <input ref={field} aria-label={label} value={text} list={list} placeholder={placeholder} spellCheck={false} autoCapitalize="off" autoCorrect="off" onChange={event => setText(event.target.value)} onBlur={keep}
-        onKeyDown={event => { if (event.key === 'Enter' && !event.nativeEvent.isComposing) event.currentTarget.blur(); }} className="min-w-0 flex-1 bg-transparent text-inherit outline-none [text-align:inherit] placeholder:font-sans placeholder:text-muted-foreground" />
+      <input ref={field} aria-label={label} value={text} list={list} placeholder={placeholder} spellCheck={false} autoCapitalize="off" autoCorrect="off" onChange={event => { setText(event.target.value); changed.current = true; }} onBlur={() => { if (changed.current) keep(); }}
+        onKeyDown={event => { if (event.key === 'Enter' && !event.nativeEvent.isComposing) keep(); }} className="min-w-0 flex-1 bg-transparent text-inherit outline-none [text-align:inherit] placeholder:font-sans placeholder:text-muted-foreground" />
       {unit && <span className="text-muted-foreground text-xs">{unit}</span>}
     </label>
   );
@@ -69,7 +70,7 @@ function One({ profile, setting }: { profile: string; setting: Setting }) {
 /** The model that writes the profile's summaries: written `provider/id`, with the models Pi lists to choose from, and how
  * hard it thinks. The chat's own model, and its agents', are chosen in the chat. */
 function Compactor({ profile, kept, standard, models }: { profile: string; kept: Kept['compactor']; standard: Kept['standard']; models: readonly Offered[] }) {
-  const [outcome, keep, setOutcome] = useKeep(profile, 'compactor'), list = useId(), field = useRef<HTMLInputElement>(null);
+  const [outcome, keep, setOutcome] = useKeep(profile, 'compactor'), list = useId(), field = useRef<HTMLInputElement>(null), [fresh, setFresh] = useState(0);
   // The model at a level it has, and a word about it where that is not the level it was asked for at.
   const ask = (text: string, thinking: ModelChoice['thinking']) => {
     const choice = asked(models, text, thinking);
@@ -78,14 +79,15 @@ function Compactor({ profile, kept, standard, models }: { profile: string; kept:
   };
   return (
     <Row label="Compactor model" description={`Writes summaries, imports and fallback handoffs. Default: ${named(standard)} · ${standard.thinking}.`} applies="Applies to the next summary." outcome={outcome}>
-      <Typed key={`${named(kept)} ${kept.thinking}`} label="Compactor model" kept={named(kept)} field={field} list={list} placeholder="provider/model" className="w-56 font-mono text-xs" onSame={() => setOutcome(undefined)} onKeep={text => ask(text, kept.thinking)} />
+      <Typed key={fresh} label="Compactor model" kept={named(kept)} field={field} list={list} placeholder="provider/model" className="w-56 font-mono text-xs" onSame={() => setOutcome(undefined)} onKeep={text => ask(text, kept.thinking)} />
       <datalist id={list}>{models.map(({ provider, id }) => named({ provider, model: id })).map(name => <option key={name} value={name} />)}</datalist>
       <select aria-label="Compactor thinking" value={kept.thinking} className={cn(FIELD, 'px-1.5')}
         onChange={event => {
-          // With the model as it stands in the field: one that was refused is asked for again with this level.
-          // Once saved, the field is the saved model again, whatever was in it.
+          // With the model as it stands in the field: one that was refused is asked for again with this level. What is no
+          // model is not: the saved one is, which the field is then given again.
           const thinking = LEVELS.find(level => level === event.target.value), text = field.current?.value ?? '';
-          if (thinking) ask(model(text) ? text : named(kept), thinking);
+          if (thinking && model(text)) ask(text, thinking);
+          else if (thinking) { setFresh(fresh + 1); ask(named(kept), thinking); }
         }}>
         {offered(models, kept).map(level => <option key={level} value={level}>{THINKING[level]}</option>)}
       </select>

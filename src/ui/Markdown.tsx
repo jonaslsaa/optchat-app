@@ -1,10 +1,13 @@
 import { WrapTextIcon } from 'lucide-react';
-import { Fragment, isValidElement, memo, Suspense, use, useMemo, useState, type ComponentProps, type ReactNode } from 'react';
-import ReactMarkdown, { type Components } from 'react-markdown';
+import { createContext, Fragment, isValidElement, lazy, memo, Suspense, use, useContext, useMemo, useState, type ComponentProps, type ReactNode } from 'react';
+import ReactMarkdown, { type Components, type ExtraProps } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import remarkMath from 'remark-math';
 import { highlighter, painter, type Token } from './highlight.ts';
 import { splitMarkdownBlocks } from './markdownStreamBlocks.ts';
+import { dollars } from './math.ts';
 import { safe } from './safe.ts';
+import { csv } from './table.ts';
 import { Button, cn, CopyButton } from './ui.tsx';
 
 const Line = memo(function Line({ tokens }: { tokens: Token[] }) {
@@ -22,6 +25,7 @@ function Coloured({ text, language, children }: { text: string; language: string
 function CodeBlock({ children }: ComponentProps<'pre'>) {
   const code = isValidElement<{ className?: string; children?: ReactNode }>(children) ? children.props : {};
   const [wrapped, setWrapped] = useState(false), language = /language-(\S+)/.exec(code.className ?? '')?.[1], text = String(code.children ?? '');
+  if (language === 'math') return <Formula tex={text} display />;
   return (
     <div data-wrap={wrapped} className={cn('my-[0.65rem] overflow-hidden rounded-lg border border-border/70 bg-secondary text-start leading-snug dark:border-transparent dark:bg-input/32', !language && 'flex flex-row-reverse items-start')}>
       {/* A block that names its language has a line for it, with the buttons at its end. One that names none has only the
@@ -37,13 +41,38 @@ function CodeBlock({ children }: ComponentProps<'pre'>) {
     </div>
   );
 }
+// A chunk that could not be fetched leaves the formula as it was written.
+const Typeset = lazy(() => import('./Typeset.tsx').catch(() => ({ default: ({ fallback }: { fallback: ReactNode }) => fallback })));
+/** A formula (`$…$`, `$$…$$` or a `math` block), drawn by KaTeX once it has loaded and as it was written until then. */
+function Formula({ tex, display }: { tex: string; display: boolean }) {
+  const written = <span className="font-mono text-xs">{display ? `$$${tex.trim()}$$` : `$${tex}$`}</span>;
+  return <span className={cn(display ? 'my-[0.65rem] block overflow-x-auto overflow-y-hidden' : 'inline-block max-w-full overflow-x-auto overflow-y-hidden align-middle')}>
+    <Suspense fallback={written}><Typeset tex={tex.trim()} display={display} fallback={written} /></Suspense>
+  </span>;
+}
+/** The block a table is in: a table can be copied as it was written, which is its place in that source, or as CSV. */
+const Source = createContext('');
+function Table({ node, ...props }: ComponentProps<'table'> & ExtraProps) {
+  const source = useContext(Source);
+  return (
+    <div>
+      <div className="table-container"><table {...props} /></div>
+      <div className="-mt-2 flex select-none justify-end gap-0.5">
+        <CopyButton text={source.slice(node?.position?.start.offset, node?.position?.end.offset)} label="Copy as Markdown">Markdown</CopyButton>
+        <CopyButton text={node ? csv(node) : ''} label="Copy as CSV">CSV</CopyButton>
+      </div>
+    </div>
+  );
+}
 const components: Components = {
   ...safe,
   pre: ({ node: _, ...props }) => <CodeBlock {...props} />,
-  table: ({ node: _, ...props }) => <div className="table-container"><table {...props} /></div>,
+  code: ({ node: _, className, ...props }) => className?.split(' ').includes('math-inline') ? <Formula tex={String(props.children ?? '')} display={false} /> : <code className={className} {...props} />,
+  table: Table,
 };
+const plugins = [remarkGfm, remarkMath, dollars];
 const Block = memo(function Block({ source }: { source: string }) {
-  return <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>{source}</ReactMarkdown>;
+  return <Source value={source}><ReactMarkdown remarkPlugins={plugins} components={components}>{source}</ReactMarkdown></Source>;
 });
 
 /** The agent's Markdown. It is cut into blocks that do not depend on each other (T3 Code's `splitMarkdownBlocks`), so while a

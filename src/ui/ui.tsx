@@ -116,8 +116,8 @@ export function useMedia(query: string) {
   }, () => matchMedia(query).matches);
 }
 /** Copies `text`, and shows for a moment that it has. */
-export function CopyButton({ text, label }: { text: string; label: string }) {
+export function CopyButton({ text, label, children }: { text: string; label: string; children?: ReactNode }) {
   const [copied, setCopied] = useState(false);
   const copy = () => void navigator.clipboard.writeText(text).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1200); });
-  return <Button variant="ghost-muted" size="icon-xs" aria-label={label} title={label} onClick={copy}>{copied ? <CheckIcon className="size-3" /> : <CopyIcon className="size-3" />}</Button>;
+  return <Button variant="ghost-muted" size={children ? 'xs' : 'icon-xs'} aria-label={label} title={label} onClick={copy}>{copied ? <CheckIcon className="size-3" /> : <CopyIcon className="size-3" />}{children}</Button>;
 }

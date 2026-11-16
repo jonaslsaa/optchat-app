@@ -239,6 +239,7 @@
 .chat-markdown strong { font-weight: 700; }
 .chat-markdown hr { margin: 1rem 0; border-color: var(--border); }
 .chat-markdown .table-container { overflow-x: auto; }
+.chat-markdown .katex-display { margin: 0; }
 .chat-markdown table { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
 .chat-markdown :is(th, td) { padding: 0.45rem 0.75rem; vertical-align: top; text-align: start; }
 .chat-markdown :is(th, td):first-child { padding-inline-start: 0; }

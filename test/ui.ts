@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { after, before, test } from 'node:test';
 import { chromium, type Browser, type Page } from 'playwright-core';
 import { build } from 'vite';
-import { agents, CHANGES, seed, TEAM } from '../scripts/seed.ts';
+import { agents, CHANGES, FORMULAS, seed, TEAM } from '../scripts/seed.ts';
 import { connect } from '../src/client.ts';
 import { startServer } from '../src/server/server.ts';
 import { createProfile, temporaryHome, writeMemory, writeRun } from './support.ts';
@@ -27,6 +27,7 @@ for (const name of ['chat', 'beside', 'sheet', 'memory', 'rows', 'menus', 'field
   for (let i = 0; i < 6; i++) writeRun(profile, { id: `e000000${i}`, title: `An older agent ${i}`, state: 'completed', started: Date.now() - 9_000_000 - i * 1000, ended: Date.now() - 8_000_000, report: 'Done.' });
 }
 seed(createProfile(home, 'diffs'), CHANGES.length, Date.now(), CHANGES);
+seed(createProfile(home, 'formulas'), 1, Date.now(), FORMULAS);
 mkdirSync(join(home, 'new'));
 
 let server: Awaited<ReturnType<typeof startServer>>, fresh: typeof server, browser: Browser;
@@ -573,4 +574,18 @@ test('a field keeps the focus when Enter saves it, and when what was typed is re
   await first.getByRole('button', { name: 'Create profile' }).click();
   await first.getByRole('alert').waitFor();
   assert.equal(await focused(first), 'Profile name');
+});
+
+test('a formula is drawn by KaTeX and a price stays as written, and a table copies as Markdown or as CSV', async () => {
+  const page = await open('formulas');
+  await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
+  await page.locator('.katex-display').waitFor();
+  assert.equal(await page.locator('.katex').count(), 4, 'Three formulas inline and one on its own line.');
+  await page.getByText('last week\'s $57.89 would have been about $340 without it.').waitFor();
+  const clipboard = () => page.evaluate(() => navigator.clipboard.readText());
+  await page.getByRole('button', { name: 'Copy as CSV' }).click();
+  assert.equal(await clipboard(), 'Role,Cost,Cache read\nMain chat,$36.41,92%\nSubagents,$19.45,88%\nCompactor,$2.02,71%');
+  await page.getByRole('button', { name: 'Copy as Markdown' }).click();
+  assert.match(await clipboard(), /^\| Role \| Cost \| Cache read \|\n\| --- \| ---: \| ---: \|\n[^]*\| Compactor \| \$2\.02 \| 71% \|$/);
+  await page.context().close();
 });

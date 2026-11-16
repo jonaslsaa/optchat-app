@@ -403,6 +403,14 @@ test('with the panel closed the agents a call started are under it, and over the
   await working.click();
   await agent(page, 'Draft the release notes').waitFor();
   assert.equal(await working.count(), 0);
+  // On a narrow page the list is a sheet, and closing it gives the focus to the panel's button: the line that opened it is gone.
+  const narrow = await open('inline', NARROW);
+  await run(narrow);
+  await narrow.getByRole('button', { name: /agents? working/ }).click();
+  await agent(narrow, 'Draft the release notes').waitFor();
+  await narrow.keyboard.press('Escape');
+  assert.equal(await narrow.locator('dialog[open]').count(), 0, 'the sheet has closed');
+  assert.equal(await focused(narrow), 'Agents and GitHub');
 });
 
 test('Esc in the memory view does nothing to the run; in the composer under it, it stops it', async () => {

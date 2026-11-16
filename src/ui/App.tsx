@@ -39,7 +39,7 @@ function Profile({ state, profile, onSettings, onUsage, onNewProfile, ref }: { s
   // page, not by what is on top, and the sidebar's buttons would drag instead of being pressed.
   const wide = useMedia('(min-width: 48rem)'), [beside, setBeside] = useState(true), [over, setOver] = useState(false);
   const sidebar = wide ? beside : over, covered = sidebar && !wide, toggle = () => (wide ? setBeside : setOver)(shown => !shown);
-  const drawer = useRef<HTMLDivElement>(null), opener = useRef<HTMLButtonElement>(null);
+  const drawer = useRef<HTMLDivElement>(null), opener = useRef<HTMLButtonElement>(null), panelButton = useRef<HTMLButtonElement>(null);
   useEffect(() => { if (wide) setOver(false); }, [wide]);
   useOverlay(covered, () => setOver(false), drawer, opener);
   // What the panel beside the main chat shows, while it is open: `panel.agent` is the agent whose chat is open in it.
@@ -112,7 +112,7 @@ function Profile({ state, profile, onSettings, onUsage, onNewProfile, ref }: { s
           )}
           {canComplete(window) && <Button variant="outline" title="Complete: hand this conversation to the main chat" onClick={() => void app.complete(window.id)}><CheckIcon />Complete</Button>}
           {!own && (
-            <Button variant="ghost-muted" size="icon-sm" aria-label="Agents and GitHub" title={agentsWork ? 'Agents and GitHub: agents are working' : 'Agents and GitHub'} aria-pressed={panel !== undefined}
+            <Button ref={panelButton} variant="ghost-muted" size="icon-sm" aria-label="Agents and GitHub" title={agentsWork ? 'Agents and GitHub: agents are working' : 'Agents and GitHub'} aria-pressed={panel !== undefined}
               className="aria-pressed:bg-accent aria-pressed:text-foreground" onClick={() => setPanel(panel ? undefined : {})}>
               <PanelRightIcon />{agentsWork && <span className="absolute top-0.5 right-0.5 size-1.5 rounded-full bg-sky-500 dark:bg-sky-300/80" />}
             </Button>
@@ -130,7 +130,10 @@ function Profile({ state, profile, onSettings, onUsage, onNewProfile, ref }: { s
               </p>
             </div>
           ) : <Timeline ref={timeline} items={items} live={live} running={window.status === 'running'} starting={window.status === 'starting'} profile={profile} loading={log?.loading} older={more ? () => void app.older(profile) : undefined} onAgent={own ? undefined : openAgent} onCite={cite} logged={own ? undefined : log?.entries.at(-1)?.i} onPlace={recall} onMemory={search} agents={own ? undefined : agents} />}
-          {!own && !panel && agentsWork && agents && <AtWork agents={agents} onOpen={() => setPanel({})} />}
+          {!own && !panel && agentsWork && agents && (
+            // The line goes when the panel opens: the focus goes first to the panel's button, where closing the panel brings it back.
+            <AtWork agents={agents} onOpen={() => { panelButton.current?.focus(); setPanel({}); }} />
+          )}
           {window.outside ? <Outside window={window} outside={window.outside} models={state.models[window.id]} /> : <Composer ref={composer} state={state} window={window} live={live} chat={items} onSend={toChat} />}
           {fresh && !memory && <div className="flex-[1.6]" />}
         </Fragment>

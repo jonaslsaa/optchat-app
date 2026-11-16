@@ -135,10 +135,10 @@ export function Agents({ state, profile, agent: id, pulse, outside, onAgent }: {
 export function useAgents(profile: string, { closed, pulse, busy, connected }: { closed: boolean; pulse: string; busy: boolean; connected: boolean }) {
   useEffect(() => { if (closed && connected) void app.readAgents(profile, SHOWN); }, [profile, closed, pulse, connected]);
   useEffect(() => {
-    if (!closed || !busy) return;
+    if (!closed || !busy || !connected) return;
     const timer = setInterval(() => void app.readAgents(profile, SHOWN), EVERY);
     return () => clearInterval(timer);
-  }, [profile, closed, busy]);
+  }, [profile, closed, busy, connected]);
 }
 /** Over the composer while the main chat's agents work and the panel is closed: how many, and each one's title and how long it
  * has worked, on one line, cut short where it is full. A click opens the panel's list. Quiet, as the line under the box is. */

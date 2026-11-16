@@ -80,9 +80,10 @@ export type GitHubItem = Static<typeof GitHubItem>;
 
 /** The app's own settings, kept in its own folder (never in pi-optchat's). `cwd`: where new windows run; your home directory
  * when it is not set. `theme`: the page's colours, the system's by default. `awake`: whether the desktop app keeps the Mac
- * from sleeping while agents work, which it does until you turn it off; a browser cannot. */
+ * from sleeping while agents work, which it does until you turn it off; a browser cannot. `editor`: the one files open in, as
+ * you picked it from those `editors` lists (an id of `EDITORS` in `server/files.ts`). */
 const Theme = Type.Enum(['system', 'light', 'dark']);
-export const Settings = Type.Object({ cwd: Type.Optional(Type.String()), theme: Theme, awake: Type.Boolean() });
+export const Settings = Type.Object({ cwd: Type.Optional(Type.String()), theme: Theme, awake: Type.Boolean(), editor: Type.Optional(Type.String()) });
 export type Settings = Static<typeof Settings>;
 
 /** One thing the app needs before it can run a chat. `ok`: there and new enough. `missing`: not there. `old`: there, and too
@@ -307,6 +308,11 @@ export const methods = {
   configure: method(Type.Object({ profile: Type.String(), key: Type.String(), value: Type.Union([Type.Number(), Type.Boolean(), ModelChoice]) }), Config),
   /** Keeps a profile's instructions (pi-optchat's `saveInstructions`). Its agents read them again each turn. */
   instruct: method(Type.Object({ profile: Type.String(), text: Type.String() }), none),
+  /** Opens a profile's instructions (its AGENTS.md) in your editor, as `openFile` opens a file. */
+  openInstructions: method(Type.Object({ profile: Type.String() }), none),
+  /** The editors on this machine a file can open in, in the order they are listed, and the one it opens in now (`current`):
+   * the one in the settings while it is there, else one found as `openFile` says. None: the Mac's text editor. */
+  editors: method(none, Type.Object({ editors: Type.Array(Type.Object({ id: Type.String(), label: Type.String() })), current: Type.Optional(Type.String()) })),
 
   /** What a profile used, in tokens and dollars, in one of pi-optchat's ranges (`Today`, unless said): read from its usage
    * ledger each time, which the Pi that has the profile writes at every answer of a model. Nothing is written. */
@@ -316,7 +322,7 @@ export const methods = {
   settings: method(none, Settings),
   /** Changes the settings it names and leaves the others, and answers them all as they are kept. A `cwd` has to be a directory
    * that exists (`~` is your home folder); `null` puts back the default. */
-  setSettings: method(Type.Object({ theme: Type.Optional(Theme), cwd: Type.Optional(Type.Union([Type.String(), Type.Null()])), awake: Type.Optional(Type.Boolean()) }), Settings),
+  setSettings: method(Type.Object({ theme: Type.Optional(Theme), cwd: Type.Optional(Type.Union([Type.String(), Type.Null()])), awake: Type.Optional(Type.Boolean()), editor: Type.Optional(Type.String()) }), Settings),
   /** What the desktop app's updater is doing now. None where the app does not update itself: a server a browser is opened
    * on, or the app run from the checkout. */
   update: method(none, Type.Object({ update: Type.Optional(Updating) })),

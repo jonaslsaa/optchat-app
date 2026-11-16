@@ -84,7 +84,8 @@ writeFileSync(join(home, 'pi', 'pi-optchat', 'package.json'), JSON.stringify({ n
 writeFileSync(join(home, 'pi', 'state.json'), JSON.stringify({ version: '1.5.2', providers: ['anthropic', 'openai', 'openai-codex', 'github-copilot', 'lab'], packages: { 'npm:pi-optchat': join(home, 'pi', 'pi-optchat') } }));
 
 await build({ logLevel: 'warn' });
-const server = await startServer({ home, app: join(home, 'app'), cwd: home, pi, gh, now: () => NOW + 42_000 });
+// The editors it finds are these, whatever this machine has.
+const server = await startServer({ home, app: join(home, 'app'), cwd: home, pi, gh, now: () => NOW + 42_000, editors: () => new Map([['cursor', '/c'], ['vscode', '/v'], ['zed', '/z'], ['finder', '/usr/bin/open']]) });
 // A machine with nothing on it yet: no Pi, no profile.
 mkdirSync(join(home, 'new'));
 const fresh = await startServer({ home: join(home, 'new'), app: join(home, 'new', 'app'), cwd: home, pi: { command: join(home, 'no-such-pi'), args: [] }, npm: { command: process.execPath, args: [join(import.meta.dirname, '../test/fake-npm.ts')] },
@@ -475,6 +476,17 @@ async function pictures(browser: Browser, control: Client) {
     await shot(page, name);
   }
   // A reply that names files: the two in the window's folder are links to your editor, the one that is not stays code.
+  // A profile's instructions, with the button that opens them in your editor, and the editors it lists.
+  for (const [button, list, options] of [['139-instructions-open-in', '140-instructions-editors', {}], ['141-instructions-open-in-dark', '142-instructions-editors-dark', { dark: true }]] as const) {
+    const page = await open(['notes'], options);
+    await page.getByRole('button', { name: 'Settings' }).click();
+    await page.getByRole('tab', { name: 'Instructions' }).click();
+    await page.getByRole('button', { name: 'Open in VS Code' }).waitFor();
+    await shot(page, button);
+    await page.getByRole('button', { name: 'Open in…' }).click();
+    await page.getByRole('listbox', { name: 'Editors' }).waitFor();
+    await shot(page, list);
+  }
   for (const [name, options] of [['98-files-named', {}], ['99-files-named-dark', { dark: true }], ['100-files-named-narrow', { width: 420 }]] as const) {
     const page = await open(['files'], options);
     await page.getByRole('button', { name: 'the shutdown test' }).waitFor();

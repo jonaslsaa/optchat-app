@@ -252,14 +252,20 @@ test('closing the server takes no more requests, stops connected windows before 
 
 test('only this machine\'s pages connect, and a request the server cannot serve is answered with why', async t => {
   const { server, request } = await setup(t, { origins: ['optchat://app'] });
-  const opened = (origin: string, host?: string) => new Promise<boolean>(resolve => {
-    const socket = new WebSocket(server.url, { origin, headers: host ? { host } : {} });
-    socket.on('open', () => { socket.close(); resolve(true); }).on('error', () => resolve(false));
+  /** Whether a socket at `url` is answered, with what a client may send as it likes: an Origin, a Host. */
+  const answered = (origin?: string, host?: string, url = server.url) => new Promise<boolean>(resolve => {
+    const socket = new WebSocket(url, { origin, headers: host ? { host } : {} });
+    socket.on('open', () => socket.send(JSON.stringify({ id: 1, method: 'profiles', params: {} })))
+      .on('message', () => { socket.close(); resolve(true); }).on('close', () => resolve(false)).on('error', () => resolve(false));
   });
   // Its own page and the shell's may connect. Another program's page on this machine may not, nor a name pointed at 127.0.0.1.
   const own = `http://127.0.0.1:${server.port}`;
-  assert.deepEqual(await Promise.all([own, `http://localhost:${server.port}`, 'optchat://app', 'https://example.com', 'http://localhost:9999', 'http://127.0.0.1:9999'].map(origin => opened(origin))), [true, true, true, false, false, false]);
-  assert.equal(await opened(own, 'rebound.example'), false);
+  assert.deepEqual(await Promise.all([own, 'optchat://app', `http://localhost:${server.port}`, 'https://example.com', 'http://localhost:9999', 'http://127.0.0.1:9999'].map(origin => answered(origin))), [true, true, false, false, false, false]);
+  assert.equal(await answered(own, 'rebound.example'), false);
+  // A program that is not a browser sends any Origin, or none: only the token in the address the server gave keeps it out.
+  const { origin, pathname } = new URL(server.url);
+  for (const url of [`${origin}${pathname}`, `${origin}${pathname}?token=guess`]) assert.deepEqual([await answered(undefined, undefined, url), await answered(own, undefined, url)], [false, false], url);
+  assert.equal(await answered(), true);
 
   // @ts-expect-error: the compiler refuses it too.
   await assert.rejects(request('history', { profile: 'work', limit: 'all' }), /Invalid history request/);
@@ -287,9 +293,13 @@ test('the built UI is the page, served to this machine only and never from outsi
     response.on('data', chunk => { body += chunk; }).on('end', () => resolve([response.statusCode, response.headers['content-type'], body]));
   }).end());
   assert.deepEqual(await get('/'), [200, 'text/html; charset=utf-8', '<title>OptChat</title>']);
+  // Any program on this machine may ask for the page, so what it is sent never holds the socket's token.
+  const token = new URL(server.page).hash.slice(1);
+  assert.ok(token.length >= 40 && !(await get('/'))[2].includes(token));
   // No other page may frame it, and it may load nothing from elsewhere.
   const { headers } = await fetch(server.page);
   assert.equal(headers.get('x-frame-options'), 'DENY');
+  assert.deepEqual([headers.get('cross-origin-resource-policy'), headers.get('x-content-type-options')], ['same-origin', 'nosniff']);
   assert.match(headers.get('content-security-policy') ?? '', /default-src 'self'.*img-src 'self' data:.*frame-ancestors 'none'/);
   assert.deepEqual(await get('/assets/app-1a2b.js'), [200, 'text/javascript', 'app()']);
   assert.deepEqual((await get('/../secret.txt'))[0], 404);

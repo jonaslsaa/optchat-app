@@ -1,4 +1,4 @@
-import type { Method, Params, Push, Response, Result, ServerMessage } from './protocol.ts';
+import { REFUSED, type Method, type Params, type Push, type Response, type Result, type ServerMessage } from './protocol.ts';
 
 export interface Client {
   /** Sends a request and resolves with its result, or rejects with the server's error. */
@@ -6,9 +6,9 @@ export interface Client {
   close(): void;
 }
 /** Connects to the app's server. It uses the standard WebSocket, so it runs in a browser and in Node alike; `onPush` gets what
- * the server sends unasked. A closed connection rejects the requests still waiting and calls `onClose`; reconnecting is the
- * caller's, with `windows` and `records` to catch up. */
-export function connect(url: string, onPush: (push: Push) => void = () => {}, onClose: () => void = () => {}): Promise<Client> {
+ * the server sends unasked. A closed connection rejects the requests still waiting and calls `onClose`, with whether the server
+ * refused its token; reconnecting is the caller's, with `windows` and `records` to catch up. */
+export function connect(url: string, onPush: (push: Push) => void = () => {}, onClose: (refused: boolean) => void = () => {}): Promise<Client> {
   const socket = new WebSocket(url), waiting = new Map<number, (response: Response | undefined) => void>();
   let requests = 0;
   socket.addEventListener('message', event => {
@@ -17,10 +17,10 @@ export function connect(url: string, onPush: (push: Push) => void = () => {}, on
     waiting.get(message.id)?.(message);
     waiting.delete(message.id);
   });
-  socket.addEventListener('close', () => {
+  socket.addEventListener('close', ({ code }) => {
     for (const answer of waiting.values()) answer(undefined);
     waiting.clear();
-    onClose();
+    onClose(code === REFUSED);
   });
   const client: Client = {
     request: <M extends Method>(method: M, params: Params<M>) => new Promise<Result<M>>((resolve, reject) => {

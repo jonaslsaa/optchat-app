@@ -6,7 +6,7 @@ A small local server between the UI and pi-optchat. It is a client, never a seco
 
 ```bash
 npm install
-npm start                 # builds the UI, then http://127.0.0.1:4780/ (the protocol is at ws://127.0.0.1:4780/ws)
+npm start                 # builds the UI, then prints the page's address: http://127.0.0.1:4780/#<token>
 npm run server            # the same without building the UI first
 ```
 
@@ -156,12 +156,15 @@ What a profile cost is pi-optchat's to count, and the server only reads it (`src
 
 ## Who may connect
 
-The windows run an agent with a shell, so the server listens on 127.0.0.1 only and checks two headers, `Host` on everything it serves and `Origin` on the WebSocket:
+The windows run an agent with a shell, so the server listens on 127.0.0.1 only, the WebSocket wants a token, and two headers are checked, `Host` on everything it serves and `Origin` on the WebSocket:
 
+- **The token** is random, new each time the server starts, and only in the addresses `startServer` returns: `url` (`ws://127.0.0.1:<port>/ws?token=…`) and `page`, after its `#` (`http://127.0.0.1:<port>/#…`), which a browser never sends to the server. The page reads it from there and connects with it. No GET answers it: any program on this machine may ask for the page. Without it, the socket is closed before anything on it is read, with code 4001 (`REFUSED`). This is what keeps out a program that is not a browser, which sends any `Host` and `Origin` it likes, or none: another macOS user's, or one in a Docker container (which reaches the Mac's 127.0.0.1 as `host.docker.internal`).
 - `Host` must name this machine (`127.0.0.1`, `localhost`, `[::1]`): a page whose own name was pointed at 127.0.0.1 is refused.
-- `Origin`, which a browser always sends on a WebSocket, must be the server's own page (`http://127.0.0.1:<port>` or `http://localhost:<port>`), or one of `startServer`'s `origins`: that option is for a desktop shell, which loads the UI from its own scheme (T3 Code's is `t3code://app`), and for Vite's address in `npm run dev`. Another program's page on this machine is refused like any other. A client that is not a browser sends no `Origin`.
+- `Origin`, which a browser always sends on a WebSocket, must be the server's own page (`http://127.0.0.1:<port>`), or one of `startServer`'s `origins`: that option is for a desktop shell, which loads the UI from its own scheme (T3 Code's is `t3code://app`), and for Vite's address in `npm run dev`. Another program's page on this machine is refused like any other, and so is `localhost`, where another user could have a page on `[::1]`.
 
-The page is sent with `X-Frame-Options: DENY` and a `Content-Security-Policy` that lets it load only from the server itself, so no other page can frame it and nothing the agent writes can make it fetch an address elsewhere.
+A server that started again has a new token, so a browser tab opened before that is refused, and says to open the address the server printed; it does not try again. The desktop app's window is loaded with its own server's address each time, so it never sees this.
+
+The page is sent with `X-Frame-Options: DENY` and a `Content-Security-Policy` that lets it load only from the server itself, so no other page can frame it and nothing the agent writes can make it fetch an address elsewhere. `Cross-Origin-Resource-Policy: same-origin` keeps another page from showing a profile's picture (an `<img>` sends no Origin), and `X-Content-Type-Options: nosniff` has every file read as the type it is sent as.
 
 ## Files the chat names
 

@@ -147,6 +147,7 @@ export function App() {
       {state.tabs.length > 1 && <Tabs state={state} />}
       {/* What the app has to tell you (`notice`). The desktop app has them at the foot: its window's buttons are in the top row. */}
       {state.connection === 'lost' && <p role="status" className="notice shrink-0 bg-warning-surface px-4 py-1.5 text-center text-warning-foreground text-xs">The server is not answering. Trying again…</p>}
+      {state.connection === 'refused' && <p role="status" className="notice shrink-0 bg-warning-surface px-4 py-1.5 text-center text-warning-foreground text-xs">This page's address has no token, or one from before the server started again. Open the address the server printed.</p>}
       {state.error && (
         <p role="alert" className="notice flex shrink-0 items-center justify-center gap-2 bg-error-surface px-4 py-1.5 text-error-foreground text-xs">
           <span className="min-w-0 truncate">{state.error}</span><button type="button" aria-label="Dismiss" onClick={() => app.dismiss()} className="rounded-sm p-0.5 hover:bg-foreground/10"><XIcon className="size-3" /></button>

@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto';
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import { createServer, type IncomingMessage } from 'node:http';
 import { hostname } from 'node:os';
@@ -6,7 +7,7 @@ import type { AddressInfo } from 'node:net';
 import { dataHome } from 'pi-optchat/files';
 import { Value } from 'typebox/value';
 import { WebSocket, WebSocketServer } from 'ws';
-import { Envelope, methods, type Method, type Params, type Push, type Result, type ServerMessage } from '../protocol.ts';
+import { Envelope, methods, REFUSED, type Method, type Params, type Push, type Result, type ServerMessage } from '../protocol.ts';
 import { Agents } from './agents.ts';
 import { editor, fallback, inside, type Launch as Opened } from './files.ts';
 import { GitHub } from './github.ts';
@@ -45,6 +46,9 @@ export interface ServerOptions extends Partial<Pick<WindowsOptions, 'home' | 'gr
   /** Origins that may connect besides the server's own page: the scheme a desktop shell loads the UI from, as T3 Code's
    * `t3code://app`, or Vite's address in development. */
   origins?: readonly string[];
+  /** The secret a client connects with (`url`, and `page` after its #): a new one each start unless said, so a page or a
+   * program from before it started again is refused. A test that starts a server again on the same address names it. */
+  token?: string;
 }
 const TYPES: Record<string, string> = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png', '.woff2': 'font/woff2', '.json': 'application/json' };
 const LOOPBACK = ['localhost', '127.0.0.1', '[::1]'];
@@ -52,7 +56,7 @@ const loopback = (url: string) => { try { return LOOPBACK.includes(new URL(url).
 
 /** Starts the app's server on this machine only: the protocol of `protocol.ts` on a WebSocket at `/ws`, a profile's images at
  * `/images/<profile>/<name>`, and the UI's page everywhere else. `close` stops every Pi it started and waits for them. */
-export async function startServer({ port = 0, origins = [], ui = join(import.meta.dirname, '../../dist/ui'), home = dataHome(), app = appHome(), cwd, pi, flags = [], npm, gh, opener, launcher, grace = 15_000, now = Date.now }: ServerOptions) {
+export async function startServer({ port = 0, origins = [], ui = join(import.meta.dirname, '../../dist/ui'), home = dataHome(), app = appHome(), cwd, pi, flags = [], npm, gh, opener, launcher, grace = 15_000, now = Date.now, token = randomBytes(32).toString('base64url') }: ServerOptions) {
   ui = resolve(ui);
   home = resolve(home); // Pi runs in each window's directory, and has to find the same profiles from there.
   app = resolve(app); // And npm runs in the app's folder, where a path that is not whole would be another folder.
@@ -104,10 +108,11 @@ export async function startServer({ port = 0, origins = [], ui = join(import.met
   /** The windows run an agent with a shell, so only the server's own page may reach it. A page anywhere can open a WebSocket to
    * any address, hence the Origin, which has to be this server's page (or one of `origins`): another program's page on this
    * machine is as foreign as one on the internet. A name pointed at 127.0.0.1 makes a foreign page's requests same-origin,
-   * hence the Host. A client that is not a browser sends no Origin. */
+   * hence the Host. A program that is not a browser sends either as it likes, and no Origin at all on a GET: what keeps it
+   * off the socket is the token, which only the address that opens the page has. */
   const allowed = ({ headers: { host, origin } }: IncomingMessage) => {
     const { port } = server.address() as AddressInfo;
-    return loopback(`http://${host}`) && (origin === undefined || origin === `http://127.0.0.1:${port}` || origin === `http://localhost:${port}` || origins.includes(origin));
+    return loopback(`http://${host}`) && (origin === undefined || origin === `http://127.0.0.1:${port}` || origins.includes(origin));
   };
   sockets.on('connection', socket => {
     socket.on('error', () => socket.terminate()); // A broken frame or a dropped connection ends that client, not the server.
@@ -133,6 +138,9 @@ export async function startServer({ port = 0, origins = [], ui = join(import.met
     // No page may show this one in a frame, and this one loads nothing from elsewhere: what the agent writes is shown as
     // Markdown, and must not be able to fetch an address of its choosing.
     response.setHeader('x-frame-options', 'DENY');
+    // Nor may another page show a picture of it (an <img> sends no Origin), and nothing it serves is read as another type.
+    response.setHeader('cross-origin-resource-policy', 'same-origin');
+    response.setHeader('x-content-type-options', 'nosniff');
     response.setHeader('content-security-policy', "default-src 'self'; img-src 'self' data:; font-src 'self' data:; style-src 'self' 'unsafe-inline'; frame-ancestors 'none'");
     try {
       if (request.method !== 'GET' || !allowed(request)) { response.writeHead(404).end(); return; }
@@ -145,13 +153,15 @@ export async function startServer({ port = 0, origins = [], ui = join(import.met
     } catch { response.writeHead(404).end(); }
   });
   server.on('upgrade', (request, socket, head) => {
-    if (closing || request.url !== '/ws' || !allowed(request)) { socket.destroy(); return; }
-    sockets.handleUpgrade(request, socket, head, client => sockets.emit('connection', client, request));
+    const { pathname, searchParams } = new URL(request.url ?? '/', 'http://localhost');
+    if (closing || pathname !== '/ws' || !allowed(request)) { socket.destroy(); return; }
+    // Without the token, the socket is closed before it is read, with a code that tells a page from before a restart to stop.
+    sockets.handleUpgrade(request, socket, head, client => { if (searchParams.get('token') === token) sockets.emit('connection', client, request); else client.close(REFUSED); });
   });
   await new Promise<void>((resolve, reject) => { server.once('error', reject); server.listen(port, '127.0.0.1', resolve); });
   const address = server.address() as AddressInfo;
   return {
-    port: address.port, url: `ws://127.0.0.1:${address.port}/ws`, page: `http://127.0.0.1:${address.port}/`,
+    port: address.port, url: `ws://127.0.0.1:${address.port}/ws?token=${token}`, page: `http://127.0.0.1:${address.port}/#${token}`,
     /** The app's settings as they are now. */
     settings: () => settings,
     /** How many agents stopping the server would cut short: every chat of its own that is in a run, and every agent that

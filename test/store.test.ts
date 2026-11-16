@@ -36,19 +36,20 @@ test('a server that is away is tried again one connection at a time, and found o
   await new Promise<void>(resolve => away.listen(0, '127.0.0.1', resolve));
   const { port } = away.address() as { port: number };
   const { app, until } = page(t, 25);
-  void app.start(`ws://127.0.0.1:${port}/ws`);
+  void app.start(`ws://127.0.0.1:${port}/ws?token=back`);
   await sleep(500);
   await new Promise(resolve => away.close(resolve));
   // One try every 25 ms and its connection: retries that doubled would be in the thousands by now.
   assert.ok(attempts >= 3 && attempts <= 21, `${attempts} attempts`);
 
-  const server = await startServer({ port, home: directory, cwd: directory, pi });
+  // Back with the token it had: one it starts with anew refuses a page from before (below).
+  const server = await startServer({ port, home: directory, cwd: directory, pi, token: 'back' });
   t.after(() => server.close());
   assert.deepEqual((await until(state => state.connection === 'open' && state.windows.length > 0)).windows.map(window => window.id), ['work/main']);
 });
 
 test('a server that started again numbers its records from one, and the page follows them', async t => {
-  const first = await startServer({ home: directory, cwd: directory, pi });
+  const first = await startServer({ home: directory, cwd: directory, pi, token: 'again' });
   const { app, until } = page(t, 25);
   const answered = (replies: number) => until(state => state.windows[0]?.status === 'idle' && state.logs.work?.entries.filter(entry => entry.kind === 'talk').length === replies);
   await app.start(first.url);
@@ -61,7 +62,7 @@ test('a server that started again numbers its records from one, and the page fol
   assert.equal(await app.send('work/main', 'anyone there?'), false);
   assert.equal(app.state.error, undefined);
 
-  const second = await startServer({ port: first.port, home: directory, cwd: directory, pi });
+  const second = await startServer({ port: first.port, home: directory, cwd: directory, pi, token: 'again' });
   t.after(() => second.close());
   await until(state => state.connection === 'open' && state.windows.length > 0);
   await app.send('work/main', 'hello again');
@@ -69,6 +70,12 @@ test('a server that started again numbers its records from one, and the page fol
   // The new server's window began at one again; records under the old number were not taken for ones already seen.
   assert.ok(after.live['work/main'].seq <= before, `${after.live['work/main'].seq} after ${before}`);
   assert.deepEqual(after.live['work/main'].messages.map(message => message.role), ['user', 'assistant']);
+
+  // One that starts with a token of its own, as every start does, refuses the page, which says so and stops trying.
+  await second.close();
+  const third = await startServer({ port: first.port, home: directory, cwd: directory, pi });
+  t.after(() => third.close());
+  await until(state => state.connection === 'refused');
 });
 
 test('a dialog goes when its time is up, when its answer has arrived, and with its window', async t => {

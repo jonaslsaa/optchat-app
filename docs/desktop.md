@@ -1,6 +1,6 @@
 # The desktop app
 
-Electron around the same page: `src/desktop/main.ts` starts the server in its own process ([server.md](server.md)) and opens one window on the page it serves ([ui.md](ui.md)). There is no second UI and no bridge between the two: the page talks to the server over its WebSocket, as it does in a browser, and has no Node in it (no `nodeIntegration`, context isolation, sandboxed, no preload).
+Electron around the same page: `src/desktop/main.ts` starts the server in its own process ([server.md](server.md)) and opens one window on the page it serves ([ui.md](ui.md)). There is no second UI and no bridge between the two: the page talks to the server over its WebSocket, as it does in a browser, and has no Node in it (no `nodeIntegration`, context isolation, sandboxed, no preload). The window loads the server's `page`, with the socket's token after its `#` ([server.md](server.md#who-may-connect)). Of the permissions a page can ask for, the window is granted only the one to copy text: no camera, microphone, location, notifications or reading the clipboard.
 
 ## Run it
 

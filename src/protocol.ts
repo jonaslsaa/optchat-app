@@ -321,6 +321,8 @@ export type Result<M extends Method> = Static<(typeof methods)[M]['result']>;
 
 /** What the client sends: `id` is its own number for the request, repeated in the response. */
 export const Envelope = Type.Object({ id, method: Type.String(), params: Type.Unknown() });
+/** The code a socket is closed with when its address has no token, or one from before the server started again. */
+export const REFUSED = 4001;
 export type Response<M extends Method = Method> = { id: number; result: Result<M> } | { id: number; error: string };
 
 /** What the server sends unasked, to every client: a window that changed, each record a window's Pi writes, and the settings

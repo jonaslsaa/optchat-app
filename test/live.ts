@@ -169,7 +169,7 @@ test('an image sent with a message reaches the model, in the main chat and in a 
   // pi-optchat keeps it in the profile and names it in the log, which is where the chat draws it from.
   const [{ text }] = (await client.request('history', { profile: 'live' })).messages;
   const [, name] = /^What colour is this square\? Answer with the one word\.\n\[image ([0-9a-f]{16})\]$/.exec(text) ?? [];
-  assert.deepEqual(Buffer.from(await (await fetch(`${server.page}images/live/${name}`)).arrayBuffer()), main.data);
+  assert.deepEqual(Buffer.from(await (await fetch(new URL(`images/live/${name}`, server.page))).arrayBuffer()), main.data);
   assert.match((await ask('connected', [40, 70, 220])).reply ?? '', /^blue\.?$/i);
 });
 

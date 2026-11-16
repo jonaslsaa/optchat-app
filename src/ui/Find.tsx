@@ -8,17 +8,20 @@ import { Button, cn } from './ui.tsx';
  * shows it (`find.ts`), with the match you are at marked stronger and in sight, and how many there are beside the box. Enter
  * goes to the next one and ⇧Enter to the one before; Esc closes the bar, and the keys are back where they were, which is the
  * composer. The chat shows its newest messages only, so under the box is the way on: the same text, searched in all of the
- * memory (`onMemory`). `asked` counts the times find was asked for: asked again, the keys are in the box again. */
-export function Find({ asked, content, scroller, onClose, onMemory }: { asked: number; content: RefObject<HTMLElement | null>; scroller: RefObject<HTMLElement | null>; onClose: () => void; onMemory: (text: string) => void }) {
+ * memory (`onMemory`). `asked` counts the times find was asked for: asked again, the keys are in the box again. `onMoved`
+ * hears that find scrolled the chat. */
+export function Find({ asked, content, scroller, onClose, onMemory, onMoved }: { asked: number; content: RefObject<HTMLElement | null>; scroller: RefObject<HTMLElement | null>; onClose: () => void; onMemory: (text: string) => void; onMoved: () => void }) {
   const [text, setText] = useState(''), [found, setFound] = useState<Found>({ at: -1, count: 0 });
   const box = useRef<HTMLInputElement>(null), search = useRef<ReturnType<typeof finding>>(undefined), [before] = useState(() => document.activeElement);
   useEffect(() => { box.current?.focus(); box.current?.select(); }, [asked]);
   useEffect(() => {
-    const made = search.current = content.current && scroller.current ? finding(content.current, scroller.current, setFound) : undefined;
+    const made = search.current = content.current && scroller.current ? finding(content.current, scroller.current, setFound, onMoved) : undefined;
     return () => made?.end();
   }, []);
   const close = () => { onClose(); if (before instanceof HTMLElement && before.isConnected) before.focus(); };
   const keyed = (event: KeyboardEvent) => {
+    // A key that picks or drops what an input method offers is the box's alone: it is no Enter or Esc of the bar's, nor the chat's.
+    if (event.nativeEvent.isComposing) return event.stopPropagation();
     escapes(event, close);
     if (event.key === 'Enter' && event.target === box.current) { event.preventDefault(); search.current?.step(event.shiftKey ? -1 : 1); }
     if (text && matches(event, 'mod+shift+f')) { event.preventDefault(); onMemory(text); }

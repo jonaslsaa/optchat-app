@@ -27,7 +27,8 @@ function selected(content: HTMLElement) {
 export function Timeline({ items, live, running, starting = false, profile, older, loading, onAgent, onQuote, onMemory, ref, narrow = false }: { items: Item[]; live: Live; running: boolean; starting?: boolean; profile: string; older?: () => void; loading?: boolean; onAgent?: (agent: string) => void; onQuote?: (said: string) => void; onMemory?: (text: string) => void; ref?: Ref<{ find: () => void }>; narrow?: boolean }) {
   const scroller = useRef<HTMLDivElement>(null), content = useRef<HTMLDivElement>(null);
   const atEnd = useRef(true), before = useRef({ first: items[0]?.key, height: 0, top: 0, sent: -1 });
-  const [away, setAway] = useState(false), [finding, setFinding] = useState(0);
+  // Find scrolls the chat to what it found (`found`), which is not you reading back to the top: no older page is read for it.
+  const [away, setAway] = useState(false), [finding, setFinding] = useState(0), found = useRef(false);
   useImperativeHandle(ref, () => ({ find: () => setFinding(asked => asked + 1) }), []);
   // The parts drawn last time are kept where their items did not change, so their rows are not drawn again.
   const drawn = useRef<Part[]>([]);
@@ -71,7 +72,8 @@ export function Timeline({ items, live, running, starting = false, profile, olde
     if (near || element.scrollTop < before.current.top) atEnd.current = near;
     before.current.top = element.scrollTop;
     setAway(!atEnd.current);
-    if (element.scrollTop < 200 && !loading) older?.();
+    if (element.scrollTop < 200 && !loading && !found.current) older?.();
+    found.current = false;
   };
   const toEnd = () => { atEnd.current = true; setAway(false); scroller.current?.scrollTo({ top: scroller.current.scrollHeight, behavior: 'smooth' }); };
 
@@ -108,7 +110,7 @@ export function Timeline({ items, live, running, starting = false, profile, olde
           )}
         </div>
       </div>
-      {finding > 0 && onMemory && <Find asked={finding} content={content} scroller={scroller} onClose={() => setFinding(0)} onMemory={onMemory} />}
+      {finding > 0 && onMemory && <Find asked={finding} content={content} scroller={scroller} onClose={() => setFinding(0)} onMemory={onMemory} onMoved={() => { found.current = true; }} />}
       {away && (
         <div className="enter enter-from-below pointer-events-none absolute inset-x-0 bottom-0 z-30 flex justify-center py-1.5">
           <Button size="xs" variant="glass" className="pointer-events-auto" onClick={toEnd}><ChevronDownIcon className="size-3.5" />Scroll to end</Button>

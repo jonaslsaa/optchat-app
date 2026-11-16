@@ -5,10 +5,11 @@
  * What is searched is the text that is on the page: what you said, what the agent answered, the reports, and whatever is open
  * (a reply's work, a tool call, what the agent thought). What is folded shut is not on the page and is not searched. A long
  * message that is cut short is on the page whole, so it is searched whole, and opens when the match in it is the one shown.
- * The words of buttons and the times beside the messages are the page's, not the chat's, and are left out. */
+ * The words of buttons and the times beside the messages are the page's, not the chat's, and are left out; a file's name
+ * that opens the file is a button too, and is the chat's text all the same. */
 
-/** Tags whose text is not the chat's. */
-const LEFT_OUT = new Set(['BUTTON', 'TIME', 'svg', 'math']);
+/** What holds text that is not the chat's. */
+const LEFT_OUT = 'button:not(.file-link), time, svg, math';
 /** Tags that begin a line of their own: a text does not run from one into the next. */
 const BLOCKS = new Set(['P', 'DIV', 'LI', 'UL', 'OL', 'PRE', 'TABLE', 'TR', 'TD', 'TH', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'BLOCKQUOTE', 'BR', 'HR', 'DETAILS', 'SUMMARY']);
 type Place = readonly [from: number, to: number];
@@ -39,9 +40,9 @@ function places(under: Element, find: ReturnType<typeof finder>): StaticRange[] 
   const read = (node: Node) => {
     if (node instanceof Text) { pieces.push({ node, from: written.length }); written += node.data; }
     if (!(node instanceof Element)) return;
-    const block = BLOCKS.has(node.tagName);
-    if (block || LEFT_OUT.has(node.tagName)) flush();
-    if (LEFT_OUT.has(node.tagName)) return;
+    const block = BLOCKS.has(node.tagName), out = node.matches(LEFT_OUT);
+    if (block || out) flush();
+    if (out) return;
     node.childNodes.forEach(read);
     if (block) flush();
   };
@@ -58,10 +59,11 @@ export interface Found { at: number; count: number }
 const MARGIN = 96;
 
 /** Finds in the rows of `content`, which `scroller` scrolls, and tells `says` what it found whenever that changes: the chat
- * grows while the agent writes, and what is found follows it. A row is read again only when something in it changed, and all
+ * grows while the agent writes, and what is found follows it. `moved` hears that it scrolled the chat, which is not you
+ * reading back to its top: find looks in what the chat has, and loads no more of it. A row is read again only when something in it changed, and all
  * of it is done before the page is painted (the observer is heard right after the change), so the marks never go out and
  * come back. `end` takes the marks off. */
-export function finding(content: HTMLElement, scroller: HTMLElement, says: (found: Found) => void) {
+export function finding(content: HTMLElement, scroller: HTMLElement, says: (found: Found) => void, moved: () => void) {
   let find = finder(''), rows = new WeakMap<Element, StaticRange[]>(), all: StaticRange[] = [], at = -1, said = '';
   // Where the chat was when you began to type, and where typing last put it: it is still there unless you moved it since.
   let began = 0, put = NaN;
@@ -84,15 +86,21 @@ export function finding(content: HTMLElement, scroller: HTMLElement, says: (foun
     at = same < 0 ? Math.min(Math.max(at, 0), all.length - 1) : same;
   };
   /** Brings the match shown into sight: a long message that is cut short over it opens (`data-clamp`, which hears
-   * `beforematch`), and what scrolls around it, the chat and a tool's output in it, is scrolled to it. */
+   * `beforematch`), and what scrolls around it is scrolled to it: the chat, a tool's output in it, and sideways a block of
+   * code or a table whose lines are longer than the page is wide. */
   const reveal = () => {
     if (at < 0) return;
     const range = live(all[at]), within = range.startContainer.parentElement, cut = within?.closest('[data-clamp]');
     if (cut && range.getBoundingClientRect().bottom > cut.getBoundingClientRect().top + cut.clientHeight * 0.6) cut.dispatchEvent(new Event('beforematch'));
     for (let box = within; box; box = box === scroller ? null : box.parentElement) {
-      if (box.scrollHeight <= box.clientHeight || box !== scroller && !/auto|scroll/.test(getComputedStyle(box).overflowY)) continue;
-      const match = range.getBoundingClientRect(), frame = box.getBoundingClientRect(), margin = Math.min(MARGIN, frame.height / 4);
-      if (match.top < frame.top + margin || match.bottom > frame.bottom - margin) box.scrollTop += match.top - frame.top - frame.height / 3;
+      const tall = box.scrollHeight > box.clientHeight, wide = box.scrollWidth > box.clientWidth;
+      if (!tall && !wide) continue;
+      const scrolls = getComputedStyle(box), match = range.getBoundingClientRect(), frame = box.getBoundingClientRect(), margin = Math.min(MARGIN, frame.height / 4);
+      if (wide && /auto|scroll/.test(scrolls.overflowX) && (match.left < frame.left || match.right > frame.right)) box.scrollLeft += match.left - frame.left - frame.width / 3;
+      if (!tall || box !== scroller && !/auto|scroll/.test(scrolls.overflowY) || match.top >= frame.top + margin && match.bottom <= frame.bottom - margin) continue;
+      const top = box.scrollTop;
+      box.scrollTop += match.top - frame.top - frame.height / 3;
+      if (box === scroller && box.scrollTop !== top) moved();
     }
   };
   const observer = new MutationObserver(changes => {
@@ -117,7 +125,7 @@ export function finding(content: HTMLElement, scroller: HTMLElement, says: (foun
       let low = 0, high = all.length;
       while (low < high) { const middle = low + high >> 1; if (live(all[middle]).getBoundingClientRect().bottom < top) low = middle + 1; else high = middle; }
       at = Math.min(low, all.length - 1);
-      if (all.length) reveal(); else scroller.scrollTop = began;
+      if (all.length) reveal(); else if (scroller.scrollTop !== began) { scroller.scrollTop = began; moved(); }
       put = scroller.scrollTop;
       tell();
     },

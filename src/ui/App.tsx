@@ -5,6 +5,7 @@ import { canComplete, current } from '../window.ts';
 import { busy } from './agents.ts';
 import { Composer } from './Composer.tsx';
 import { label, useOverlay, useShortcuts } from './keys.ts';
+import { InWindow } from './Markdown.tsx';
 import { MemoryView } from './Memory.tsx';
 import { NO_TREE } from './memory.ts';
 import { Outside } from './Outside.tsx';
@@ -68,8 +69,9 @@ function Profile({ state, profile, onSettings, onUsage }: { state: State; profil
   const more = !own && log && log.entries.length > 0 && log.entries[0].i > 0;
   // Nothing has been said here, as far as is known: a window that may have a conversation waits for it rather than say so.
   const fresh = items.length === 0 && (own ? window.status === 'stopped' || session !== undefined : log !== undefined);
+  // A file the chat names is looked for in the folder this window runs in (the panel and the memory view are the main chat's).
   return (
-    <div className="flex min-h-0 flex-1">
+    <InWindow value={window.id}><div className="flex min-h-0 flex-1">
       {sidebar && <div ref={drawer} className="max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:z-40 max-md:shadow-xl"><Sidebar state={state} profile={profile} selected={window.id} onPick={() => setOver(false)} /></div>}
       {sidebar && <button type="button" aria-label="Close the sidebar" onClick={() => setOver(false)} className="fixed inset-0 z-30 bg-black/20 md:hidden dark:bg-black/60" />}
       {/* The keys in this column are the chat's, or the memory view's while that stands in its place (keys.ts): its top row
@@ -109,7 +111,7 @@ function Profile({ state, profile, onSettings, onUsage }: { state: State; profil
         </Fragment>
       </main>
       {panel && !own && <Panel state={state} profile={profile} shown={panel} pulse={pulse} turn={turn} outside={window.outside !== undefined} onShow={setPanel} />}
-    </div>
+    </div></InWindow>
   );
 }
 export function App() {

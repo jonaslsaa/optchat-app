@@ -225,8 +225,10 @@
 .chat-markdown li.task-list-item { list-style-type: none; }
 .chat-markdown li.task-list-item input[type="checkbox"] { margin-inline: -1.25rem 0.35em; vertical-align: middle; }
 .chat-markdown img { display: inline-block; max-width: 100%; border-radius: 0.5rem; }
-.chat-markdown a { text-decoration: none; color: var(--info-foreground); }
-.chat-markdown a:is(:hover, :focus-visible) {
+/* A file the chat named opens in your editor: it reads as a link. */
+.chat-markdown :is(a, .file-link) { text-decoration: none; color: var(--info-foreground); }
+.chat-markdown .file-link { cursor: pointer; font: inherit; text-align: inherit; }
+.chat-markdown :is(a, .file-link):is(:hover, :focus-visible) {
   background-image: radial-gradient(circle, currentcolor 0.75px, transparent 1px);
   background-position: left bottom;
   background-repeat: repeat-x;

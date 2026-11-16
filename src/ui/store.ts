@@ -451,6 +451,16 @@ export class App {
     return queued ? [...queued.steering, ...queued.followUp] : [];
   }
   async complete(window: string) { await this.ask('complete', { window }); }
+  private files = new Map<string, Promise<boolean>>();
+  /** Whether a path the chat named is a file in the window's folder: asked once a path and window, so a component can wait on
+   * it with `use`. A file made since is a link once the page is opened again. */
+  isFile(window: string, path: string) {
+    const key = `${window}\n${path}`;
+    let file = this.files.get(key);
+    if (!file) this.files.set(key, file = Promise.resolve().then(() => this.request('isFile', { window, path })).then(({ file }) => file, () => false));
+    return file;
+  }
+  async openFile(window: string, path: string, line?: number) { await this.ask('openFile', { window, path, line }); }
   async closeWindow(window: string) { await this.ask('close', { window }); }
   /** Answers a dialog, which then goes; one whose answer did not arrive stays to be answered again. */
   async answer(window: string, response: Omit<Params<'answer'>, 'window'>) {

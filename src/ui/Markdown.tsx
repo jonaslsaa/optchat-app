@@ -6,7 +6,9 @@ import remarkMath from 'remark-math';
 import { highlighter, painter, type Token } from './highlight.ts';
 import { splitMarkdownBlocks } from './markdownStreamBlocks.ts';
 import { dollars } from './math.ts';
-import { safe } from './safe.ts';
+import { fileTarget } from './paths.ts';
+import { link, safe } from './safe.ts';
+import { app } from './store.ts';
 import { csv } from './table.ts';
 import { Button, cn, CopyButton, Picture } from './ui.tsx';
 
@@ -64,12 +66,38 @@ function Table({ node, ...props }: ComponentProps<'table'> & ExtraProps) {
     </div>
   );
 }
+/** The window whose chat is drawn: a file its agent names is looked for in the folder that window runs in. */
+export const InWindow = createContext<string | undefined>(undefined);
+/** A file the agent named, as a button that opens it in your editor once the server says it is there; until then, and when
+ * it is not, as it was written. */
+function File({ window, path, line, children }: { window: string; path: string; line?: number; children: ReactNode }) {
+  return <Suspense fallback={children}><Opens window={window} path={path} line={line}>{children}</Opens></Suspense>;
+}
+function Opens({ window, path, line, children }: { window: string; path: string; line?: number; children: ReactNode }) {
+  if (!use(app.isFile(window, path))) return children;
+  return <button type="button" className="file-link" title={`Open ${path}${line ? ` at line ${line}` : ''} in your editor`} onClick={() => void app.openFile(window, path, line)}>{children}</button>;
+}
+/** A link whose target is a path: a file in the window's folder opens in your editor, and any other is its words alone, since
+ * the page has nothing at that address. What it holds is no file button of its own: a click is the link's alone. */
+function Link({ node: _, ...props }: ComponentProps<'a'> & { node?: unknown }) {
+  const window = useContext(InWindow), target = props.href && !/^[a-z][\w+.-]*:|^\/\//i.test(props.href) ? fileTarget(props.href) : undefined;
+  const children = <InWindow value={undefined}>{props.children}</InWindow>;
+  return window && target ? <File window={window} {...target}>{children}</File> : link({ ...props, children });
+}
+/** Inline code: a formula when remark-math made it one, a file button when it is the path of a file in the window's folder. */
+function Code({ node: _, ...props }: ComponentProps<'code'> & { node?: unknown }) {
+  const window = useContext(InWindow);
+  if (props.className?.split(' ').includes('math-inline')) return <Formula tex={String(props.children ?? '')} display={false} />;
+  const target = fileTarget(String(props.children)), code = <code {...props} />;
+  return window && target ? <File window={window} {...target}>{code}</File> : code;
+}
 const components: Components = {
   ...safe,
   // An image that is drawn, which only one of the profile's own is (`safe`), is shown large on a click; a link stays a link.
   img: props => { const drawn = safe.img(props); return drawn.type === 'img' ? <Picture src={String(props.src)} alt={props.alt} /> : drawn; },
+  a: Link,
+  code: Code,
   pre: ({ node: _, ...props }) => <CodeBlock {...props} />,
-  code: ({ node: _, className, ...props }) => className?.split(' ').includes('math-inline') ? <Formula tex={String(props.children ?? '')} display={false} /> : <code className={className} {...props} />,
   table: Table,
 };
 const plugins = [remarkGfm, remarkMath, dollars];

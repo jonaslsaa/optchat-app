@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import type { Message, PiRecord } from '../src/protocol.ts';
-import { act, apply, chat, failure, idle, logged, merged, news, parts, quiet, replay, spoken, stopped, took, without, worked, type Item, type PiMessage, type Tool } from '../src/ui/transcript.ts';
+import { act, apply, chat, failure, idle, logged, merged, news, parts, quiet, recalled, replay, spoken, stopped, took, without, worked, type Item, type PiMessage, type Tool } from '../src/ui/transcript.ts';
 
 const T = Date.UTC(2026, 0, 1), at = (seconds: number) => new Date(T + seconds * 1000).toISOString();
 const user = (seconds: number, text: string): PiMessage => ({ role: 'user', timestamp: T + seconds * 1000, content: [{ type: 'text', text }] });
@@ -251,6 +251,14 @@ test('Complete\'s handoff is a part of its own under the conversation, and not t
   // Complete stops a reply that is being written: what it had said by then stays in view, and is said to have been stopped.
   const cut = parts(spoken([user(1, 'what is the port?'), { ...reply(2, text('It is 80')), stopReason: 'aborted' }, asks, handoff]));
   assert.partialDeepStrictEqual(cut, [{ type: 'user' }, { type: 'reply', stopped: true, answer: { text: 'It is 80' }, steps: [{ type: 'fault' }] }, { type: 'handoff' }]);
+});
+
+test('↑ in the composer goes back through what you said and ↓ forward again, and neither takes what you are typing', () => {
+  // What was said twice is there once, where it was said last.
+  const said = spoken([user(1, 'deploy it'), reply(2, text('Done.')), user(3, 'and the docs?'), user(4, 'deploy it')]);
+  assert.deepEqual(['', 'deploy it', 'and the docs?'].map(box => recalled(said, box, true)), ['deploy it', 'and the docs?', undefined]);
+  assert.deepEqual(['and the docs?', 'deploy it', ''].map(box => recalled(said, box, false)), ['deploy it', '', undefined]);
+  assert.deepEqual([recalled(said, 'deploy it to stage', true), recalled(said, 'deploy it ', false)], [undefined, undefined]);
 });
 
 test('a message says what pi-optchat would log, with an image named as one and a tool call by its id', () => {

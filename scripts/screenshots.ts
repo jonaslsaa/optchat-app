@@ -420,4 +420,15 @@ async function pictures(browser: Browser, control: Client) {
   await pick.keyboard.press('Escape');
   await pick.waitForTimeout(300);
   if (!await pick.getByRole('button', { name: 'Stop the agent' }).isVisible()) throw new Error('Esc in the memory view\'s search box stopped the run.');
+  // Nor this: what is typed and not sent is there when the page is opened again, and not once it is sent.
+  const typed = await open(['notes']), box = typed.getByRole('textbox', { name: 'Message' });
+  await box.fill('half a thought');
+  await typed.reload();
+  await box.waitFor();
+  if (await box.inputValue() !== 'half a thought') throw new Error('What was typed and not sent is gone after a reload.');
+  await box.press('Enter');
+  await typed.getByText('half a thought').waitFor();
+  await typed.reload();
+  await box.waitFor();
+  if (await box.inputValue() !== '') throw new Error('A message that was sent is in the box again after a reload.');
 }

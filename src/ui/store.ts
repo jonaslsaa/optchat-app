@@ -63,15 +63,15 @@ export class App {
   private readonly listeners = new Set<() => void>();
   private readonly loading = new Set<string>();
   private readonly deadlines = new Map<string, ReturnType<typeof setTimeout>>();
-  private readonly storage: () => Pick<Storage, 'getItem' | 'setItem'>;
+  private readonly storage: () => Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
   private readonly retry: number;
   private readonly poll: number;
   /** Which sign-in is being waited for: a later one, or a cancel, ends the wait of the one before. */
   private waiting = 0;
 
-  /** `storage` keeps which profiles are open across reloads; `retry` is how long to wait before connecting again, and `poll`
+  /** `storage` keeps which profiles are open and what is typed and not sent, across reloads; `retry` is how long to wait before connecting again, and `poll`
    * between asking whether a sign-in is done. */
-  constructor({ storage = () => localStorage, retry = 1000, poll = 3000 }: { storage?: () => Pick<Storage, 'getItem' | 'setItem'>; retry?: number; poll?: number } = {}) {
+  constructor({ storage = () => localStorage, retry = 1000, poll = 3000 }: { storage?: () => Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>; retry?: number; poll?: number } = {}) {
     this.storage = storage;
     this.retry = retry;
     this.poll = poll;
@@ -144,7 +144,8 @@ export class App {
     const others = this.state.windows.filter(w => w.id !== window.id), gone = window.status === 'closed';
     const selected = gone && this.state.selected[window.profile] === window.id ? { ...this.state.selected, [window.profile]: mainOf(window.profile) } : this.state.selected;
     if (!gone) { this.set({ windows: ordered([...others, window]), selected }); return; }
-    // What a closed window said and asked goes with it.
+    // What a closed window said and asked goes with it, and what was being typed in it.
+    this.keep(window.id, '');
     const { [window.id]: _run, ...live } = this.state.live, { [window.id]: _conversation, ...sessions } = this.state.sessions;
     for (const [key, deadline] of this.deadlines) if (key.startsWith(`${window.id} `)) { clearTimeout(deadline); this.deadlines.delete(key); }
     this.set({ windows: others, selected, live, sessions });
@@ -399,6 +400,10 @@ export class App {
     // Unless the search was ended or is for other text by now: then the tree is open down to the message, and that is all.
     this.tree(profile, tree => tree.search?.text === text ? { ...tree, found: id } : tree);
   }
+  /** What is typed in a window and not sent yet. It is kept where the open profiles are, so it is there when the page is
+   * opened again, and until it is sent or its window is closed. */
+  draft(window: string) { return this.storage().getItem(`${SAVED}-draft:${window}`) ?? ''; }
+  keep(window: string, text: string) { if (text) this.storage().setItem(`${SAVED}-draft:${window}`, text); else this.storage().removeItem(`${SAVED}-draft:${window}`); }
   /** Sends your message. In a run it steers the agent, or with `later` waits until the agent has stopped. */
   async send(window: string, text: string, later = false) {
     return await this.ask('prompt', { window, text, whenBusy: later ? 'followUp' : 'steer' }) !== undefined;

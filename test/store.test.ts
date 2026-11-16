@@ -15,9 +15,8 @@ import { createProfile, temporaryHome, writeMemory, writeRun } from './support.t
 
 const pi = { command: process.execPath, args: [join(import.meta.dirname, 'fake-pi.ts')] };
 /** The page's store, without a page: what it would keep in the browser stays in `saved`. */
-function page(t: TestContext, retry = 1000, poll = 3000) {
-  const saved = new Map<string, string>();
-  const app = new App({ retry, poll, storage: () => ({ getItem: key => saved.get(key) ?? null, setItem: (key, value) => { saved.set(key, value); } }) });
+function page(t: TestContext, retry = 1000, poll = 3000, saved = new Map<string, string>()) {
+  const app = new App({ retry, poll, storage: () => ({ getItem: key => saved.get(key) ?? null, setItem: (key, value) => { saved.set(key, value); }, removeItem: key => { saved.delete(key); } }) });
   t.after(() => app.close());
   const until = (met: (state: State) => boolean) => new Promise<State>(resolve => {
     const check = () => { if (met(app.state)) { stop(); resolve(app.state); } };
@@ -86,6 +85,19 @@ test('a dialog goes when its time is up, when its answer has arrived, and with i
   assert.deepEqual([app.state.live['work/1'].dialogs.length, app.state.error], [1, 'Not connected to the server.']);
   app.receive(window('closed'));
   assert.deepEqual([app.state.windows, app.state.live], [[], {}]);
+});
+
+test('what is typed and not sent is there when the page is opened again, until it is sent or its window is closed', t => {
+  const { app, saved } = page(t);
+  app.keep('work/main', 'half a thought');
+  app.keep('work/1', 'for the other window');
+  // The page opened again: another store over what the browser kept.
+  const again = page(t, undefined, undefined, saved).app;
+  assert.deepEqual([again.draft('work/main'), again.draft('work/1'), again.draft('work/2')], ['half a thought', 'for the other window', '']);
+  // Sent, the box is empty, and nothing of it is kept.
+  again.keep('work/main', '');
+  again.receive({ push: 'window', window: { id: 'work/1', profile: 'work', role: 'connected', cwd: '/tmp', status: 'closed', seq: 0 } });
+  assert.deepEqual([...saved.keys()].filter(key => key.includes('draft')), []);
 });
 
 test('records the page missed are read again from the server, so it shows what a page that saw them all shows', async t => {

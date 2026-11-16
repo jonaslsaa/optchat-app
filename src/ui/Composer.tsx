@@ -7,9 +7,6 @@ import { app, type State } from './store.ts';
 import { failure, news, type Live } from './transcript.ts';
 import { Button, cn, Kbd, Spinner } from './ui.tsx';
 
-/** What you were typing in each window, kept while you look at another. */
-const drafts = new Map<string, string>();
-
 /** A question from Pi or one of its extensions (`extension_ui_request`): a choice, a yes or no, or a line of text. Esc in it
  * says no, or cancels, as its first button does and as Esc does in Pi's terminal; the run it belongs to goes on. */
 function Dialog({ window, dialog }: { window: string; dialog: PiRecord }) {
@@ -84,10 +81,11 @@ export function SendButton({ steer, ...props }: { steer: boolean; disabled: bool
  * work. Beside the button that sends is the model the agent runs on, which is picked there. The look is T3 Code's composer
  * (MIT, see THIRD_PARTY_NOTICES.md), over a plain textarea. */
 export function Composer({ state, window, live, onSend }: { state: State; window: WindowState; live: Live; onSend?: () => void }) {
-  const [text, setText] = useState(drafts.get(window.id) ?? ''), [sending, setSending] = useState(false);
+  const [text, setText] = useState(() => app.draft(window.id)), [sending, setSending] = useState(false);
   const area = useRef<HTMLTextAreaElement>(null);
   const running = window.status === 'running', queued = [...live.queued.steering, ...live.queued.followUp];
-  const change = (value: string) => { drafts.set(window.id, value); setText(value); };
+  // What is typed is kept as it is typed (`app.draft`): while you look at another window, and when the page is opened again.
+  const change = (value: string) => { app.keep(window.id, value); setText(value); };
   useEffect(() => area.current?.focus(), [window.id]);
 
   const send = async (later: boolean) => {
@@ -95,14 +93,14 @@ export function Composer({ state, window, live, onSend }: { state: State; window
     if (!message || sending) return;
     setSending(true); change(''); onSend?.();
     // A message the server refused goes back where it was typed, before what was typed since.
-    if (!await app.send(window.id, message, later)) change([message, drafts.get(window.id)].filter(Boolean).join('\n\n'));
+    if (!await app.send(window.id, message, later)) change([message, app.draft(window.id)].filter(Boolean).join('\n\n'));
     setSending(false);
   };
   const stop = async () => {
     // The button that stops is gone once it has: the focus is where the next message is typed.
     area.current?.focus();
     const waiting = await app.stop(window.id);
-    if (waiting.length) change([...waiting, drafts.get(window.id) ?? ''].filter(Boolean).join('\n\n'));
+    if (waiting.length) change([...waiting, app.draft(window.id)].filter(Boolean).join('\n\n'));
   };
   // Esc stops the agent while the keys are the chat's, as they are here: not from the panel beside it, nor from the memory view.
   useShortcuts((): Record<string, () => void> => running ? { escape: () => void stop() } : {}, [running, window.id], 'chat');

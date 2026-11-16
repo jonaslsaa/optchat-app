@@ -1,5 +1,6 @@
 import { BotIcon, ChevronRightIcon, EyeIcon, GlobeIcon, HistoryIcon, SearchIcon, SquarePenIcon, StickyNoteIcon, TerminalIcon, WrenchIcon, XIcon, type LucideIcon } from 'lucide-react';
 import { memo, useEffect, useState, type ReactNode } from 'react';
+import { flushSync } from 'react-dom';
 import { Markdown } from './Markdown.tsx';
 import { act, took, worked, type Part, type Step, type Thinking, type Tool } from './transcript.ts';
 import { Button, cn, CopyButton, Picture, Spinner } from './ui.tsx';
@@ -20,13 +21,15 @@ function Fold({ open, toggle, children }: { open: boolean; toggle: () => void; c
     </button>
   );
 }
-/** Shows long text a few lines high, with a button for the rest. */
+/** Shows long text a few lines high, with a button for the rest. Find in the chat opens it at once (`beforematch`, find.ts) when
+ * what it found is in the part that is cut off. */
 function Clamp({ text, lines, children }: { text: string; lines: number; children: ReactNode }) {
   const [open, setOpen] = useState(false);
   if (text.length <= lines * 100 && text.split('\n').length <= lines) return children;
   return (
     <>
-      <div className={cn(!open && 'max-h-44 overflow-hidden [mask-image:linear-gradient(to_bottom,black_60%,transparent)]')}>{children}</div>
+      <div data-clamp={open ? undefined : ''} ref={cut => { const found = () => flushSync(() => setOpen(true)); cut?.addEventListener('beforematch', found); return () => cut?.removeEventListener('beforematch', found); }}
+        className={cn(!open && 'max-h-44 overflow-hidden [mask-image:linear-gradient(to_bottom,black_60%,transparent)]')}>{children}</div>
       <Button variant="ghost-muted" size="xs" className="-ms-1.5 mt-1" onClick={() => setOpen(!open)}>{open ? 'Show less' : 'Show full message'}</Button>
     </>
   );

@@ -1,5 +1,6 @@
 import { ChevronDownIcon, QuoteIcon } from 'lucide-react';
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState, type Ref } from 'react';
+import { Find } from './Find.tsx';
 import { Doing, HandoffRow, NoteRow, ReplyRow, ReportRow, UserRow, type Working } from './Rows.tsx';
 import { parts, thinking, type Item, type Live, type Part } from './transcript.ts';
 import { escapes } from './keys.ts';
@@ -21,11 +22,13 @@ function selected(content: HTMLElement) {
 /** The chat, oldest at the top. It stays at the end while you are there, and stays where you are while you read back; older
  * pages of the log are read as you reach the top. `running` says the agent is in a run, and `live` what it is doing in it.
  * `onAgent` opens the agent a report is from; `narrow` is for a chat in a panel, which has no room for wide margins. Where
- * there is a composer to quote into (`onQuote`), a "Quote" button stands by what is selected in a reply or a report. */
-export function Timeline({ items, live, running, starting = false, profile, older, loading, onAgent, onQuote, narrow = false }: { items: Item[]; live: Live; running: boolean; starting?: boolean; profile: string; older?: () => void; loading?: boolean; onAgent?: (agent: string) => void; onQuote?: (said: string) => void; narrow?: boolean }) {
+ * there is a composer to quote into (`onQuote`), a "Quote" button stands by what is selected in a reply or a report. Where the
+ * memory can be searched from (`onMemory`), the chat can be found in: `ref.find` shows the bar for it (`Find`). */
+export function Timeline({ items, live, running, starting = false, profile, older, loading, onAgent, onQuote, onMemory, ref, narrow = false }: { items: Item[]; live: Live; running: boolean; starting?: boolean; profile: string; older?: () => void; loading?: boolean; onAgent?: (agent: string) => void; onQuote?: (said: string) => void; onMemory?: (text: string) => void; ref?: Ref<{ find: () => void }>; narrow?: boolean }) {
   const scroller = useRef<HTMLDivElement>(null), content = useRef<HTMLDivElement>(null);
   const atEnd = useRef(true), before = useRef({ first: items[0]?.key, height: 0, top: 0, sent: -1 });
-  const [away, setAway] = useState(false);
+  const [away, setAway] = useState(false), [finding, setFinding] = useState(0);
+  useImperativeHandle(ref, () => ({ find: () => setFinding(asked => asked + 1) }), []);
   // The parts drawn last time are kept where their items did not change, so their rows are not drawn again.
   const drawn = useRef<Part[]>([]);
   const blocks = useMemo(() => drawn.current = parts(items, drawn.current), [items]);
@@ -105,6 +108,7 @@ export function Timeline({ items, live, running, starting = false, profile, olde
           )}
         </div>
       </div>
+      {finding > 0 && onMemory && <Find asked={finding} content={content} scroller={scroller} onClose={() => setFinding(0)} onMemory={onMemory} />}
       {away && (
         <div className="enter enter-from-below pointer-events-none absolute inset-x-0 bottom-0 z-30 flex justify-center py-1.5">
           <Button size="xs" variant="glass" className="pointer-events-auto" onClick={toEnd}><ChevronDownIcon className="size-3.5" />Scroll to end</Button>

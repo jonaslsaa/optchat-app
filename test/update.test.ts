@@ -142,7 +142,10 @@ test('no answer is no update: a private repository, no release yet, or no networ
 
 test('an app that cannot be replaced where it is downloads nothing and offers the release\'s page, once', mac, async () => {
   const github = await feed('0.2.0', release('unwritable', '0.2.0')), { folder, app, said, start } = installed('read-only', '0.1.0', github.latest), updates = start();
-  // As on the dmg it came in, or where macOS runs a copy it does not trust: the folder cannot be written to.
+  // As on the dmg it came in, or where macOS runs a copy it does not trust: the folder cannot be written to. What an earlier
+  // update left there cannot be removed either, which is no reason not to say that there is a new one.
+  mkdirSync(join(folder, '.OptChat-update', 'replaced.app'), { recursive: true });
+  chmodSync(join(folder, '.OptChat-update'), 0o555);
   chmodSync(folder, 0o555);
   try {
     await updates.look();
@@ -155,7 +158,7 @@ test('an app that cannot be replaced where it is downloads nothing and offers th
     assert.equal(replaceable(join(copy, 'OptChat.app')), false);
     chmodSync(folder, 0o755);
     assert.equal(replaceable(app), true);
-  } finally { chmodSync(folder, 0o755); await github.close(); }
+  } finally { chmodSync(folder, 0o755); chmodSync(join(folder, '.OptChat-update'), 0o755); await github.close(); }
 });
 
 test('an update that could not be put in place leaves the app as it was, and its version is offered as a page from then on', mac, async () => {

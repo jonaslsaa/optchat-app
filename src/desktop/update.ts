@@ -121,10 +121,12 @@ export function updater({ bundle, version, feed = LATEST, failed, ready, manual 
       if (looking || staged) return;
       looking = true;
       try {
-        await tidy(bundle); // The app this one replaced, when it is the first look after an update.
+        // The app this one replaced, when it is the first look after an update. Where nothing can be removed, nothing is.
+        const can = replaceable(bundle);
+        if (can) await tidy(bundle);
         const update = await latest(feed, version);
         if (!update || update.version === told) return;
-        if (!replaceable(bundle) || gaveUp() === update.version) { told = update.version; manual(update); return; }
+        if (!can || gaveUp() === update.version) { told = update.version; manual(update); return; }
         staged = { app: await stage(update, bundle), version: update.version };
         told = update.version;
         ready(update);

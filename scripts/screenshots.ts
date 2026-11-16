@@ -5,7 +5,7 @@ import { build } from 'vite';
 import { connect, type Client } from '../src/client.ts';
 import { startServer } from '../src/server/server.ts';
 // pi-optchat's own lock, which only Pi takes: here it stands for a Pi in a terminal.
-import { describeOwner, lockProfile } from 'pi-optchat/files';
+import { defaults, describeOwner, lockProfile } from 'pi-optchat/files';
 import { createProfile, give, png } from '../test/support.ts';
 import { agents, CHANGES, demo, FILES, FORMULAS, limited, NAMED, remember, seed, SHIPPED, SHIPPING, spend, TEAM } from './seed.ts';
 
@@ -27,6 +27,8 @@ process.on('exit', () => rmSync(home, { recursive: true, force: true }));
 for (const signal of ['SIGINT', 'SIGTERM'] as const) process.once(signal, () => process.exit(1));
 createProfile(home, 'empty');
 const team = createProfile(home, 'team');
+// Its compactor is pi-optchat's default, as a new profile's is: its settings show no test model.
+writeFileSync(join(team, 'config.json'), JSON.stringify({ ...JSON.parse(readFileSync(join(team, 'config.json'), 'utf8')), compactor: defaults.compactor }));
 seed(team, TEAM.length, NOW, TEAM);
 seed(createProfile(home, 'changes'), CHANGES.length, NOW, CHANGES);
 agents(team, NOW + 42_000);
@@ -340,6 +342,7 @@ async function pictures(browser: Browser, control: Client) {
   // its field; one that was changed; and one pi-optchat would not have.
   const profile = await open(['notes'], { height: 1500 });
   await profile.getByRole('button', { name: 'Settings' }).click();
+  await profile.getByRole('tab', { name: 'Profile' }).click();
   await profile.locator('datalist option').first().waitFor({ state: 'attached' }); // The models are read, with their levels.
   await profile.getByRole('combobox', { name: 'Compactor model' }).fill('anthropic/claude-opus-5-5');
   await profile.keyboard.press('Enter');
@@ -351,14 +354,13 @@ async function pictures(browser: Browser, control: Client) {
   await profile.keyboard.press('Enter');
   await profile.getByRole('alert').waitFor();
   await shot(profile, '41-settings-profile');
-  const night = await open(['notes'], { dark: true, height: 1500 });
-  await night.getByRole('button', { name: 'Settings' }).click();
-  await night.getByRole('switch', { name: 'Memory search', checked: true }).waitFor();
-  await shot(night, '42-settings-profile-dark');
-  const slender = await open(['notes'], { width: 420, height: 800 });
-  await slender.getByRole('button', { name: 'Settings' }).click();
-  await slender.getByRole('heading', { name: 'Profile: notes' }).scrollIntoViewIfNeeded();
-  await shot(slender, '43-settings-profile-narrow');
+  // One as pi-optchat made it, untouched: its compactor is the default it names.
+  for (const [page, name] of [[await open(['team'], { dark: true, height: 1500 }), '42-settings-profile-dark'], [await open(['team'], { width: 420, height: 800 }), '43-settings-profile-narrow']] as const) {
+    await page.getByRole('button', { name: 'Settings' }).click();
+    await page.getByRole('tab', { name: 'Profile' }).click();
+    await page.locator('input[aria-label="Compactor model"][value="anthropic/claude-sonnet-5-5"]').waitFor();
+    await shot(page, name);
+  }
 
   // What a profile used, under its subscription's limits: today's, the week's (light, dark, narrow), a profile that has used
   // nothing and has no limits saved, and a ledger with a line that cannot be read.

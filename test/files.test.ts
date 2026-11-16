@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
 import { chmodSync, mkdirSync, mkdtempSync, realpathSync, symlinkSync, writeFileSync } from 'node:fs';
+import { hostname } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
+import { describeOwner, lockProfile } from 'pi-optchat/files';
 import { connect } from '../src/client.ts';
 import { editor, inside, type Launch } from '../src/server/files.ts';
 import { startServer } from '../src/server/server.ts';
@@ -54,4 +56,22 @@ test('the server opens what the chat named in the window\'s folder, and refuses 
   assert.ok(launched[0].args.includes(join(cwd, 'run.command')) || launched[0].args.includes(`${join(cwd, 'run.command')}:3`), JSON.stringify(launched[0]));
   await assert.rejects(client.request('openFile', { window: window.id, path: 'src/out.txt' }), /not a file/);
   assert.equal(launched.length, 1);
+});
+
+test('a main chat a Pi outside the app holds names files in that Pi\'s folder, and in none when that Pi is on another machine', async t => {
+  const there = realpathSync(mkdtempSync(join(home, 'there-')));
+  mkdirSync(join(there, 'src'));
+  writeFileSync(join(there, 'src', 'There.ts'), '');
+  const server = await startServer({ home, cwd, pi: { command: process.execPath, args: ['-e', ''] }, launcher: () => {} });
+  const client = await connect(server.url);
+  t.after(async () => { client.close(); await server.close(); });
+  for (const [profile, host] of [['terminal', hostname()], ['remote', 'another-machine']]) {
+    const unlock = await lockProfile(createProfile(home, profile), describeOwner({ profile, pid: process.pid, host, cwd: there }));
+    t.after(() => unlock().catch(() => {}));
+  }
+  const terminal = (await client.request('open', { profile: 'terminal' })).window.id, remote = (await client.request('open', { profile: 'remote' })).window.id;
+  assert.deepEqual(await client.request('isFile', { window: terminal, path: 'src/There.ts' }), { file: true });
+  assert.deepEqual(await client.request('isFile', { window: terminal, path: 'src/App.tsx' }), { file: false });
+  assert.deepEqual(await client.request('isFile', { window: remote, path: 'src/There.ts' }), { file: false });
+  await assert.rejects(client.request('openFile', { window: remote, path: 'src/There.ts' }), /not a file/);
 });

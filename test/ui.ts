@@ -31,6 +31,7 @@ seed(createProfile(home, 'diffs'), CHANGES.length, Date.now(), CHANGES);
 seed(createProfile(home, 'formulas'), 1, Date.now(), FORMULAS);
 // A chat that names files, and those files in the folder its windows run in.
 seed(createProfile(home, 'files'), 1, Date.now(), NAMED);
+seed(createProfile(home, 'linked'), 1, Date.now(), [[['user', 'Show me.'], ['talk', '[![the preview](/images/linked/0123456789abcdef)](test/pi.test.ts)']]]);
 for (const file of FILES) { mkdirSync(join(home, file, '..'), { recursive: true }); writeFileSync(join(home, file), ''); }
 mkdirSync(join(home, 'new'));
 
@@ -678,4 +679,12 @@ test('a file the chat names opens in your editor when it is in the window\'s fol
   assert.ok(launched.length === 2 && named('src/server/pi.ts') && named('test/pi.test.ts'), JSON.stringify(launched));
   assert.equal(await page.getByRole('button', { name: 'src/server/wait.ts' }).count(), 0);
   assert.equal(await page.getByRole('link', { name: 'src/server/wait.ts' }).count(), 0);
+  // A picture in a link to a file is the link's too: no button of its own to show it large.
+  const again = await connect(server.url);
+  await again.request('open', { profile: 'linked', cwd: home });
+  again.close();
+  const linked = await open('linked');
+  await linked.locator('.file-link').waitFor();
+  assert.equal(await linked.locator('.file-link button').count(), 0);
+  await linked.context().close();
 });

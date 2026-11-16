@@ -1,5 +1,6 @@
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import { createServer, type IncomingMessage } from 'node:http';
+import { hostname } from 'node:os';
 import { extname, join, resolve, sep } from 'node:path';
 import type { AddressInfo } from 'node:net';
 import { dataHome } from 'pi-optchat/files';
@@ -63,14 +64,20 @@ export async function startServer({ port = 0, origins = [], ui = join(import.met
   const setup = new Setup({ app, cwd, pi, npm, opener, push: setup => push({ push: 'setup', setup }) });
   // A window runs in the folder the settings name, unless that folder is gone since it was kept.
   const windows = new Windows({ home, grace, push, cwd: () => settings.cwd && isDirectory(settings.cwd) ? settings.cwd : cwd, pi: async () => { const { command, args } = await setup.launch(); return { command, args: [...args, ...flags] }; }, catalog: () => setup.catalog() });
-  // The folder a window runs in, which the files its chat names are read from.
-  const folder = (id: string) => { const window = windows.list().windows.find(window => window.id === id); if (!window) throw new Error(`No window ${id}.`); return window.cwd; };
+  // The folder the files a window's chat names are read from: where its Pi runs, which for a main chat a Pi outside the app
+  // holds is that Pi's, and none when that Pi is on another machine or does not say.
+  const folder = (id: string) => {
+    const window = windows.list().windows.find(window => window.id === id);
+    if (!window) throw new Error(`No window ${id}.`);
+    const { outside } = window;
+    return !outside ? window.cwd : outside !== 'unknown' && outside.host === hostname() ? outside.cwd : undefined;
+  };
   const handlers: { [M in Method]: (params: Params<M>) => Result<M> | Promise<Result<M>> } = {
     agents: params => agents.list(params), agent: params => agents.one(params), github: params => github.list(params),
-    isFile: ({ window, path }) => ({ file: inside(folder(window), path) !== undefined }),
+    isFile: ({ window, path }) => { const at = folder(window); return { file: at !== undefined && inside(at, path) !== undefined }; },
     openFile: ({ window, path, line }) => {
-      const file = inside(folder(window), path);
-      if (!file) throw new Error(`${path} is not a file in ${folder(window)}.`);
+      const at = folder(window), file = at && inside(at, path);
+      if (!file) throw new Error(`${path} is not a file in the folder this chat runs in.`);
       if (!launcher) throw new Error('This server opens no editor.');
       launcher(editor()?.(file, line) ?? fallback(file));
       return {};

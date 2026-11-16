@@ -77,24 +77,32 @@ function Opens({ window, path, line, children }: { window: string; path: string;
   if (!use(app.isFile(window, path))) return children;
   return <button type="button" className="file-link" title={`Open ${path}${line ? ` at line ${line}` : ''} in your editor`} onClick={() => void app.openFile(window, path, line)}>{children}</button>;
 }
+/** Inside a link: what it holds (code, an image) is no control of its own, so a click is the link's alone. */
+const InLink = createContext(false);
 /** A link whose target is a path: a file in the window's folder opens in your editor, and any other is its words alone, since
- * the page has nothing at that address. What it holds is no file button of its own: a click is the link's alone. */
+ * the page has nothing at that address. */
 function Link({ node: _, ...props }: ComponentProps<'a'> & { node?: unknown }) {
   const window = useContext(InWindow), target = props.href && !/^[a-z][\w+.-]*:|^\/\//i.test(props.href) ? fileTarget(props.href) : undefined;
-  const children = <InWindow value={undefined}>{props.children}</InWindow>;
+  const children = <InLink value>{props.children}</InLink>;
   return window && target ? <File window={window} {...target}>{children}</File> : link({ ...props, children });
 }
 /** Inline code: a formula when remark-math made it one, a file button when it is the path of a file in the window's folder. */
 function Code({ node: _, ...props }: ComponentProps<'code'> & { node?: unknown }) {
-  const window = useContext(InWindow);
+  const window = useContext(InWindow), linked = useContext(InLink);
   if (props.className?.split(' ').includes('math-inline')) return <Formula tex={String(props.children ?? '')} display={false} />;
   const target = fileTarget(String(props.children)), code = <code {...props} />;
-  return window && target ? <File window={window} {...target}>{code}</File> : code;
+  return window && target && !linked ? <File window={window} {...target}>{code}</File> : code;
+}
+/** An image that is drawn, which only one of the profile's own is (`safe`), is shown large on a click; a link stays a link.
+ * In a link it is the link's: drawn plain, or its words. */
+function Image(props: ComponentProps<'img'> & ExtraProps) {
+  const drawn = safe.img(props), linked = useContext(InLink);
+  if (drawn.type !== 'img') return linked ? props.alt || String(props.src ?? '') : drawn;
+  return linked ? drawn : <Picture src={String(props.src)} alt={props.alt} />;
 }
 const components: Components = {
   ...safe,
-  // An image that is drawn, which only one of the profile's own is (`safe`), is shown large on a click; a link stays a link.
-  img: props => { const drawn = safe.img(props); return drawn.type === 'img' ? <Picture src={String(props.src)} alt={props.alt} /> : drawn; },
+  img: Image,
   a: Link,
   code: Code,
   pre: ({ node: _, ...props }) => <CodeBlock {...props} />,

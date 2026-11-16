@@ -1,5 +1,5 @@
 import { CheckIcon, CircleAlertIcon, CircleDashedIcon, CopyIcon, LogInIcon, PlusIcon, RefreshCwIcon } from 'lucide-react';
-import { useState, type FormEvent, type ReactNode } from 'react';
+import { useRef, useState, type FormEvent, type ReactNode } from 'react';
 import type { Params, Setup as SetupState } from '../protocol.ts';
 import { app, type State } from './store.ts';
 import { Button, cn, Spinner } from './ui.tsx';
@@ -72,11 +72,12 @@ function SignIn({ signingIn }: { signingIn?: Provider }) {
 
 /** The first profile: a name, and pi-optchat makes it. The server says so when the name will not do. */
 function NewProfile() {
-  const [name, setName] = useState(''), [making, setMaking] = useState(false);
-  const make = (event: FormEvent) => { event.preventDefault(); setMaking(true); void app.createProfile(name.trim()).finally(() => setMaking(false)); };
+  const [name, setName] = useState(''), [making, setMaking] = useState(false), field = useRef<HTMLInputElement>(null);
+  // The button is off while it is asked, and loses the focus with that: a name that was refused is put right in its field.
+  const make = (event: FormEvent) => { event.preventDefault(); setMaking(true); void app.createProfile(name.trim()).finally(() => { setMaking(false); field.current?.focus(); }); };
   return (
     <form onSubmit={make} className="mt-2 flex flex-wrap items-center gap-2">
-      <input aria-label="Profile name" value={name} onChange={event => setName(event.target.value)} placeholder="work" autoCapitalize="off" autoCorrect="off" spellCheck={false} maxLength={64}
+      <input ref={field} aria-label="Profile name" value={name} onChange={event => setName(event.target.value)} placeholder="work" autoCapitalize="off" autoCorrect="off" spellCheck={false} maxLength={64}
         className="h-7 w-48 rounded-md border bg-background px-2 text-sm outline-none placeholder:text-muted-foreground/70 focus-visible:ring-2 focus-visible:ring-ring" />
       <Button type="submit" variant="outline" disabled={making || !name.trim()}>{making ? <Spinner /> : <PlusIcon />}Create profile</Button>
     </form>

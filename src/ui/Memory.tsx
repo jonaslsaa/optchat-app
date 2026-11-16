@@ -133,10 +133,9 @@ export const MemoryView = memo(function MemoryView({ tree, profile, window, puls
   useShortcuts(() => ({ 'mod+f': () => { box.current?.focus(); box.current?.select(); } }), []);
   // Ending the search leaves the keys in its box: what they were on may be gone.
   const end = () => { void app.search(profile, ''); box.current?.focus(); };
-  // Esc ends a search from anywhere in the view, and in the box it is taken with no search on too: ending one leaves the
-  // keys there, and the next Esc is not meant for the agent. From the first message found, ↑ goes back to the box.
+  // Esc ends a search from anywhere in the view. From the first message found, ↑ goes back to the box.
   const keyed = (event: KeyboardEvent) => {
-    if (search || event.target === box.current) escapes(event, end);
+    if (search) escapes(event, end);
     if (event.key === 'ArrowUp' && results && !event.defaultPrevented && event.target !== box.current) { event.preventDefault(); box.current?.focus(); }
   };
   const answer = search?.answer, count = (answer?.hits.length ?? 0) + (answer?.more ?? 0), matches = `${count.toLocaleString()} ${count === 1 ? 'message' : 'messages'}`;

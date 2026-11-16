@@ -2,7 +2,7 @@ import { CircleCheckIcon, CircleDashedIcon, CircleDotIcon, CircleXIcon, GitMerge
 import { useEffect, useState } from 'react';
 import type { GitHubItem, Result } from '../protocol.ts';
 import { app, type State } from './store.ts';
-import { Button, cn, Section } from './ui.tsx';
+import { Button, cn, More, Section } from './ui.tsx';
 
 /** How many are listed, how often GitHub is asked while the list is in sight (ms), and how soon the answer to a question
  * that was just asked is looked for. */
@@ -71,7 +71,7 @@ export function GitHub({ state, profile, pulse }: { state: State; profile: strin
         </p>
       )}
       <ul className="flex flex-col gap-0.5">{items.map(item => <Row key={`${item.repo}#${item.number}`.toLowerCase()} item={item} />)}</ul>
-      {list.more > 0 && <Button variant="ghost-muted" size="xs" className="mx-2.5 mt-2" onClick={() => setLimit(limit + SHOWN)}>Show {Math.min(list.more, SHOWN)} more</Button>}
+      {list.more > 0 && <More more={list.more} step={SHOWN} onMore={() => setLimit(limit + SHOWN)} />}
     </Section>
   );
 }

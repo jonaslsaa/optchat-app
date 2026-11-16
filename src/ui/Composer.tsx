@@ -97,13 +97,15 @@ export function Composer({ state, window, live, onSend }: { state: State; window
     setSending(false);
   };
   const stop = async () => {
+    // The button that stops is gone once it has: the focus is where the next message is typed.
+    area.current?.focus();
     const waiting = await app.stop(window.id);
     if (waiting.length) change([...waiting, drafts.get(window.id) ?? ''].filter(Boolean).join('\n\n'));
   };
-  // Esc stops the agent wherever the focus is.
-  useShortcuts((): Record<string, () => void> => running ? { escape: () => void stop() } : {}, [running, window.id]);
+  // Esc stops the agent while the keys are the chat's, as they are here: not from the panel beside it, nor from the memory view.
+  useShortcuts((): Record<string, () => void> => running ? { escape: () => void stop() } : {}, [running, window.id], 'chat');
   return (
-    <div className="shrink-0 px-3 pb-3 sm:px-12 sm:pb-4">
+    <div data-keys="chat" className="shrink-0 px-3 pb-3 sm:px-12 sm:pb-4">
       <div className="mx-auto flex w-full max-w-(--chat-content-max-width) flex-col gap-2">
         <Queued messages={queued} later={live.queued.followUp.length} />
         {live.dialogs.map(dialog => <Dialog key={String(dialog.id)} window={window.id} dialog={dialog} />)}

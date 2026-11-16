@@ -1,25 +1,26 @@
 import { CheckIcon, ChevronsUpDownIcon, PlusIcon, XIcon } from 'lucide-react';
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { badge } from './badge.ts';
+import { useOverlay } from './keys.ts';
 import { app, type State } from './store.ts';
 import { cn, WindowDot } from './ui.tsx';
 
-/** A button that opens the list of profiles. Picking one opens it, in a tab of its own beside those already open. */
+/** A button that opens the list of profiles. Picking one opens it, in a tab of its own beside those already open. The arrows
+ * walk the list, round its ends; Esc closes it and nothing else (`useOverlay`). */
 export function ProfilePicker({ state, label, className, children }: { state: State; label: string; className?: string; children: ReactNode }) {
-  const [open, setOpen] = useState(false), menu = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!open) return;
-    const outside = (event: PointerEvent) => { if (event.target instanceof Node && !menu.current?.contains(event.target)) setOpen(false); };
-    // Esc closes the menu and nothing else: it is taken before the shortcut that stops the agent hears it.
-    const escape = (event: KeyboardEvent) => { if (event.key === 'Escape') { event.stopPropagation(); event.preventDefault(); setOpen(false); } };
-    addEventListener('pointerdown', outside); addEventListener('keydown', escape, true);
-    return () => { removeEventListener('pointerdown', outside); removeEventListener('keydown', escape, true); };
-  }, [open]);
+  const [open, setOpen] = useState(false), menu = useRef<HTMLDivElement>(null), opener = useRef<HTMLButtonElement>(null);
+  useOverlay(open, () => setOpen(false), menu, opener);
+  const walk = (event: KeyboardEvent) => {
+    if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
+    const all = [...event.currentTarget.querySelectorAll('button')], here = all.findIndex(button => button === document.activeElement);
+    event.preventDefault();
+    all[(here + (event.key === 'ArrowDown' ? 1 : all.length - 1)) % all.length]?.focus();
+  };
   return (
     <div ref={menu} className="relative shrink-0">
-      <button type="button" aria-label={label} title={label} aria-haspopup="listbox" aria-expanded={open} onClick={() => setOpen(!open)} className={className}>{children}</button>
+      <button ref={opener} type="button" aria-label={label} title={label} aria-haspopup="listbox" aria-expanded={open} onClick={() => setOpen(!open)} className={className}>{children}</button>
       {open && (
-        <ul role="listbox" aria-label="Profiles" className="absolute top-full left-0 z-50 mt-1 max-h-80 w-56 overflow-auto rounded-lg border bg-popover p-1 text-popover-foreground shadow-lg">
+        <ul role="listbox" aria-label="Profiles" onKeyDown={walk} className="absolute top-full left-0 z-50 mt-1 max-h-80 w-56 overflow-auto rounded-lg border bg-popover p-1 text-popover-foreground shadow-lg">
           {state.profiles.map(name => (
             <li key={name} role="option" aria-selected={name === state.profile}>
               <button type="button" autoFocus={name === state.profile} onClick={() => { setOpen(false); void app.openProfile(name); }} className="flex h-8 w-full items-center gap-2 rounded-md px-2 text-left text-sm hover:bg-accent focus-visible:bg-accent focus-visible:outline-none">

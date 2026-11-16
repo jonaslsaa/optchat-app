@@ -2,7 +2,7 @@ import { CheckIcon, SearchIcon } from 'lucide-react';
 import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import type { ModelChoice, Result, WindowState } from '../protocol.ts';
 import { THINKING } from './config.ts';
-import { escapes } from './keys.ts';
+import { useOverlay } from './keys.ts';
 import { Mark } from './Mark.tsx';
 import { arranged, listed, picked, provider, search, thinks } from './models.ts';
 import { app, type State } from './store.ts';
@@ -120,22 +120,14 @@ function Picker({ window, models, own, subagent, below }: { window: WindowState;
 /** The model the window's agent runs on and how hard it thinks, in the composer: a click opens the list it is picked from.
  * Before the window's Pi runs it says what that will start on: the pick, the model the profile keeps for its main chat, or
  * Pi's own default. The list is read when the window is shown, for the names, and again each time it is opened: logging in
- * to a provider adds its models. Esc closes the list and nothing else, wherever the focus is (a click on a row leaves it
- * with the page), so the key is heard on its way down, before the shortcut that stops a run; a click anywhere else closes
- * it too. The list opens
- * over the composer, or under it where the composer is in the upper half of the page, as in a chat with nothing in it yet. */
+ * to a provider adds its models. Esc closes the list and nothing else, and a click anywhere else closes it too
+ * (`useOverlay`). The list opens over the composer, or under it where the composer is in the upper half of the page, as in a
+ * chat with nothing in it yet. */
 export function Model({ state, window }: { state: State; window: WindowState }) {
   const [open, setOpen] = useState<'over' | 'under'>(), root = useRef<HTMLDivElement>(null), chip = useRef<HTMLButtonElement>(null);
   const models = state.models[window.id], model = window.model ?? models?.preset;
   useEffect(() => { if (open || !models) void app.readModels(window.id); }, [window.id, open]);
-  useEffect(() => {
-    if (!open) return;
-    const away = (event: PointerEvent) => { if (event.target instanceof Node && !root.current?.contains(event.target)) setOpen(undefined); };
-    const pressed = (event: globalThis.KeyboardEvent) => escapes(event, () => { setOpen(undefined); chip.current?.focus(); });
-    addEventListener('pointerdown', away);
-    addEventListener('keydown', pressed, true);
-    return () => { removeEventListener('pointerdown', away); removeEventListener('keydown', pressed, true); };
-  }, [open]);
+  useOverlay(open !== undefined, () => setOpen(undefined), root, chip);
   return (
     <div ref={root} className="flex min-w-0 shrink">
       <button ref={chip} type="button" aria-label="Model" title="Model and thinking level" aria-haspopup="dialog" aria-expanded={open !== undefined} aria-busy={!models} onClick={event => setOpen(open ? undefined : event.currentTarget.getBoundingClientRect().top < innerHeight / 2 ? 'under' : 'over')}

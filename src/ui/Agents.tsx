@@ -9,7 +9,7 @@ import { escapes } from './keys.ts';
 import { app, type State } from './store.ts';
 import { Timeline } from './Timeline.tsx';
 import { idle, took } from './transcript.ts';
-import { Button, cn, Section, StatusDot } from './ui.tsx';
+import { Button, cn, More, Section, StatusDot } from './ui.tsx';
 
 /** `SHOWN` is how many agents that ended are listed until more are asked for: few, because the GitHub list is under them. */
 const NOTHING = idle(), SHOWN = 8, EVERY = 2000;
@@ -25,11 +25,12 @@ function Mark({ agent }: { agent: Agent }) {
   const Icon = agent.state === 'completed' ? CheckIcon : agent.state === 'failed' ? XIcon : CircleSlashIcon, { tone } = stood(agent);
   return <Icon role="img" aria-label={agent.state} className={cn('size-3.5 shrink-0 text-muted-foreground/70', tone && TONES[tone])} />;
 }
-/** An agent in the list: what it is called, how long it has worked, and under that what it is doing now or how it ended. */
-function Row({ agent, depth, onOpen }: { agent: Agent; depth: number; onOpen: () => void }) {
+/** An agent in the list: what it is called, how long it has worked, and under that what it is doing now or how it ended.
+ * `back`: its chat was open until now, so the focus comes back to it. */
+function Row({ agent, depth, back, onOpen }: { agent: Agent; depth: number; back: boolean; onOpen: () => void }) {
   return (
     <li style={{ paddingInlineStart: `${Math.min(depth, 4) * 0.875}rem` }}>
-      <button type="button" onClick={onOpen} className="flex w-full min-w-0 cursor-pointer flex-col gap-0.5 rounded-lg px-2.5 py-2 text-left outline-none transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring/70">
+      <button type="button" autoFocus={back} onClick={onOpen} className="flex w-full min-w-0 cursor-pointer flex-col gap-0.5 rounded-lg px-2.5 py-2 text-left outline-none transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring/70">
         <span className="flex min-w-0 items-center gap-2">
           <Mark agent={agent} />
           <span className="min-w-0 flex-1 truncate font-medium text-sm">{named(agent)}</span>
@@ -41,12 +42,13 @@ function Row({ agent, depth, onOpen }: { agent: Agent; depth: number; onOpen: ()
   );
 }
 
-/** What stands at the top of the panel while an agent's chat is open in it: the way back to the list, and what it is called. */
+/** What stands at the top of the panel while an agent's chat is open in it: the way back to the list, and what it is called.
+ * The row that was opened is gone, and the focus it had is on the way back. */
 export function AgentHead({ state, profile, id, onAgent }: { state: State; profile: string; id: string; onAgent: (id?: string) => void }) {
   const agent = state.agents[profile]?.agents.find(agent => agent.id === id);
   return (
     <>
-      <Button variant="ghost-muted" size="icon-sm" aria-label="Back to the lists" title="Back" onClick={() => onAgent()}><ArrowLeftIcon /></Button>
+      <Button autoFocus variant="ghost-muted" size="icon-sm" aria-label="Back to the lists" title="Back (Esc)" onClick={() => onAgent()}><ArrowLeftIcon /></Button>
       <h2 title={id} className="min-w-0 flex-1 truncate font-medium text-sm">{agent ? named(agent) : `Agent ${id}`}</h2>
     </>
   );
@@ -59,8 +61,8 @@ const drafts = new Map<string, string>(), refusals = new Map<string, { why: stri
  * A message reaches an agent at work and starts one that has ended again: the server picks, so there is one box and one
  * button. Interrupt and Stop are there while they would do something. What pi-optchat refuses is said here in its words.
  * A message stays in the box until it is taken, so one that is refused is still where it was typed.
- * Esc in here is this agent's, as in Pi's view of an agent: it interrupts it, and the main chat, whose Esc stops its own
- * agent wherever the focus is, never hears it. `owner`: the agent that started this one, where only that one can resume it.
+ * Esc in here is this agent's while it can be interrupted, as in Pi's view of an agent: the panel, whose Esc is the way
+ * back to the lists, does not hear it then. `owner`: the agent that started this one, where only that one can resume it.
  * `onDone`: something was asked, so the agent is worth reading again. */
 function Control({ profile, agent, owner, queued = [], onDone }: { profile: string; agent: Agent; owner?: Agent; queued?: readonly string[]; onDone: () => Promise<unknown> }) {
   const key = `${profile}/${agent.id}`, can = controls(agent), { word, tone } = stood(agent);
@@ -84,8 +86,7 @@ function Control({ profile, agent, owner, queued = [], onDone }: { profile: stri
   };
   const interrupt = () => { if (can.interrupt && !asking) void ask('interruptAgent', { profile, id: agent.id }); };
   return (
-    // A sheet over the page has taken its Esc by now, and closed: the key is this agent's only where the panel stands beside the chat.
-    <div className="flex shrink-0 flex-col gap-2 border-border/70 border-t px-3 pt-2.5 pb-3" onKeyDown={event => { if (!event.defaultPrevented) escapes(event, interrupt); }}>
+    <div className="flex shrink-0 flex-col gap-2 border-border/70 border-t px-3 pt-2.5 pb-3" onKeyDown={event => { if (can.interrupt) escapes(event, interrupt); }}>
       <Queued messages={queued} />
       {refused && <p role="alert" className="whitespace-pre-wrap rounded-xl border border-error/24 bg-error-surface px-3 py-2 text-foreground/80 text-xs [overflow-wrap:anywhere]">{refused}</p>}
       {can.message && (
@@ -122,10 +123,13 @@ export function Agents({ state, profile, agent: id, pulse, outside, onAgent }: {
   useEffect(() => { if (state.connection === 'open') void read(); }, [profile, id, limit, pulse, state.connection]);
   useEffect(() => { if (!active) return; const timer = setInterval(read, EVERY); return () => clearInterval(timer); }, [active, profile, id, limit]);
   const running = agents.filter(working).length;
+  // The agent whose chat was open until now, for the focus on the way back: once, as the list is drawn again.
+  const opened = useRef(id);
+  useEffect(() => { opened.current = id; }, [id]);
   if (id === undefined) return agents.length === 0 ? null : (
     <Section title={running ? `Agents · ${running} running` : 'Agents'}>
-      <ul className="flex flex-col gap-0.5">{listed(agents).map(({ agent, depth }) => <Row key={agent.id} agent={agent} depth={depth} onOpen={() => onAgent(agent.id)} />)}</ul>
-      {list && list.more > 0 && <Button variant="ghost-muted" size="xs" className="mx-2.5 mt-2" onClick={() => setLimit(limit + SHOWN)}>Show {Math.min(list.more, SHOWN)} more</Button>}
+      <ul className="flex flex-col gap-0.5">{listed(agents).map(({ agent, depth }) => <Row key={agent.id} agent={agent} depth={depth} back={agent.id === opened.current} onOpen={() => onAgent(agent.id)} />)}</ul>
+      {list && list.more > 0 && <More more={list.more} step={SHOWN} onMore={() => setLimit(limit + SHOWN)} />}
     </Section>
   );
   return (

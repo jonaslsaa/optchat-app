@@ -39,7 +39,7 @@ function Folder({ kept = '' }: { kept?: string }) {
   const keep = () => { if (cwd.trim() !== kept) void app.saveSettings({ cwd: cwd.trim() || null }); };
   return (
     <input aria-label="Folder for new windows" value={cwd} placeholder="Your home folder" spellCheck={false} onChange={event => setCwd(event.target.value)} onBlur={keep}
-      onKeyDown={event => { if (event.key === 'Enter' && !event.nativeEvent.isComposing) event.currentTarget.blur(); }}
+      onKeyDown={event => { if (event.key === 'Enter' && !event.nativeEvent.isComposing) keep(); }}
       className="h-8 w-full rounded-[var(--control-radius)] border border-input bg-popover px-2.5 font-mono text-sm outline-none placeholder:font-sans placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring dark:bg-input/32" />
   );
 }

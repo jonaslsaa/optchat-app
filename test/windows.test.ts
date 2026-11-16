@@ -37,17 +37,20 @@ async function client(t: TestContext, url: string) {
   const statuses = (id: string) => pushes.flatMap(push => push.push === 'window' && push.window.id === id ? [push.window.status] : []).filter((status, k, all) => status !== all[k - 1]);
   const record = (type: string, from = 0) => pushed((push): push is Extract<Push, { push: 'record' }> => push.push === 'record' && push.record.type === type && push.seq > from);
   const status = (status: WindowState['status']) => pushed((push): push is Extract<Push, { push: 'window' }> => push.push === 'window' && push.window.status === status);
-  return { request: connection.request, pushes, types, statuses, record, status };
+  /** The window as it is once it pushed record `seq`. A record that changes the window's status is pushed first and the
+   * window after it, in a message of its own, so the record alone does not say the status has come. */
+  const since = (seq: number) => pushed((push): push is Extract<Push, { push: 'window' }> => push.push === 'window' && push.window.seq >= seq);
+  return { request: connection.request, pushes, types, statuses, record, status, since };
 }
 
 test('a window starts its Pi on the first prompt, and what Pi writes reaches the client in order', async t => {
-  const { request, cwd, pushes, types, statuses, record } = await setup(t);
+  const { request, cwd, pushes, types, statuses, record, since } = await setup(t);
   const { window } = await request('open', { profile: 'work' });
   assert.deepEqual(window, { id: 'work/main', profile: 'work', role: 'main', cwd, status: 'stopped', seq: 0 });
   await assert.rejects(request('command', { window: window.id, command: { type: 'get_state' } }), /no Pi running/);
 
   assert.deepEqual(await request('prompt', { window: window.id, text: 'hello' }), { disposition: 'started' });
-  await record('agent_settled');
+  await since((await record('agent_settled')).seq);
   assert.deepEqual(statuses(window.id), ['stopped', 'starting', 'idle', 'running', 'idle']);
   assert.deepEqual(types(), ['extension_ui_request', 'extension_ui_request', 'agent_start', 'message_start', 'message_end', 'message_start', 'message_update', 'message_update', 'message_update', 'message_update', 'message_end', 'agent_end', 'agent_settled']);
   const numbers = pushes.flatMap(push => push.push === 'record' ? [push.seq] : []);

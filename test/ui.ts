@@ -523,8 +523,12 @@ test('what is selected in a reply or a report is quoted into the composer, under
   assert.equal(await focused(page), 'Message');
   assert.equal(await quote.count(), 0, 'the button went with the selection');
   // A reply, with something typed already: the quote is under it, and what is typed next under the quote.
+  // Three clicks on its last paragraph select on into the row under it: the button is at the paragraph's end all the same.
   await box.fill('About the agents:');
-  await page.getByText('Started two agents.').click({ clickCount: 3 });
+  const reply = page.getByText('Started two agents.');
+  await reply.click({ clickCount: 3 });
+  const [line, button] = [await reply.boundingBox(), await quote.boundingBox()];
+  assert.ok(line && button && Math.abs(button.y - line.y - line.height) < 8, 'the Quote button is not under the last line that is selected');
   await quote.click();
   await page.keyboard.type('how long?');
   assert.equal(await box.inputValue(), 'About the agents:\n\n> Started two agents. I\'ll tell you when they report.\n\nhow long?');
@@ -539,6 +543,12 @@ test('what is selected in a reply or a report is quoted into the composer, under
   const copied = async (name: string) => { await page.getByRole('button', { name }).last().click(); return page.evaluate(() => navigator.clipboard.readText()); };
   assert.match(await copied('Copy report'), /^\*\*T3 Code replays by sequence number\.\*\*[^]*- Nothing is replayed twice$/);
   assert.equal(await copied('Copy message'), 'Good. Get someone to check how T3 Code handles reconnects, and someone to run that test on Windows.');
+  // Esc on the button takes it away, and is not the key that stops the run.
+  await run(page);
+  await page.getByText('Nothing is replayed twice').click({ clickCount: 3 });
+  await quote.focus();
+  await goesOn(page, 'on the Quote button');
+  assert.equal(await quote.count(), 0);
 });
 
 test('a field keeps the focus when Enter saves it, and when what was typed is refused', async () => {

@@ -2,18 +2,19 @@ import { ChevronDownIcon, QuoteIcon } from 'lucide-react';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { HandoffRow, NoteRow, ReplyRow, ReportRow, UserRow, Waiting, type Working } from './Rows.tsx';
 import { parts, thinking, type Item, type Live, type Part } from './transcript.ts';
+import { escapes } from './keys.ts';
 import { Button, cn } from './ui.tsx';
 
 /** How near the end counts as at the end, in pixels. */
 const EDGE = 48;
-/** What is selected, when it begins in a reply's answer or in a report (`data-quote`), and where its last line ends in
+/** What is selected, when it begins in a reply's answer or in a report (`data-quote`), and where its last line there ends in
  * `content`: that is where the button that quotes it stands. A paragraph selected with three clicks ends at the start of what
- * is under it, so where a selection ends is not asked. */
+ * is under it, so where a selection ends is not asked, and the lines it has outside the answer or the report do not count. */
 function selected(content: HTMLElement) {
   const selection = getSelection(), text = selection?.toString().trim(), range = selection?.rangeCount ? selection.getRangeAt(0) : undefined;
-  const from = range?.startContainer, begins = from instanceof Element ? from : from?.parentElement;
-  if (!range || !text || !content.contains(begins ?? null) || !begins?.closest('[data-quote]')) return;
-  const line = [...range.getClientRects()].at(-1), frame = content.getBoundingClientRect();
+  const from = range?.startContainer, said = (from instanceof Element ? from : from?.parentElement)?.closest('[data-quote]')?.getBoundingClientRect();
+  if (!range || !text || !said || !content.contains(from ?? null)) return;
+  const line = [...range.getClientRects()].findLast(line => line.top >= said.top - 1 && line.bottom <= said.bottom + 1), frame = content.getBoundingClientRect();
   return line && { text, left: Math.min(line.right - frame.left, frame.width - 80), top: line.bottom - frame.top };
 }
 
@@ -89,8 +90,11 @@ export function Timeline({ items, live, running, profile, older, loading, onAgen
             : <ReplyRow key={part.key} part={part} working={running && part === last ? working : undefined} latest={part === latest} />)}
           {running && last && last.type !== 'reply' && last.type !== 'handoff' && <Waiting from={last.items[0].date} activity={live.activity} />}
           {quote && onQuote && (
-            // The press does not take the selection away, and the click that follows it quotes it.
-            <Button size="xs" variant="glass" className="absolute z-20 mt-1" style={{ left: quote.left, top: quote.top }} onPointerDown={event => event.preventDefault()} onClick={() => { onQuote(quote.text); getSelection()?.removeAllRanges(); setQuote(undefined); }}>
+            // The press does not take the selection away, and the click that follows it quotes it. Esc on the button takes
+            // both away, and is then not the chat's key.
+            <Button size="xs" variant="glass" className="absolute z-20 mt-1" style={{ left: quote.left, top: quote.top }} onPointerDown={event => event.preventDefault()}
+              onClick={() => { onQuote(quote.text); getSelection()?.removeAllRanges(); setQuote(undefined); }}
+              onKeyDown={event => escapes(event, () => { getSelection()?.removeAllRanges(); setQuote(undefined); })}>
               <QuoteIcon className="size-3.5" />Quote
             </Button>
           )}

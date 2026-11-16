@@ -11,7 +11,7 @@ import { WorkLogDetails, WorkLogRow } from './WorkLog.tsx';
 
 type Of<T extends Part['type']> = Extract<Part, { type: T }>;
 const clock = (date: string) => new Date(date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-const Time = ({ date }: { date: string }) => <time dateTime={date} title={new Date(date).toLocaleString()} className="text-muted-foreground text-xs tabular-nums">{clock(date)}</time>;
+const Time = ({ date }: { date: string }) => <time dateTime={date} title={new Date(date).toLocaleString()} className="select-none text-muted-foreground text-xs tabular-nums">{clock(date)}</time>;
 /** The line that something is folded under, which opens it. */
 function Fold({ open, toggle, children }: { open: boolean; toggle: () => void; children: ReactNode }) {
   return (
@@ -40,7 +40,7 @@ export const UserRow = memo(function UserRow({ part, profile }: { part: Of<'user
         {part.images.length > 0 && <div className="mb-2 flex flex-wrap gap-2">{part.images.map(name => <img key={name} src={`/images/${profile}/${name}`} alt="" className="max-h-48 rounded-lg" />)}</div>}
         <Clamp text={part.text} lines={12}><p className="whitespace-pre-wrap text-sm leading-relaxed [overflow-wrap:anywhere]">{part.text}</p></Clamp>
       </div>
-      <div className="flex max-w-[80%] items-center gap-1.5 pe-1 opacity-0 transition-opacity duration-200 focus-within:opacity-100 group-hover:opacity-100"><CopyButton text={part.text} label="Copy message" /><Time date={part.date} /></div>
+      <div className="flex max-w-[80%] items-center gap-1.5 pe-1 opacity-0 transition-opacity duration-200 focus-within:opacity-100 group-hover:opacity-100">{part.text && <CopyButton text={part.text} label="Copy message" />}<Time date={part.date} /></div>
     </div>
   );
 });

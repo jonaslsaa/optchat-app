@@ -18,7 +18,7 @@ process.env.FAKE_PI_HOME = join(home, 'pi');
 mkdirSync(join(home, 'pi', 'pi-optchat'), { recursive: true });
 writeFileSync(join(home, 'pi', 'pi-optchat', 'package.json'), JSON.stringify({ name: 'pi-optchat', version: '0.11.12' }));
 writeFileSync(join(home, 'pi', 'state.json'), JSON.stringify({ version: '1.5.2', providers: ['anthropic', 'openai'], packages: { 'npm:pi-optchat': join(home, 'pi', 'pi-optchat') } }));
-for (const name of ['chat', 'beside', 'sheet', 'memory', 'rows', 'menus', 'fields', 'asks', 'windows', 'importing', 'keys', 'spend', 'commands', 'arrows', 'mute']) {
+for (const name of ['chat', 'beside', 'sheet', 'memory', 'rows', 'menus', 'fields', 'asks', 'windows', 'importing', 'keys', 'spend', 'commands', 'arrows', 'mute', 'said']) {
   const profile = createProfile(home, name);
   if (['memory', 'windows', 'keys', 'spend', 'arrows'].includes(name)) { writeMemory(profile, 16); continue; }
   seed(profile, TEAM.length, Date.now(), TEAM);
@@ -511,6 +511,44 @@ test('a long edit opens as its diff, which scrolls in its box and does not make 
   assert.equal(box.diff, box.drawn, 'the diff is drawn whole inside it');
   assert.equal(box.page, 0, 'the page does not scroll');
   await page.context().close();
+});
+
+test('what is selected in a reply or a report is quoted into the composer, under what is typed, and a report and your own message can be copied', async () => {
+  const page = await open('said'), box = page.getByRole('textbox', { name: 'Message' }), quote = page.getByRole('button', { name: 'Quote' });
+  await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
+  // A line of a report.
+  await page.getByText('Nothing is replayed twice').click({ clickCount: 3 });
+  await quote.click();
+  assert.equal(await box.inputValue(), '> Nothing is replayed twice\n\n');
+  assert.equal(await focused(page), 'Message');
+  assert.equal(await quote.count(), 0, 'the button went with the selection');
+  // A reply, with something typed already: the quote is under it, and what is typed next under the quote.
+  // Three clicks on its last paragraph select on into the row under it: the button is at the paragraph's end all the same.
+  await box.fill('About the agents:');
+  const reply = page.getByText('Started two agents.');
+  await reply.click({ clickCount: 3 });
+  const [line, button] = [await reply.boundingBox(), await quote.boundingBox()];
+  assert.ok(line && button && Math.abs(button.y - line.y - line.height) < 8, 'the Quote button is not under the last line that is selected');
+  await quote.click();
+  await page.keyboard.type('how long?');
+  assert.equal(await box.inputValue(), 'About the agents:\n\n> Started two agents. I\'ll tell you when they report.\n\nhow long?');
+  // What you said yourself is not quoted, and a click takes the selection and the button away.
+  await page.getByText('Good. Get someone to check').click({ clickCount: 3 });
+  assert.equal(await quote.count(), 0);
+  await page.getByText('Nothing is replayed twice').click({ clickCount: 3 });
+  await quote.waitFor();
+  await page.getByText('Nothing is replayed twice').click();
+  await quote.waitFor({ state: 'detached' });
+  // A report and a message of yours are copied whole, as a reply is.
+  const copied = async (name: string) => { await page.getByRole('button', { name }).last().click(); return page.evaluate(() => navigator.clipboard.readText()); };
+  assert.match(await copied('Copy report'), /^\*\*T3 Code replays by sequence number\.\*\*[^]*- Nothing is replayed twice$/);
+  assert.equal(await copied('Copy message'), 'Good. Get someone to check how T3 Code handles reconnects, and someone to run that test on Windows.');
+  // Esc on the button takes it away, and is not the key that stops the run.
+  await run(page);
+  await page.getByText('Nothing is replayed twice').click({ clickCount: 3 });
+  await quote.focus();
+  await goesOn(page, 'on the Quote button');
+  assert.equal(await quote.count(), 0);
 });
 
 test('a field keeps the focus when Enter saves it, and when what was typed is refused', async () => {

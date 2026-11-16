@@ -304,6 +304,12 @@ export function recalled(chat: readonly Item[], text: string, back: boolean) {
   if (text ? at < 0 : !back) return;
   return past[at + (back ? 1 : -1)] ?? (back ? undefined : '');
 }
+/** What is `typed` in the composer with something `said` in the chat under it as a quote, a `>` before each line of it, and
+ * an empty line after it to answer on. */
+export function quoted(typed: string, said: string) {
+  const quote = said.trim().split('\n').map(line => `> ${line}`.trimEnd()).join('\n');
+  return `${typed.trim() ? `${typed.trimEnd()}\n\n` : ''}${quote}\n\n`;
+}
 /** How long something took, as 42s, 3m 05s or 1h 15m. */
 export function took(from: string, to: string) {
   const seconds = Math.max(0, Math.round((Date.parse(to) - Date.parse(from)) / 1000)), minutes = Math.floor(seconds / 60), two = (count: number) => String(count).padStart(2, '0');

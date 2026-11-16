@@ -1,11 +1,11 @@
 import { CircleAlertIcon, CornerUpRightIcon, ListPlusIcon, XIcon } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useImperativeHandle, useRef, useState, type Ref } from 'react';
 import type { PiRecord, WindowState } from '../protocol.ts';
 import { useCommands } from './Commands.tsx';
 import { escapes, label, useShortcuts } from './keys.ts';
 import { Model } from './Model.tsx';
 import { app, type State } from './store.ts';
-import { failure, news, recalled, type Item, type Live, type Notice } from './transcript.ts';
+import { failure, news, quoted, recalled, type Item, type Live, type Notice } from './transcript.ts';
 import { Button, cn, Kbd, Spinner } from './ui.tsx';
 
 /** A question from Pi or one of its extensions (`extension_ui_request`): a choice, a yes or no, or a line of text. Esc in it
@@ -94,7 +94,7 @@ export function SendButton({ steer, ...props }: { steer: boolean; disabled: bool
  * first and the last line of what is in the box. Beside the button that
  * sends is the model the agent runs on, which is picked there. The look is T3 Code's composer
  * (MIT, see THIRD_PARTY_NOTICES.md), over a plain textarea. */
-export function Composer({ state, window, live, chat, onSend }: { state: State; window: WindowState; live: Live; chat: readonly Item[]; onSend?: () => void }) {
+export function Composer({ state, window, live, chat, onSend, ref }: { state: State; window: WindowState; live: Live; chat: readonly Item[]; onSend?: () => void; ref?: Ref<{ quote: (said: string) => void }> }) {
   const [text, setText] = useState(() => app.draft(window.id)), [sending, setSending] = useState(false);
   const area = useRef<HTMLTextAreaElement>(null);
   const running = window.status === 'running', queued = [...live.queued.steering, ...live.queued.followUp];
@@ -102,6 +102,8 @@ export function Composer({ state, window, live, chat, onSend }: { state: State; 
   const change = (value: string) => { setText(value); app.keep(window.id, value); };
   useEffect(() => area.current?.focus(), [window.id]);
   const commands = useCommands(state, window, text, change, area);
+  // What was selected in the chat goes under what is typed, as a quote, and the keys are after it.
+  useImperativeHandle(ref, () => ({ quote: said => { change(quoted(text, said)); area.current?.focus(); } }));
 
   const send = async (later: boolean) => {
     const message = text.trim();

@@ -17,13 +17,17 @@ import type { Updating } from '../protocol.ts';
 /** Where the latest release is asked for. GitHub answers without a token for a public repository, and 404 for a private one,
  * which is "nothing newer". */
 export const LATEST = 'https://api.github.com/repos/jonaslsaa/optchat-app/releases/latest';
+/** Where the releases are for you to read: the only place the app opens a release's page in. */
+export const RELEASES = 'https://github.com/jonaslsaa/optchat-app/releases';
 
 /** What is read of GitHub's answer. `digest` is the sha256 GitHub takes of a file when it is uploaded. */
 const Release = Type.Object({
   tag_name: Type.String(), html_url: Type.String(),
   assets: Type.Array(Type.Object({ name: Type.String(), size: Type.Number(), browser_download_url: Type.String(), digest: Type.Optional(Type.Union([Type.String(), Type.Null()])) })),
 });
-/** A release newer than the app: its page for you, and its zip of the app with what the zip has to be. */
+/** A release newer than the app: its page for you, and its zip of the app with what the zip has to be. The page is opened
+ * in your browser, so it is the one the answer names only when that is a page of this repository on GitHub, and else the
+ * list of releases: an answer from elsewhere does not say where your browser goes. */
 export interface Update { version: string; page: string; url: string; size: number; sha256: string }
 
 const parts = (version: string) => /^v?(\d+)\.(\d+)\.(\d+)$/.exec(version)?.slice(1).map(Number);
@@ -41,7 +45,7 @@ export function offered(release: unknown, current: string, arch: string = proces
   if (!Value.Check(Release, release) || !newer(release.tag_name, current)) return undefined;
   const version = release.tag_name.replace(/^v/, ''), zip = release.assets.find(asset => asset.name === `OptChat-${version}-${arch}.zip`);
   const sha256 = /^sha256:([0-9a-f]{64})$/.exec(zip?.digest ?? '')?.[1];
-  return zip && sha256 ? { version, page: release.html_url, url: zip.browser_download_url, size: zip.size, sha256 } : undefined;
+  return zip && sha256 ? { version, page: release.html_url.startsWith('https://github.com/jonaslsaa/optchat-app/') ? release.html_url : RELEASES, url: zip.browser_download_url, size: zip.size, sha256 } : undefined;
 }
 /** The latest release, when it is an update for an app at `current`. None is none (a private repository, or no release yet);
  * any other refusal, as when GitHub has been asked too often, is no answer, as no network is. */
@@ -124,8 +128,13 @@ export interface UpdaterOptions {
 const words = (error: unknown): string => {
   if (!(error instanceof Error)) return String(error);
   const { message, cause } = error;
-  return message === 'fetch failed' && cause !== undefined && words(cause instanceof AggregateError ? cause.errors[0] : cause) || message;
+  return message === 'fetch failed' && cause !== undefined && words(cause instanceof AggregateError ? cause.errors[0] ?? '' : cause) || message;
 };
+/** What a click on the update button does, by what the updater is doing: it opens the page of an update this copy cannot
+ * install, and else looks, as Check for Updates… does, which for an update that is ready asks whether to restart. */
+export function clicked(state: Updating | undefined, does: { open(page: string): void; look(): void }) {
+  if (state?.state === 'manual') does.open(state.page); else does.look();
+}
 /** Looks for updates and installs them. `look` asks for the latest release and, if it is newer, makes it ready and says so
  * once (`ready`), or says that you have to get it yourself (`manual`): where the app cannot be replaced, or the same version
  * could not be installed before. A look you `asked` for says again what was said before, and every look answers what it

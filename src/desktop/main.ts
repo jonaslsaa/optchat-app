@@ -11,7 +11,7 @@ import { loginEnvironment } from './environment.ts';
 import { destination } from './links.ts';
 import { appMenu } from './menu.ts';
 import { quitter } from './quit.ts';
-import { updater } from './update.ts';
+import { clicked, updater } from './update.ts';
 import { contextMenu, placed, recovery } from './window.ts';
 
 /** The desktop app: a window around the same page the server serves to a browser, with the server in this process. It is built
@@ -29,9 +29,8 @@ else {
   let updates: ReturnType<typeof updater> | undefined;
   /** Looks for an update because you asked, and answers whatever it finds: an update is said as at any other look. */
   let check: (() => void) | undefined;
-  // A click on the page's update button: the page of an update this copy cannot install, and else what the menu's Check for
-  // Updates… does, which for an update that is ready is the question whether to restart.
-  const update = () => { const now = updates?.state(); if (now?.state === 'manual') browse(now.page); else check?.(); };
+  // A click on the page's update button (`clicked`): the release's page, or what the menu's Check for Updates… does.
+  const update = () => clicked(updates?.state(), { open: page => browse(page), look: () => check?.() });
   const options = { ui: join(import.meta.dirname, '../ui'), cwd: homedir(), opener: terminal(), launcher: launch, update };
   const server = await startServer({ ...options, port: PORT }).catch(() => startServer(options));
   // The Mac does not fall asleep under agents at work (awake.ts): looked at every ten seconds, which is soon enough for a
@@ -145,7 +144,7 @@ else {
         // Not "the newest": a newer release whose app is not there for this Mac yet is no update either.
         if (found === 'none') say(`There is no update for OptChat ${app.getVersion()}`);
         if (found === 'busy') say('OptChat is looking for an update already', 'If there is one it is downloaded now, and you are asked when it is ready.');
-      }, () => { const now = updates?.state(); say('OptChat could not look for an update', now?.state === 'failed' ? now.error : undefined); });
+      }, () => { const now = updates?.state(); say('OptChat could not update', now?.state === 'failed' ? now.error : undefined); });
     }
     // The menu bar, in place of Electron's own, which names the app by its package (menu.ts).
     Menu.setApplicationMenu(Menu.buildFromTemplate(appMenu({ page: tell, keys: () => current()?.webContents.isFocused() ?? false, update: check, browse })));

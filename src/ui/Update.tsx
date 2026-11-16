@@ -12,7 +12,7 @@ export function says(update: Updating) {
     case 'downloading': return `Downloading OptChat ${update.version}: ${update.percent}%`;
     case 'ready': return `OptChat ${update.version} is ready. Restart to install it`;
     case 'manual': return `OptChat ${update.version} is out. Open its page to download it`;
-    case 'failed': return `Could not look for an update: ${update.error.replace(/\.$/, '')}. Try again`;
+    case 'failed': return `Could not update: ${update.error.replace(/\.$/, '')}. Try again`;
   }
 }
 
@@ -20,20 +20,27 @@ export function says(update: Updating) {
 const RADIUS = 14, AROUND = 2 * Math.PI * RADIUS;
 const MARK = 'absolute top-0.5 right-0.5 size-1.5 rounded-full';
 
+/** The icon of a button that looks for something, turning while it looks. A look is over in a moment: the turn it started is
+ * finished, so the icon never jumps back. It is only there while the button has nothing else to show, so a turn is never
+ * left over from a look that went on to a download. */
+function Refresh({ looking }: { looking: boolean }) {
+  const [turning, setTurning] = useState(false);
+  useEffect(() => { if (looking) setTurning(true); }, [looking]);
+  return <RefreshCwIcon className={cn(turning && 'motion-safe:animate-spin')} onAnimationIteration={() => { if (!looking) setTurning(false); }} />;
+}
+
 /** The desktop app's update button: a small round one that shows what the updater is doing (docs/desktop.md) and, clicked,
  * does the next thing, which is the app's to do and to say: it looks now, asks whether to restart into the update that is
  * ready, or opens the page of one you have to get yourself. It turns while it looks, fills a ring while it downloads, and has
  * a mark when there is something for you: an update, or a look that failed. Not a button while it is busy. The icons and
  * the ring are T3 Code's sidebar update button (MIT, see THIRD_PARTY_NOTICES.md). */
 export function UpdateButton({ update, className }: { update: Updating; className?: string }) {
-  const { state } = update, looking = state === 'looking', busy = looking || state === 'downloading', text = says(update);
-  // A look is over in a moment: the turn it started is finished, so the icon never jumps back.
-  const [turning, setTurning] = useState(false);
-  useEffect(() => { if (looking) setTurning(true); }, [looking]);
+  const { state } = update, busy = state === 'looking' || state === 'downloading', text = says(update);
   return (
     <Button variant="ghost-muted" size="icon-sm" aria-label={text} title={text} aria-disabled={busy || undefined} data-update={state}
       className={cn('rounded-full', busy && 'cursor-default hover:bg-transparent active:scale-100', (state === 'ready' || state === 'manual') && 'text-foreground', className)}
-      onClick={() => { if (!busy) void app.update(); }}>
+      // The second click of a double click asks nothing a second time: one question, one page opened.
+      onClick={event => { if (!busy && event.detail < 2) void app.update(); }}>
       {state === 'downloading' ? (
         <>
           <svg aria-hidden="true" viewBox="0 0 32 32" className="enter pointer-events-none absolute -inset-px size-7 -rotate-90">
@@ -45,7 +52,7 @@ export function UpdateButton({ update, className }: { update: Updating; classNam
         </>
       ) : state === 'ready' ? <RotateCwIcon className="enter" />
         : state === 'manual' ? <DownloadIcon className="enter" />
-        : <RefreshCwIcon className={cn(turning && 'motion-safe:animate-spin')} onAnimationIteration={() => { if (!looking) setTurning(false); }} />}
+        : <Refresh looking={state === 'looking'} />}
       {(state === 'ready' || state === 'manual') && <span className={cn(MARK, 'enter bg-sky-500 dark:bg-sky-300/80')} />}
       {state === 'failed' && <span className={cn(MARK, 'enter bg-warning')} />}
     </Button>

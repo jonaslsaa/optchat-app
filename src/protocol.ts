@@ -176,12 +176,11 @@ const target = Type.Object({ window: Type.String() });
 const none = Type.Object({});
 const method = <P extends TSchema, R extends TSchema>(params: P, result: R) => ({ params, result });
 
-/** Every request: what it takes and what it answers. */
+const version = Type.String();
 /** What the desktop app's updater is doing (docs/desktop.md): nothing (and whether it has `looked` since the app opened, and
  * found nothing newer), looking, downloading a version (`percent` of its file), waiting with it `ready` to take the app's
  * place at the next quit, knowing of one this copy cannot install itself (`manual`, with the release's `page`), or `failed`,
  * with why in the error's own words. */
-const version = Type.String();
 export const Updating = Type.Union([
   Type.Object({ state: Type.Literal('idle'), looked: Type.Boolean() }),
   Type.Object({ state: Type.Literal('looking') }),
@@ -192,6 +191,7 @@ export const Updating = Type.Union([
 ]);
 export type Updating = Static<typeof Updating>;
 
+/** Every request: what it takes and what it answers. */
 export const methods = {
   /** The profiles on disk. */
   profiles: method(none, Type.Object({ profiles: Type.Array(Type.Object({ name: Type.String() })) })),

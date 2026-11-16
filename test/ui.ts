@@ -959,9 +959,14 @@ test('the update button says what the updater is doing in each of its states, a 
     own.updating({ state: 'manual', version: '1.1.0', page: 'https://example.com/release' });
     await shows('OptChat 1.1.0 is out. Open its page to download it', true);
     own.updating({ state: 'failed', error: 'GitHub answered 403.' });
-    await shows('Could not look for an update: GitHub answered 403. Try again', true);
+    await shows('Could not update: GitHub answered 403. Try again', true);
     own.updating({ state: 'idle', looked: true });
     await shows('No update found. Look again', true);
+    // A double click is one click: one question asked, one page opened.
+    const once = clicks;
+    await button.dblclick();
+    await page.waitForTimeout(200);
+    assert.equal(clicks - once, 1, 'a double click');
 
     // With the sidebar closed, the button is in the top row while there is something to say, and not while there is nothing.
     await page.getByRole('button', { name: 'Toggle the sidebar' }).click();
@@ -997,6 +1002,14 @@ test('the update button says what the updater is doing in each of its states, a 
       if (motion === 'no-preference') {
         assert.notEqual(await turns(), 'none', 'the turn it began is finished, not cut off');
         await moving.waitForFunction(() => getComputedStyle(document.querySelector('[data-update] svg')!).animationName === 'none', undefined, { timeout: 3000 });
+        // A look that went on to a download which failed: nothing is left to turn.
+        own.updating({ state: 'looking' });
+        await icon.waitFor();
+        own.updating({ state: 'downloading', version: '1.1.0', percent: 40 });
+        await moving.locator('[data-update="downloading"]').waitFor();
+        own.updating({ state: 'failed', error: 'terminated' });
+        await moving.locator('[data-update="failed"]').waitFor();
+        assert.equal(await turns(), 'none', 'the icon turns after a download that failed');
       }
       await moving.context().close();
     }

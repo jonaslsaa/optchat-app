@@ -348,12 +348,12 @@ async function pictures(browser: Browser, control: Client) {
     await page.getByText(range ? 'Cost over time' : 'Estimated at API prices').waitFor();
     return page;
   };
-  await shot(await usage('long', { height: 1000 }), '70-usage-today');
-  await shot(await usage('long', { height: 1000 }, 'Last 7 days'), '71-usage-week');
-  await shot(await usage('long', { dark: true, height: 1000 }, 'Last 7 days'), '72-usage-week-dark');
-  await shot(await usage('long', { width: 420, height: 1100 }, 'Last 7 days'), '73-usage-week-narrow');
-  await shot(await usage('empty'), '74-usage-none');
-  await shot(await usage('notes', { height: 1150 }, 'All time'), '75-usage-unreadable-line');
+  await shot(await usage('long', { height: 1000 }), '73-usage-today');
+  await shot(await usage('long', { height: 1000 }, 'Last 7 days'), '74-usage-week');
+  await shot(await usage('long', { dark: true, height: 1000 }, 'Last 7 days'), '75-usage-week-dark');
+  await shot(await usage('long', { width: 420, height: 1100 }, 'Last 7 days'), '76-usage-week-narrow');
+  await shot(await usage('empty'), '77-usage-none');
+  await shot(await usage('notes', { height: 1150 }, 'All time'), '78-usage-unreadable-line');
 
   // Talking to an agent, under its chat. A message is worth a Pi: the app's own is started on the chat for the first one, and
   // its agents are at work with it. One at work keeps the message until it reads it.

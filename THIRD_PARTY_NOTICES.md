@@ -9,6 +9,7 @@ Parts of the UI come from [T3 Code](https://github.com/pingdotgg/t3code) (commit
 - `src/ui/index.css`: the colour tokens, the `surface-glass` utility, the `.chat-markdown` rules and the window drag region (`window-bar`), from `apps/web/src/index.css`.
 - `src/desktop/environment.ts`: how the login shell is asked for its environment (`-ilc`, the values between marks), after `packages/shared/src/shell.ts`.
 - `src/desktop/main.ts`: the window's title bar options, from `apps/desktop/src/window/DesktopWindow.ts`.
+- `src/desktop/window.ts`: the right-click menu (its entries and their order), the rule for a window's kept place (whole on one screen, a pixel past its edge allowed) and loading a crashed page again at most three times in a minute, from `apps/desktop/src/window/DesktopWindow.ts`.
 - `src/ui/badge.ts`: a profile's two letters and its colour, from `apps/web/src/projectIdentity.ts` (the rules as they are) and `projectIconColors.ts` (the eighteen colours). `ProfileBadge` in `src/ui/Profiles.tsx`: the drawing, copied from `apps/web/src/components/ProjectMonogram.tsx`.
 - `src/ui/ui.tsx`: the `Button` and `Kbd` class strings, from `apps/web/src/components/ui/button.tsx` and `kbd.tsx`, without Base UI.
 - `src/ui/Composer.tsx`, `Rows.tsx`, `Markdown.tsx`, `Sidebar.tsx`, `Timeline.tsx` and `App.tsx`: the looks (Tailwind class strings) of T3 Code's composer, timeline rows, code block frame, sidebar thread row and new-thread heading. The components themselves are written for this app.

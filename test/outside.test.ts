@@ -6,7 +6,7 @@ import type { Push, WindowState } from '../src/protocol.ts';
 import { startServer } from '../src/server/server.ts';
 // pi-optchat's own lock, which only Pi takes: here it stands for a Pi in a terminal.
 import { describeOwner, lockProfile } from 'pi-optchat/files';
-import { createProfile, temporaryHome } from './support.ts';
+import { createProfile, temporaryHome, writeRun } from './support.ts';
 
 const home = temporaryHome();
 
@@ -26,6 +26,9 @@ test('a profile a Pi outside the app holds is never joined unasked, and is the a
   assert.deepEqual(main.outside, { pid: 4242, host: 'a-terminal', cwd: '/somewhere' });
   await assert.rejects(client.request('prompt', { window: main.id, text: 'hello' }), /This chat is running outside the app\./);
   assert.equal(windows.get(main.id)?.status, 'stopped');
+  // An agent at work under that Pi is not the app's to stop: a quit does not ask about it.
+  writeRun(directory, { id: 'aaaaaaaa', state: 'running', started: Date.now() });
+  assert.equal(await server.working(), 0);
 
   // A connected window is the explicit way in: it joins the Pi outside, and the main window still starts none.
   const { window } = await client.request('open', { profile: 'work', role: 'connected' });

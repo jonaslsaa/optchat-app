@@ -208,6 +208,11 @@ async function pictures(browser: Browser, control: Client) {
   await first.getByText('The app installed this Pi into its own folder.').waitFor();
   await first.getByText('Not installed in this Pi.').waitFor();
   await shot(first, '20-pi-installed');
+  // The first profile's name, when it will not do: why is said under it.
+  await first.getByRole('textbox', { name: 'Profile name' }).fill('My Chat');
+  await first.getByRole('button', { name: 'Create profile' }).click();
+  await first.getByRole('alert').waitFor();
+  await shot(first, '145-first-profile-refused');
   // Later, with a profile: the settings still say where the app's Pi is, and how to put it on your PATH.
   await first.getByRole('textbox', { name: 'Profile name' }).fill('work');
   await first.getByRole('button', { name: 'Create profile' }).click();
@@ -560,6 +565,26 @@ async function pictures(browser: Browser, control: Client) {
   await typed.reload();
   await box.waitFor();
   if (await box.inputValue() !== '') throw new Error('A message that was sent is in the box again after a reload.');
+
+  // Another profile: the list of profiles with the way to a new one under it, the dialog that names it, a name there is
+  // already, and the dialog narrow and dark. Nothing is made.
+  const naming = await open(['work'], { width: 900, height: 520 });
+  await naming.getByRole('button', { name: 'Open a profile' }).click();
+  await shot(naming, '141-profiles-list');
+  await naming.getByRole('button', { name: 'New profile…' }).click();
+  await naming.getByRole('textbox', { name: 'Profile name' }).fill('research');
+  await shot(naming, '142-new-profile');
+  await naming.getByRole('textbox', { name: 'Profile name' }).fill('work');
+  await naming.keyboard.press('Enter');
+  await naming.getByRole('dialog').getByRole('alert').waitFor();
+  await shot(naming, '143-new-profile-taken');
+  const pocketed = await open(['work'], { width: 420, dark: true });
+  await pocketed.getByRole('button', { name: 'Open a profile' }).click();
+  await pocketed.getByRole('button', { name: 'New profile…' }).click();
+  await pocketed.getByRole('textbox', { name: 'Profile name' }).fill('Not a name');
+  await pocketed.keyboard.press('Enter');
+  await pocketed.getByRole('dialog').getByRole('alert').waitFor();
+  await shot(pocketed, '144-new-profile-refused-dark-narrow');
 
   // The desktop app's update button, at the sidebar's foot, in each thing its updater does. Last: from here on the server has
   // an updater, so every page has the button.

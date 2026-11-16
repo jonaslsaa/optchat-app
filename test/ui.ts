@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { appendFileSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
+import { appendFileSync, mkdirSync, readdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { after, before, test } from 'node:test';
 import { chromium, type Browser, type Page } from 'playwright-core';
@@ -950,7 +950,13 @@ test('with motion on, what you open comes in, and with less motion it is there a
     const whole = motion === 'reduce', seen = (opacity: string, what: string) => assert.equal(Number(opacity) === 1, whole, `${what} is at ${opacity} of its opacity as it appears, with motion ${whole ? 'reduced' : 'on'}`);
     await page.getByRole('button', { name: 'Open a profile' }).click();
     seen(await page.getByRole('listbox', { name: 'Profiles' }).evaluate(list => getComputedStyle(list).opacity), 'the list of profiles');
+    // The New Profile dialog, opened from under that list, and the shade behind it.
+    await page.getByRole('button', { name: 'New profile…' }).click();
+    const naming = page.locator('dialog[aria-label="New profile"]');
+    seen(await naming.evaluate(dialog => getComputedStyle(dialog).opacity), 'the New Profile dialog');
+    seen(await naming.evaluate(dialog => getComputedStyle(dialog, '::backdrop').opacity), 'the shade behind the New Profile dialog');
     await page.keyboard.press('Escape');
+    await naming.waitFor({ state: 'detached' });
     // A sheet, and the shade behind it.
     await page.getByRole('button', { name: 'Agents and GitHub' }).click();
     const sheet = page.locator('dialog[aria-label="Agents and GitHub"]');
@@ -1073,4 +1079,105 @@ test('the update button says what the updater is doing in each of its states, a 
       await moving.context().close();
     }
   } finally { await own.close(); }
+});
+
+test('New Profile…: the menu and the list of profiles open a dialog that makes another profile and opens it; a name that will not do is said in it, Esc and Cancel make nothing, and a run in the profile behind it goes on', async () => {
+  const at = join(home, 'naming');
+  createProfile(at, 'alone');
+  const own = await startServer({ home: at, app: join(at, 'app'), cwd: home, pi }), client = await connect(own.url);
+  const ask = (page: Page, action: string) => page.evaluate(action => { dispatchEvent(new CustomEvent('optchat-menu', { detail: action })); }, action);
+  try {
+    const context = await browser.newContext({ viewport: WIDE, reducedMotion: 'reduce' });
+    await context.addInitScript(saved => localStorage.setItem('optchat-app', saved), JSON.stringify({ tabs: ['alone'], profile: 'alone', selected: {} }));
+    const page = await context.newPage();
+    await page.goto(own.page);
+    await page.getByRole('textbox', { name: 'Message' }).waitFor();
+    const dialog = page.getByRole('dialog', { name: 'New profile' }), field = dialog.getByRole('textbox', { name: 'Profile name' }), create = dialog.getByRole('button', { name: 'Create profile' }), refused = dialog.getByRole('alert');
+    const profiles = async () => (await client.request('profiles', {})).profiles.map(profile => profile.name);
+    // Gone from the page, which is a frame after it is closed: a closed dialog says so at the next one.
+    const closed = async (how: string) => { await page.locator('dialog[aria-label="New profile"]').waitFor({ state: 'detached', timeout: 3000 }).catch(() => assert.fail(`${how} did not close the dialog.`)); };
+    await run(page);
+
+    // The menu's New Profile… opens the dialog, with the keys in its name. Esc puts it away and does nothing else: nothing
+    // is made, and the run behind it goes on.
+    await ask(page, 'newProfile');
+    await field.waitFor();
+    assert.equal(await focused(page), 'Profile name');
+    await field.fill('unmade');
+    await goesOn(page, 'in the New Profile dialog');
+    await closed('Esc');
+    // Asked for by the menu while a list lies open on the page: Esc is the dialog's, which is the nearer of the two, and
+    // the next one the list's.
+    await page.getByRole('button', { name: 'Open a profile' }).click();
+    await page.locator('[role=listbox]').waitFor();
+    await ask(page, 'newProfile');
+    await field.waitFor();
+    await goesOn(page, 'in the New Profile dialog, over the list of profiles');
+    await closed('Esc, over the list of profiles');
+    assert.equal(await page.locator('[role=listbox]').count(), 1);
+    await goesOn(page, 'in the list of profiles');
+    assert.equal(await page.locator('[role=listbox]').count(), 0);
+    // The other way in, and the only one in a browser: under the list of profiles. Cancel makes nothing either, and the focus
+    // is where it was.
+    await page.getByRole('button', { name: 'Open a profile' }).click();
+    await page.getByRole('button', { name: 'New profile…' }).click();
+    assert.equal(await field.inputValue(), '', 'what was typed and put away is not there again');
+    await field.fill('unmade');
+    await dialog.getByRole('button', { name: 'Cancel' }).click();
+    await closed('Cancel');
+    assert.equal(await focused(page), 'Open a profile');
+    assert.deepEqual(await profiles(), ['alone']);
+
+    // No name, or one of spaces, is not asked for at all. One that will not do, and one there is already, are refused in
+    // pi-optchat's words, in the dialog, with the focus in the name; nothing is made, and nothing is said over the page.
+    await ask(page, 'newProfile');
+    assert.equal(await create.isDisabled(), true);
+    await field.fill('   ');
+    assert.equal(await create.isDisabled(), true);
+    await field.fill('Not a name');
+    await page.keyboard.press('Enter');
+    await refused.filter({ hasText: 'Profile names: 1–64 lowercase letters, digits, hyphens, or underscores.' }).waitFor();
+    assert.equal(await focused(page), 'Profile name');
+    await field.fill('alone');
+    assert.equal(await refused.count(), 0, 'what was said of the last name is gone once another is typed');
+    await create.click();
+    await refused.filter({ hasText: 'Profile already exists: alone' }).waitFor();
+    assert.equal(await focused(page), 'Profile name', 'the button that was pressed went off while it asked, and the focus is in the name again');
+    assert.deepEqual([await profiles(), await page.getByRole('alert').count()], [['alone'], 1]);
+
+    // A name that will do: the profile is made, opened in a tab beside the first and put in front, with the keys in its chat.
+    // The spaces around it are not part of it.
+    await field.fill(' second ');
+    await page.keyboard.press('Enter');
+    await closed('Making the profile');
+    await page.getByRole('tab', { name: 'second' }).and(page.locator('[aria-selected=true]')).waitFor();
+    await page.getByRole('textbox', { name: 'Message' }).waitFor();
+    assert.deepEqual([await profiles(), await focused(page)], [['alone', 'second'], 'Message']);
+    // It is as a first profile is: pi-optchat's own settings and instructions, and nothing else.
+    assert.deepEqual(readdirSync(join(at, 'profiles', 'second')).sort(), ['AGENTS.md', 'config.json']);
+    // The first profile's chat was left alone: it is still at work, and is stopped from its own page.
+    assert.equal((await client.request('windows', {})).windows.find(window => window.id === 'alone/main')?.status, 'running');
+    await page.getByRole('tab', { name: 'alone' }).click();
+    await stop(page).waitFor();
+    await stops(page, 'in the first profile, after another was made');
+
+    // From another page, the settings: the dialog lies over them, and the new profile's chat takes their place.
+    await page.getByRole('button', { name: 'Settings' }).click();
+    await page.getByRole('radiogroup', { name: 'Theme' }).waitFor();
+    await ask(page, 'newProfile');
+    await field.fill('third');
+    await create.click();
+    await closed('Making the profile');
+    await page.getByRole('tab', { name: 'third' }).and(page.locator('[aria-selected=true]')).waitFor();
+    assert.equal(await page.getByRole('radiogroup', { name: 'Theme' }).count(), 0);
+    await page.context().close();
+
+    // With no profile yet the first page is where one is named: no dialog over it, and the keys in its name.
+    const first = await open();
+    await first.getByRole('textbox', { name: 'Profile name' }).waitFor();
+    await ask(first, 'newProfile');
+    await first.waitForTimeout(300);
+    assert.deepEqual([await first.getByRole('dialog').count(), await focused(first)], [0, 'Profile name']);
+    await first.context().close();
+  } finally { client.close(); await own.close(); }
 });

@@ -11,7 +11,7 @@ import { MemoryView } from './Memory.tsx';
 import { NO_TREE } from './memory.ts';
 import { Outside } from './Outside.tsx';
 import { BESIDE, Panel, type Shown } from './Panel.tsx';
-import { ProfileName, Tabs } from './Profiles.tsx';
+import { NewProfileDialog, ProfileName, Tabs } from './Profiles.tsx';
 import { Settings, Welcome } from './Settings.tsx';
 import { missing } from './Setup.tsx';
 import { Sidebar } from './Sidebar.tsx';
@@ -27,10 +27,10 @@ const NOTHING = idle();
 const SHOWS = [['Chat', false], ['Memory', true]] as const;
 
 /** What the desktop app's menu bar asks of a profile's page, which its own shortcuts run too. */
-type InProfile = Record<Exclude<MenuAction, 'settings' | 'usage'>, () => void>;
+type InProfile = Record<Exclude<MenuAction, 'settings' | 'usage' | 'newProfile'>, () => void>;
 /** One profile: its windows on the left, the selected window's chat, and beside the main chat its agents or what it named on
  * GitHub, when they are opened. */
-function Profile({ state, profile, onSettings, onUsage, ref }: { state: State; profile: string; onSettings: () => void; onUsage: () => void; ref: Ref<InProfile> }) {
+function Profile({ state, profile, onSettings, onUsage, onNewProfile, ref }: { state: State; profile: string; onSettings: () => void; onUsage: () => void; onNewProfile: () => void; ref: Ref<InProfile> }) {
   // The sidebar stands beside the chat in a wide window. In a narrow one it lies over the chat and is opened for one pick: a
   // window picked, a new one, Esc and a press beside it close it (`useOverlay`), and it is closed again whenever the window
   // is narrow anew. Its top row is then not what the desktop app's window is dragged by: Electron goes by the order in the
@@ -92,7 +92,7 @@ function Profile({ state, profile, onSettings, onUsage, ref }: { state: State; p
           {/* The update button is at the sidebar's foot. With the sidebar closed it is here, while it has something to say; on a
               narrow page, where the row is full, only while that is for you to act on, and not while the app looks or downloads. */}
           {!sidebar && state.update && state.update.state !== 'idle' && <UpdateButton update={state.update} className={cn('-ms-1', (state.update.state === 'looking' || state.update.state === 'downloading') && 'max-md:hidden')} />}
-          {state.tabs.length === 1 && <><ProfileName state={state} profile={profile} /><span aria-hidden="true" className="-ms-1.5 text-muted-foreground/50 text-sm">/</span></>}
+          {state.tabs.length === 1 && <><ProfileName state={state} profile={profile} onNew={onNewProfile} /><span aria-hidden="true" className="-ms-1.5 text-muted-foreground/50 text-sm">/</span></>}
           <h1 className={cn('min-w-0 truncate font-medium text-sm', name === UNTITLED && 'text-muted-foreground')}>{name}</h1>
           {own && <span className="shrink-0 rounded-full border px-2 py-0.5 text-2xs text-muted-foreground">{window.completed ? 'Completed' : 'Connected window'}</span>}
           <span className="flex-1" />
@@ -130,6 +130,8 @@ function Profile({ state, profile, onSettings, onUsage, ref }: { state: State; p
 export function App() {
   // The page in the chat's place, if one is: the settings, or what the profile in front used.
   const state = useApp(), [page, setPage] = useState<'settings' | 'usage'>(), settings = page === 'settings', needs = missing(state);
+  // The New Profile dialog, over whatever page is there.
+  const [naming, setNaming] = useState(false), name = () => setNaming(true);
   const toSettings = () => setPage(page => page === 'settings' ? undefined : 'settings'), chat = useRef<InProfile>(null);
   // Such a page is in place of the chat, so Esc there closes it: a run is stopped from the chat, where it can be seen.
   useShortcuts(() => ({ 'mod+,': toSettings, ...page && { escape: () => setPage(undefined) } }), [page]);
@@ -141,14 +143,18 @@ export function App() {
     if (connecting) return false;
     // The menu's Settings… opens them and never closes them, as its key does.
     if (action === 'settings') return setPage('settings');
+    // A profile after the first is named in a dialog. The first is named on the first page, as below.
+    if (action === 'newProfile' && state.profile) return name();
     if (opening) return false;
     if (action === 'usage' && state.profile) return setPage('usage');
     flushSync(() => setPage(undefined));
-    if (action !== 'usage' && chat.current) chat.current[action](); else document.querySelector<HTMLElement>('[aria-label="Profile name"]')?.focus();
+    if (action !== 'usage' && action !== 'newProfile' && chat.current) chat.current[action](); else document.querySelector<HTMLElement>('[aria-label="Profile name"]')?.focus();
   }, [connecting, opening, state.profile]);
   return (
     <div className="flex h-dvh flex-col">
-      {state.tabs.length > 1 && <Tabs state={state} />}
+      {state.tabs.length > 1 && <Tabs state={state} onNew={name} />}
+      {/* The new profile is opened in the chat's place: a page that stood there gives way to it. */}
+      {naming && <NewProfileDialog onClose={() => setNaming(false)} onMade={() => setPage(undefined)} />}
       {/* What the app has to tell you (`notice`). The desktop app has them at the foot: its window's buttons are in the top row. */}
       {state.connection === 'lost' && <p role="status" className="notice enter shrink-0 bg-warning-surface px-4 py-1.5 text-center text-warning-foreground text-xs">The server is not answering. Trying again…</p>}
       {state.connection === 'refused' && <p role="status" className="notice enter shrink-0 bg-warning-surface px-4 py-1.5 text-center text-warning-foreground text-xs">This page's address has no token, or one from before the server started again. Open the address the server printed.</p>}
@@ -164,7 +170,7 @@ export function App() {
       )}
       {settings ? <Settings state={state} onClose={() => setPage(undefined)} />
         : page && state.profile ? <UsagePage key={state.profile} state={state} profile={state.profile} onClose={() => setPage(undefined)} />
-        : state.profile ? <Profile ref={chat} key={state.profile} state={state} profile={state.profile} onSettings={() => setPage('settings')} onUsage={() => setPage('usage')} />
+        : state.profile ? <Profile ref={chat} key={state.profile} state={state} profile={state.profile} onSettings={() => setPage('settings')} onUsage={() => setPage('usage')} onNewProfile={name} />
         : state.connection === 'connecting' ? <p className="m-auto text-muted-foreground text-sm">Connecting…</p>
         : <Welcome state={state} />}
     </div>

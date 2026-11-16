@@ -208,12 +208,11 @@ export class App {
     const setup = await this.ask('setup', { fresh });
     if (setup) this.set({ setup });
   }
-  /** Makes a profile and opens it. Whether it was made: the server says why when it was not. */
+  /** Makes a profile, which is then there to open. Why not, when pi-optchat will not make it (a name that will not do, or one
+   * there is already): that is said where the name was typed, not over the page. */
   async createProfile(name: string) {
-    if (!await this.ask('createProfile', { name })) return false;
+    try { await this.request('createProfile', { name }); } catch (error) { return error instanceof Error ? error.message : String(error); }
     this.set({ profiles: [...this.state.profiles, name].sort() });
-    await this.openProfile(name);
-    return true;
   }
   /** The profiles as they are now. Once there is one, it is opened. */
   async findProfiles() {

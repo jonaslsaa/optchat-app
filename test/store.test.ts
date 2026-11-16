@@ -197,21 +197,25 @@ test('the first profile is made from the page: pi-optchat makes it, and it opens
   await app.start(server.url);
   assert.deepEqual([app.state.profiles, app.state.profile], [[], undefined]);
 
-  // What makes a name is pi-optchat's to say, and the page says it after it.
-  assert.equal(await app.createProfile('My Chat'), false);
-  assert.match(app.state.error ?? '', /Profile names: 1–64 lowercase letters, digits, hyphens, or underscores\./);
-  assert.equal(await app.createProfile('../elsewhere'), false);
+  // What makes a name is pi-optchat's to say, and the page says it after it: where the name was typed, not over the page.
+  assert.match(await app.createProfile('My Chat') ?? '', /Profile names: 1–64 lowercase letters, digits, hyphens, or underscores\./);
+  assert.match(await app.createProfile('../elsewhere') ?? '', /Profile names:/);
+  assert.equal(app.state.error, undefined);
   assert.equal(existsSync(join(home, 'profiles')), false, 'and nothing is written for a name that will not do');
 
-  assert.equal(await app.createProfile('first'), true);
+  assert.equal(await app.createProfile('first'), undefined);
+  assert.deepEqual([app.state.profiles, app.state.profile], [['first'], undefined], 'it is there to open');
+  await app.openProfile('first');
   assert.deepEqual([app.state.profiles, app.state.profile, app.state.windows.map(window => window.id)], [['first'], 'first', ['first/main']]);
   // The profile is pi-optchat's own: its settings and its instructions, where pi-optchat keeps them.
   assert.deepEqual(readdirSync(join(home, 'profiles', 'first')).sort(), ['AGENTS.md', 'config.json']);
   assert.equal(await app.send('first/main', 'hello'), true);
   // One that is there is not made again, nor written over.
-  app.dismiss();
-  assert.equal(await app.createProfile('first'), false);
-  assert.match(app.state.error ?? '', /Profile already exists: first/);
+  assert.match(await app.createProfile('first') ?? '', /Profile already exists: first/);
+  // A second profile is opened beside the first, which stays open with its window.
+  assert.equal(await app.createProfile('second'), undefined);
+  await app.openProfile('second');
+  assert.deepEqual([app.state.profiles, app.state.tabs, app.state.profile, app.state.windows.map(window => window.id).sort()], [['first', 'second'], ['first', 'second'], 'second', ['first/main', 'second/main']]);
 });
 
 test('an agent\'s chat is read on from where the page has it, and a report that is not its last answer closes it', async t => {

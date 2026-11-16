@@ -3,6 +3,7 @@ import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { Value } from 'typebox/value';
 import { Settings, type Params } from '../protocol.ts';
+import { isEditor } from './files.ts';
 
 /** The app's own folder: its settings, and the Pi it installs. Never pi-optchat's `~/.optchat`. `OPTCHAT_APP_HOME` moves it,
  * which is how tests keep away from yours. */
@@ -24,11 +25,12 @@ export function readSettings(directory: string): Settings {
 }
 export const isDirectory = (path: string) => statSync(path, { throwIfNoEntry: false })?.isDirectory() ?? false;
 /** Keeps `kept` with what `change` names changed, written whole beside the old file and then put in its place, so a crash
- * leaves one or the other. A folder is kept as its whole path, and has to be there. */
-export function writeSettings(directory: string, kept: Settings, { theme = kept.theme, cwd: folder, awake = kept.awake }: Params<'setSettings'>): Settings {
+ * leaves one or the other. A folder is kept as its whole path, and has to be there; an editor is one of `EDITORS`. */
+export function writeSettings(directory: string, kept: Settings, { theme = kept.theme, cwd: folder, awake = kept.awake, editor = kept.editor }: Params<'setSettings'>): Settings {
   const cwd = folder === undefined ? kept.cwd : folder === null ? undefined : whole(folder);
   if (folder && cwd && !isDirectory(cwd)) throw new Error(`No such directory: ${cwd}`);
-  const settings: Settings = { theme, ...cwd !== undefined && { cwd }, awake }, file = join(directory, 'settings.json');
+  if (editor !== undefined && !isEditor(editor)) throw new Error(`No editor ${editor}.`);
+  const settings: Settings = { theme, ...cwd !== undefined && { cwd }, awake, ...editor !== undefined && { editor } }, file = join(directory, 'settings.json');
   mkdirSync(directory, { recursive: true });
   // Two servers may share the folder: each writes a file of its own beside it.
   const written = `${file}.${process.pid}.new`;

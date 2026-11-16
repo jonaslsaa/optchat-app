@@ -9,7 +9,7 @@ import { Value } from 'typebox/value';
 import { WebSocket, WebSocketServer } from 'ws';
 import { Envelope, methods, REFUSED, type Method, type Params, type Push, type Result, type ServerMessage, type Updating } from '../protocol.ts';
 import { Agents } from './agents.ts';
-import { editor, fallback, inside, type Launch as Opened } from './files.ts';
+import { inside, installed, opening, preferred, EDITORS, type Installed, type Launch as Opened } from './files.ts';
 import { GitHub } from './github.ts';
 import { reason } from './pi.ts';
 import { profileDirectory, Profiles } from './profiles.ts';
@@ -41,6 +41,8 @@ export interface ServerOptions extends Partial<Pick<WindowsOptions, 'home' | 'gr
   /** What starts your editor on a file the chat named (`launch` in `files.ts`). Without it the server opens none, so nothing a
    * test starts can. */
   launcher?: (launch: Opened) => void;
+  /** The editors on this machine (`installed` in `files.ts`, unless said): a test names its own, so it does not depend on yours. */
+  editors?: () => Installed;
   /** The built UI's directory (`npm run build`), served as the page at `/`. */
   ui?: string;
   /** Origins that may connect besides the server's own page: the scheme a desktop shell loads the UI from, as T3 Code's
@@ -59,7 +61,7 @@ const loopback = (url: string) => { try { return LOOPBACK.includes(new URL(url).
 
 /** Starts the app's server on this machine only: the protocol of `protocol.ts` on a WebSocket at `/ws`, a profile's images at
  * `/images/<profile>/<name>`, and the UI's page everywhere else. `close` stops every Pi it started and waits for them. */
-export async function startServer({ port = 0, origins = [], ui = join(import.meta.dirname, '../../dist/ui'), home = dataHome(), app = appHome(), cwd, pi, flags = [], npm, gh, opener, launcher, update, grace = 15_000, now = Date.now, token = randomBytes(32).toString('base64url') }: ServerOptions) {
+export async function startServer({ port = 0, origins = [], ui = join(import.meta.dirname, '../../dist/ui'), home = dataHome(), app = appHome(), cwd, pi, flags = [], npm, gh, opener, launcher, editors = () => installed(), update, grace = 15_000, now = Date.now, token = randomBytes(32).toString('base64url') }: ServerOptions) {
   ui = resolve(ui);
   home = resolve(home); // Pi runs in each window's directory, and has to find the same profiles from there.
   app = resolve(app); // And npm runs in the app's folder, where a path that is not whole would be another folder.
@@ -79,15 +81,25 @@ export async function startServer({ port = 0, origins = [], ui = join(import.met
     const { outside } = window;
     return !outside ? window.cwd : outside !== 'unknown' && outside.host === hostname() ? outside.cwd : undefined;
   };
+  // A file opens in the editor in the settings, or the one `preferred` finds: only ever one of `EDITORS`, given the path whole.
+  const open = (file: string, line?: number) => {
+    if (!launcher) throw new Error('This server opens no editor.');
+    const found = editors();
+    launcher(opening(found, preferred(found, settings.editor), file, line));
+  };
   const handlers: { [M in Method]: (params: Params<M>) => Result<M> | Promise<Result<M>> } = {
     agents: params => agents.list(params), agent: params => agents.one(params), github: params => github.list(params),
     isFile: ({ window, path }) => { const at = folder(window); return { file: at !== undefined && inside(at, path) !== undefined }; },
     openFile: ({ window, path, line }) => {
       const at = folder(window), file = at && inside(at, path);
       if (!file) throw new Error(`${path} is not a file in the folder this chat runs in.`);
-      if (!launcher) throw new Error('This server opens no editor.');
-      launcher(editor()?.(file, line) ?? fallback(file));
+      open(file, line);
       return {};
+    },
+    openInstructions: ({ profile }) => { open(join(profileDirectory(home, profile), 'AGENTS.md')); return {}; },
+    editors: () => {
+      const found = editors();
+      return { editors: [...found.keys()].map(id => ({ id, label: EDITORS[id].label })), current: preferred(found, settings.editor) };
     },
     config: params => profiles.config(params), configure: params => profiles.configure(params), instruct: params => profiles.instruct(params),
     // An agent is reached through the Pi that has its profile open, and a message to one is worth starting that Pi for.

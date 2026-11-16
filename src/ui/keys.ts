@@ -1,4 +1,4 @@
-import { useEffect, useState, type RefObject } from 'react';
+import { useEffect, useState, type KeyboardEvent as ReactKeyboardEvent, type RefObject } from 'react';
 import { MENU_ACTIONS, MENU_EVENT, type MenuAction } from '../menu.ts';
 
 /** Keyboard shortcuts, written as `mod+shift+o`: `mod` is ⌘ on a Mac and Ctrl elsewhere. Letters and digits are matched by the
@@ -93,6 +93,13 @@ export function useOverlay(open: boolean, close: () => void, root: RefObject<HTM
     addEventListener('pointerdown', away); addEventListener('keydown', pressed, true);
     return () => { removeEventListener('pointerdown', away); removeEventListener('keydown', pressed, true); };
   }, [open]);
+}
+/** The arrows walk a list's buttons, round its ends. */
+export function walk(event: ReactKeyboardEvent) {
+  if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
+  const all = [...event.currentTarget.querySelectorAll('button')], here = all.findIndex(button => button === document.activeElement);
+  event.preventDefault();
+  all[(here + (event.key === 'ArrowDown' ? 1 : all.length - 1)) % all.length]?.focus();
 }
 /** Whether ⌥ (Alt) is down, which is when the page shows what it does with a digit. */
 export function useAltHeld() {

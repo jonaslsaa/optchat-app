@@ -1,7 +1,7 @@
 import { CheckIcon, ChevronsUpDownIcon, PlusIcon, XIcon } from 'lucide-react';
-import { useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
+import { useRef, useState, type ReactNode } from 'react';
 import { badge } from './badge.ts';
-import { useOverlay } from './keys.ts';
+import { useOverlay, walk } from './keys.ts';
 import { app, type State } from './store.ts';
 import { cn, WindowDot } from './ui.tsx';
 
@@ -10,12 +10,6 @@ import { cn, WindowDot } from './ui.tsx';
 export function ProfilePicker({ state, label, className, children }: { state: State; label: string; className?: string; children: ReactNode }) {
   const [open, setOpen] = useState(false), menu = useRef<HTMLDivElement>(null), opener = useRef<HTMLButtonElement>(null);
   useOverlay(open, () => setOpen(false), menu, opener);
-  const walk = (event: KeyboardEvent) => {
-    if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
-    const all = [...event.currentTarget.querySelectorAll('button')], here = all.findIndex(button => button === document.activeElement);
-    event.preventDefault();
-    all[(here + (event.key === 'ArrowDown' ? 1 : all.length - 1)) % all.length]?.focus();
-  };
   return (
     <div ref={menu} className="relative shrink-0">
       <button ref={opener} type="button" aria-label={label} title={label} aria-haspopup="listbox" aria-expanded={open} onClick={() => setOpen(!open)} className={className}>{children}</button>

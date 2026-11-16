@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { appendFileSync, mkdirSync, realpathSync, writeFileSync } from 'node:fs';
+import { appendFileSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { after, before, test } from 'node:test';
 import { chromium, type Browser, type Page } from 'playwright-core';
@@ -38,11 +38,11 @@ for (const file of FILES) { mkdirSync(join(home, file, '..'), { recursive: true 
 mkdirSync(join(home, 'new'));
 
 let server: Awaited<ReturnType<typeof startServer>>, fresh: typeof server, browser: Browser;
-// What would have started your editor: nothing does here.
-const launched: Launch[] = [];
+// What would have started your editor: nothing does here. The editors found are these, whatever this machine has.
+const launched: Launch[] = [], EDITORS = [['cursor', '/Applications/Cursor.app/Contents/Resources/app/bin/cursor'], ['vscode', '/usr/local/bin/code'], ['zed', '/Applications/Zed.app/Contents/MacOS/cli'], ['finder', '/usr/bin/open']] as const;
 before(async () => {
   await build({ logLevel: 'warn' });
-  server = await startServer({ home, app: join(home, 'app'), cwd: home, pi, launcher: launch => launched.push(launch) });
+  server = await startServer({ home, app: join(home, 'app'), cwd: home, pi, launcher: launch => launched.push(launch), editors: () => new Map(EDITORS) });
   // A machine with no profile yet, for the first one's name.
   fresh = await startServer({ home: join(home, 'new'), app: join(home, 'new', 'app'), cwd: home, pi });
   browser = await chromium.launch({ channel: 'chrome' });
@@ -650,6 +650,65 @@ test('the settings are in tabs: the arrows go from one to the next, the page ope
   writeFileSync(optchat, JSON.stringify({ name: 'pi-optchat', version: '0.11.13' }));
   await again.click();
   await old.waitFor({ state: 'detached' });
+});
+
+/** Waits for what the server does on its own, once the page has asked. */
+async function until(done: () => boolean) {
+  for (let tries = 0; tries < 100 && !done(); tries++) await new Promise(resolve => setTimeout(resolve, 20));
+  assert.ok(done());
+}
+
+test('the instructions open in your editor, what was typed is saved first, and the field reads the file again when you are back', async () => {
+  const directory = createProfile(home, 'editing'), file = join(directory, 'AGENTS.md');
+  const page = await open('editing'), instructions = page.getByRole('textbox', { name: 'Instructions' });
+  await page.getByRole('button', { name: 'Settings' }).click();
+  await page.getByRole('tab', { name: 'Instructions' }).click();
+  await instructions.fill('Typed here.');
+  launched.length = 0;
+  await page.getByRole('button', { name: 'Open in VS Code' }).click();
+  await page.getByRole('status').filter({ hasText: 'Saved' }).waitFor();
+  await until(() => launched.length === 1);
+  assert.equal(readFileSync(file, 'utf8'), 'Typed here.');
+  assert.deepEqual(launched.pop(), { command: '/usr/local/bin/code', args: [file] });
+  // The list has what was found; the one picked opens it and is the one from then on.
+  const chevron = page.getByRole('button', { name: 'Open in…' }), list = page.getByRole('listbox', { name: 'Editors' });
+  await chevron.click();
+  assert.deepEqual(await list.getByRole('option').allInnerTexts(), ['Cursor', 'VS Code', 'Zed', 'Finder']);
+  // The arrows walk it from the one in use, and Esc closes the list alone: the settings stay, and the focus is on the chevron.
+  assert.equal(await focused(page), 'VS Code');
+  await page.keyboard.press('ArrowDown');
+  assert.equal(await focused(page), 'Zed');
+  await page.keyboard.press('Escape');
+  await list.waitFor({ state: 'detached' });
+  await page.getByRole('heading', { name: 'Settings' }).waitFor();
+  assert.equal(await focused(page), 'Open in…');
+  await chevron.click();
+  await page.getByRole('option', { name: 'Zed' }).click();
+  await page.getByRole('button', { name: 'Open in Zed' }).waitFor();
+  assert.equal(await focused(page), 'Open in Zed'); // Not the page: the option it was on is gone.
+  await until(() => launched.length === 1);
+  assert.deepEqual(launched.pop(), { command: '/Applications/Zed.app/Contents/MacOS/cli', args: [file] });
+  // Changed in the editor: back in the window, the field has it, and typing not saved yet is never replaced.
+  writeFileSync(file, 'Changed in Zed.');
+  await page.evaluate(() => dispatchEvent(new Event('focus')));
+  await page.waitForFunction(() => document.querySelector('textarea')?.value === 'Changed in Zed.');
+  await instructions.fill('Typing.');
+  writeFileSync(file, 'Changed again.');
+  await page.evaluate(() => dispatchEvent(new Event('focus')));
+  await page.waitForTimeout(300);
+  assert.equal(await instructions.inputValue(), 'Typing.');
+  // Typed while the file is read again: the file's text, which comes after, does not replace it.
+  await instructions.fill('Changed in Zed.'); // What was read last.
+  writeFileSync(file, 'Changed a third time.');
+  await page.evaluate(() => {
+    dispatchEvent(new Event('focus'));
+    const field = document.querySelector('textarea')!;
+    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set?.call(field, 'Typed meanwhile.');
+    field.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  await page.waitForTimeout(300);
+  assert.equal(await instructions.inputValue(), 'Typed meanwhile.');
+  await page.context().close();
 });
 
 test('a field keeps the focus when Enter saves it, and when what was typed is refused', async () => {

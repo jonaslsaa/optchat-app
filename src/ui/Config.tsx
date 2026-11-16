@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState, type ReactNode, type Ref } from 'react';
 import type { Config as Kept, ModelChoice, Offered, Params, Setting } from '../protocol.ts';
 import { asked, field, LEVELS, model, named, offered, said, THINKING, typed, unit } from './config.ts';
+import { OpenIn } from './OpenIn.tsx';
 import { app } from './store.ts';
 import { Button, cn, Switch } from './ui.tsx';
 
@@ -99,17 +100,27 @@ export function Config({ profile, config, models }: { profile: string; config: K
     </ul>
   );
 }
-/** The profile's instructions, kept whole when you say so: they are long, and half of one is not one. */
+/** The profile's instructions, kept whole when you say so: they are long, and half of one is not one. They can be opened in your
+ * editor too (`OpenIn`), and then the file is the one to trust: what was typed here is saved before it opens, and back in this
+ * window the field reads the file again, unless it holds typing not saved yet. */
 export function Instructions({ profile, kept }: { profile: string; kept: string }) {
-  const [text, setText] = useState(kept), [outcome, setOutcome] = useState<Outcome>();
-  useEffect(() => setText(kept), [kept]);
-  const keep = async () => { const problem = await app.instruct(profile, text); setOutcome(problem ? { problem } : { kept: true }); };
+  const [text, setText] = useState(kept), [outcome, setOutcome] = useState<Outcome>(), shown = useRef(kept);
+  // The file read again replaces the field only while it holds what was read before: typing since is never lost.
+  useEffect(() => { setText(text => text === shown.current ? kept : text); shown.current = kept; }, [kept]);
+  useEffect(() => {
+    const back = () => { if (text === kept) void app.readConfig(profile); };
+    addEventListener('focus', back);
+    return () => removeEventListener('focus', back);
+  }, [profile, text, kept]);
+  const keep = async () => { const problem = await app.instruct(profile, text); setOutcome(problem ? { problem } : { kept: true }); return !problem; };
+  const open = async (editor?: string) => { if (text === kept || await keep()) await app.openInstructions(profile, editor); };
   return (
     <>
       <textarea aria-label="Instructions" value={text} rows={10} spellCheck={false} onChange={event => { setText(event.target.value); setOutcome(undefined); }}
         className={cn(FIELD, 'block h-auto w-full resize-y py-2 font-mono text-xs leading-relaxed')} />
       <p className="mt-2 flex items-center gap-3 text-xs">
         <Button variant="outline" disabled={text === kept} onClick={() => void keep()}>Save</Button>
+        <OpenIn onOpen={editor => void open(editor)} />
         {outcome && ('problem' in outcome ? <span role="alert" className="text-error-foreground">{outcome.problem}</span> : <span role="status" className="text-success-foreground">Saved. Applies from the next turn.</span>)}
       </p>
     </>

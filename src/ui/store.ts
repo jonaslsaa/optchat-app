@@ -188,6 +188,13 @@ export class App {
       this.set({ config: { ...this.state.config, [profile]: config } });
     } catch (error) { return error instanceof Error ? error.message : String(error); }
   }
+  /** The editors a file can open in here, and the one it opens in now. */
+  editors() { return this.ask('editors', {}); }
+  /** Opens a profile's instructions in your editor: in `editor`, which is then the one files open in, when one is picked. */
+  async openInstructions(profile: string, editor?: string) {
+    if (editor && !await this.saveSettings({ editor })) return;
+    await this.ask('openInstructions', { profile });
+  }
   /** Keeps a profile's instructions, or says why not. */
   async instruct(profile: string, text: string) {
     try {

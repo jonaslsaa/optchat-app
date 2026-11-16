@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 import { describeOwner, lockProfile } from 'pi-optchat/files';
 import { connect } from '../src/client.ts';
-import { editor, inside, type Launch } from '../src/server/files.ts';
+import { inside, installed, opening, preferred, type Installed, type Launch } from '../src/server/files.ts';
 import { startServer } from '../src/server/server.ts';
 import { fileTarget } from '../src/ui/paths.ts';
 import { createProfile, temporaryHome } from './support.ts';
@@ -32,14 +32,51 @@ test('only a file that is there, under the folder the window runs in, can be ope
     assert.equal(inside(cwd, path), undefined, path);
 });
 
-test('the editor is found where the app opened from the Finder looks, with launchd\'s PATH: yours, a GUI one, or VS Code', () => {
-  const brew = mkdtempSync(join(home, 'bin-')), stripped = { PATH: '/usr/bin:/bin:/usr/sbin:/sbin' };
-  for (const name of ['code', 'zed', 'vim']) { writeFileSync(join(brew, name), ''); chmodSync(join(brew, name), 0o755); }
-  assert.deepEqual(editor(stripped, [brew])?.('/a/b.ts', 42), { command: join(brew, 'code'), args: ['-g', '/a/b.ts:42'] });
-  assert.deepEqual(editor({ ...stripped, EDITOR: 'zed --wait' }, [brew])?.('/a/b.ts', 42), { command: join(brew, 'zed'), args: ['/a/b.ts:42'] });
-  // A terminal editor has no terminal to run in.
-  assert.equal(editor({ ...stripped, VISUAL: 'vim' }, [brew])?.('/a/b.ts').command, join(brew, 'code'));
-  assert.equal(editor(stripped, []), undefined);
+test('an editor is found by its command or, with launchd\'s PATH, inside its app, and yours is the one used unless you picked another', () => {
+  const bin = mkdtempSync(join(home, 'bin-')), apps = mkdtempSync(join(home, 'apps-'));
+  const put = (file: string) => { mkdirSync(join(file, '..'), { recursive: true }); writeFileSync(file, ''); chmodSync(file, 0o755); };
+  // The `zed` on the PATH is OpenZFS's event daemon, which has Zed's name: Zed's app is looked in first.
+  for (const file of [join(bin, 'code'), join(bin, 'vim'), join(bin, 'zed'), join(apps, 'Zed.app/Contents/MacOS/cli'), join(apps, 'Cursor.app/Contents/Resources/app/bin/cursor')]) put(file);
+  const found = installed({ env: { PATH: '/usr/bin:/bin' }, extra: [bin], apps: [apps] });
+  assert.deepEqual([...found], [['cursor', join(apps, 'Cursor.app/Contents/Resources/app/bin/cursor')], ['vscode', join(bin, 'code')], ['zed', join(apps, 'Zed.app/Contents/MacOS/cli')], ['finder', '/usr/bin/open']]);
+  assert.equal(preferred(found, undefined, {}), 'vscode');
+  assert.equal(preferred(found, undefined, { EDITOR: 'zed --wait' }), 'zed');
+  // A terminal editor has no terminal to run in, and an editor picked that is gone since is passed over too.
+  assert.equal(preferred(found, 'vscodium', { VISUAL: 'vim' }), 'vscode');
+  // `open` is no editor, and Finder is never yours unless you pick it.
+  assert.equal(preferred(found, undefined, { EDITOR: '/usr/bin/open -R' }), 'vscode');
+  assert.equal(preferred(found, 'cursor', { EDITOR: 'zed' }), 'cursor');
+  assert.equal(preferred(new Map([['finder', '/usr/bin/open']]), undefined, {}), undefined);
+  // Yours, named by its whole path, is the one started, before one on the PATH.
+  const own = join(mkdtempSync(join(home, 'own-')), 'code');
+  put(own);
+  assert.equal(installed({ env: { PATH: '/usr/bin:/bin', EDITOR: `${own} --wait` }, extra: [bin], apps: [apps] }).get('vscode'), own);
+  const all: Installed = new Map([['cursor', '/c'], ['zed', '/z'], ['idea', '/i'], ['finder', '/usr/bin/open']]);
+  assert.deepEqual(opening(all, 'cursor', '/a/b.ts', 42), { command: '/c', args: ['--classic', '-g', '/a/b.ts:42'] });
+  // `-g` only with a line: a name that ends in `:12` is the file's whole name.
+  assert.deepEqual(opening(all, 'cursor', '/a/log:12'), { command: '/c', args: ['--classic', '/a/log:12'] });
+  assert.deepEqual(opening(all, 'zed', '/a/b.ts', 42), { command: '/z', args: ['/a/b.ts:42'] });
+  assert.deepEqual(opening(all, 'idea', '/a/b.ts', 42), { command: '/i', args: ['--line', '42', '/a/b.ts'] });
+  assert.deepEqual(opening(all, 'finder', '/a/b.ts', 42), { command: '/usr/bin/open', args: ['-R', '/a/b.ts'] });
+  // With no editor, the Mac's text editor: `open` on the file itself would run a script.
+  assert.deepEqual(opening(all, undefined, '/a/run.command'), { command: 'open', args: ['-t', '/a/run.command'] });
+});
+
+test('a profile\'s instructions open in the editor of your choice, which is one of the editors found and is kept', async t => {
+  const directory = createProfile(home, 'instructed'), launched: Launch[] = [];
+  writeFileSync(join(directory, 'AGENTS.md'), '# instructed\n');
+  const server = await startServer({ home, app: mkdtempSync(join(home, 'app-')), cwd, pi: { command: process.execPath, args: ['-e', ''] }, launcher: launch => launched.push(launch), editors: () => new Map([['zed', '/z'], ['finder', '/usr/bin/open']]) });
+  const client = await connect(server.url);
+  t.after(async () => { client.close(); await server.close(); });
+  assert.deepEqual(await client.request('editors', {}), { editors: [{ id: 'zed', label: 'Zed' }, { id: 'finder', label: 'Finder' }], current: 'zed' });
+  await client.request('openInstructions', { profile: 'instructed' });
+  assert.deepEqual(launched.pop(), { command: '/z', args: [join(directory, 'AGENTS.md')] });
+  await client.request('setSettings', { editor: 'finder' });
+  await client.request('openInstructions', { profile: 'instructed' });
+  assert.deepEqual(launched.pop(), { command: '/usr/bin/open', args: ['-R', join(directory, 'AGENTS.md')] });
+  await assert.rejects(client.request('setSettings', { editor: '/bin/sh' }), /No editor/);
+  await assert.rejects(client.request('openInstructions', { profile: 'nobody' }), /No profile/);
+  assert.equal(launched.length, 0);
 });
 
 test('the server opens what the chat named in the window\'s folder, and refuses what is not there', async t => {

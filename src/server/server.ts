@@ -112,7 +112,7 @@ export async function startServer({ port = 0, origins = [], ui = join(import.met
     // No page may show this one in a frame, and this one loads nothing from elsewhere: what the agent writes is shown as
     // Markdown, and must not be able to fetch an address of its choosing.
     response.setHeader('x-frame-options', 'DENY');
-    response.setHeader('content-security-policy', "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; frame-ancestors 'none'");
+    response.setHeader('content-security-policy', "default-src 'self'; img-src 'self' data:; font-src 'self' data:; style-src 'self' 'unsafe-inline'; frame-ancestors 'none'");
     try {
       if (request.method !== 'GET' || !allowed(request)) { response.writeHead(404).end(); return; }
       const { pathname } = new URL(request.url ?? '/', 'http://localhost'), image = /^\/images\/([^/]+)\/([0-9a-f]{16})$/.exec(pathname);

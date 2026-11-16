@@ -7,7 +7,7 @@ import { startServer } from '../src/server/server.ts';
 // pi-optchat's own lock, which only Pi takes: here it stands for a Pi in a terminal.
 import { describeOwner, lockProfile } from 'pi-optchat/files';
 import { createProfile } from '../test/support.ts';
-import { agents, CHANGES, demo, remember, seed, SHIPPED, SHIPPING, spend, TEAM } from './seed.ts';
+import { agents, CHANGES, demo, FORMULAS, remember, seed, SHIPPED, SHIPPING, spend, TEAM } from './seed.ts';
 
 /** `npm run screenshots [directory] [--dark]`: a PNG of every main state of the UI, in /tmp/optchat-app-shots unless a directory
  * is named, and all of them in dark mode with `--dark`. It builds the UI, serves it against throwaway profiles under /tmp with
@@ -54,6 +54,7 @@ const ship = createProfile(home, 'ship');
 seed(ship, SHIPPING.length, NOW, SHIPPING);
 agents(ship, NOW + 42_000);
 seed(createProfile(home, 'links'), SHIPPING.length, NOW, SHIPPING);
+seed(createProfile(home, 'formulas'), 1, NOW, FORMULAS);
 const gh = { command: process.execPath, args: [join(import.meta.dirname, '../test/fake-gh.ts')] }, github = (state: object) => writeFileSync(join(home, 'gh', 'gh.json'), JSON.stringify(state));
 process.env.FAKE_GH_HOME = join(home, 'gh');
 mkdirSync(join(home, 'gh'));
@@ -447,6 +448,12 @@ async function pictures(browser: Browser, control: Client) {
   await quoting.getByText('The snapshot is the fallback, not the default').click({ clickCount: 3 });
   await quoting.getByRole('button', { name: 'Quote' }).waitFor();
   await shot(quoting, '72-quote-selection');
+  // Formulas in a reply, a price beside them as written, and a table with its copy buttons.
+  for (const [name, options] of [['91-formulas-and-table', {}], ['92-formulas-and-table-dark', { dark: true }], ['93-formulas-and-table-narrow', { width: 420 }]] as const) {
+    const page = await open(['formulas'], options);
+    await page.locator('.katex-display').waitFor();
+    await shot(page, name);
+  }
   // Not a picture: Esc closes the list and the run goes on, wherever the focus is. A click on a row once left the key to the
   // shortcut that stops the agent.
   await pick.getByText('Main chat', { exact: true }).last().click();

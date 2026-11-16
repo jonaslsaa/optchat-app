@@ -379,3 +379,25 @@ test('the memory view is looked at again by the clock while the chat says too li
   await app.readMemory('held');
   assert.deepEqual([polled(memory(), { status: 'idle' }), polled(memory(), { status: 'stopped' }), polled(memory(), { status: 'running' }), polled(memory(), { status: 'stopped', outside: 'unknown' })], [false, false, true, true]);
 });
+
+test('a message pi-optchat does not take is not sent: what it said about it stands until the next message, and a command is sent', async t => {
+  const home = temporaryHome(), server = await startServer({ home, cwd: home, pi });
+  createProfile(home, 'importing');
+  t.after(() => server.close());
+  const { app, until } = page(t);
+  void app.start(server.url);
+  await until(state => state.connection === 'open');
+  await app.openProfile('importing');
+  const window = 'importing/main', notices = () => app.state.live[window].notices.map(notice => notice.text);
+
+  // The composer puts back a message that was not sent (`send` answers false), as one the server refused.
+  assert.equal(await app.send(window, 'Hello there'), false);
+  await until(state => state.live[window].notices.length === 1);
+  assert.match(notices()[0], /^This profile has an import in progress/);
+  assert.equal(app.state.error, undefined);
+  // Said again for the next message, it is there once; a command Pi ran is sent, and what was said before it is gone.
+  assert.equal(await app.send(window, 'Hello again'), false);
+  await until(state => state.live[window].notices.length === 1);
+  assert.equal(await app.send(window, '/optchat'), true);
+  assert.deepEqual(notices(), []);
+});

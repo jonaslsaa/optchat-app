@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import type { Message, PiRecord } from '../src/protocol.ts';
-import { act, apply, chat, failure, idle, logged, merged, news, parts, replay, spoken, stopped, took, without, worked, type Item, type PiMessage, type Tool } from '../src/ui/transcript.ts';
+import { act, apply, chat, failure, idle, logged, merged, news, parts, quiet, replay, spoken, stopped, took, without, worked, type Item, type PiMessage, type Tool } from '../src/ui/transcript.ts';
 
 const T = Date.UTC(2026, 0, 1), at = (seconds: number) => new Date(T + seconds * 1000).toISOString();
 const user = (seconds: number, text: string): PiMessage => ({ role: 'user', timestamp: T + seconds * 1000, content: [{ type: 'text', text }] });
@@ -260,4 +260,17 @@ test('a message says what pi-optchat would log, with an image named as one and a
   assert.deepEqual(spoken([{ role: 'toolResult', timestamp: T, toolName: 'read', content: [text('a chart'), picture] }]).map(item => [item.kind, item.text]), [['echo', 'read: a chart\n[image]']]);
   assert.deepEqual(spoken([reply(1, text('Looking.'), bash('call-1', 'ls'), bash('call-2', 'pwd'))]).map(item => [item.kind, item.text, item.call]),
     [['talk', 'Looking.', undefined], ['tool', 'bash {"command":"ls"}', 'call-1'], ['tool', 'bash {"command":"pwd"}', 'call-2']]);
+});
+
+test('what Pi says in passing stands once, in its kind, until it is dismissed, and for a client that connects late too', () => {
+  const notify = (message: string, notifyType?: string) => ({ type: 'extension_ui_request', id: message, method: 'notify', message, ...notifyType && { notifyType } });
+  const records = [notify('An import is in progress.'), notify('Could not save input: disk full', 'error'), notify('An import is in progress.', 'info'), notify('')];
+  const said = run(...records);
+  // The refusal said twice stands once, where it was said last.
+  assert.deepEqual(said.notices, [{ text: 'Could not save input: disk full', kind: 'error' }, { text: 'An import is in progress.', kind: 'info' }]);
+  assert.deepEqual(replay({ ui: [], records: records.map((record, index) => ({ seq: index + 1, record })) }, 0).notices, said.notices);
+  assert.deepEqual(quiet(said, 'An import is in progress.').notices, [{ text: 'Could not save input: disk full', kind: 'error' }]);
+  assert.deepEqual(quiet(said).notices, []);
+  // A run does not take them away: only you do.
+  assert.deepEqual(apply(said, { type: 'agent_start' }).notices, said.notices);
 });

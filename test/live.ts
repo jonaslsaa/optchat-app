@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { working } from '../src/agent.ts';
@@ -91,6 +91,24 @@ test('a real Pi turn on a throwaway profile, end to end through the WebSocket', 
   assert.equal(existsSync(join(profile, 'lock.sock')), true);
   await server.close();
   assert.equal(existsSync(join(profile, 'lock.sock')), false);
+});
+
+test('pi-optchat does not take a message for a profile whose import is paused: it says why, and answers that it dealt with it', { timeout: 60_000 }, async t => {
+  const home = temporaryHome(), profile = createProfile(home, 'live'), id = '11111111-2222-3333-4444-555555555555';
+  // What pi-optchat leaves when an import is paused (its `imports/pending.json`).
+  mkdirSync(join(profile, 'imports'));
+  writeFileSync(join(profile, 'imports', 'pending.json'), JSON.stringify({ id, mode: 'append', previous: '.', target: `memories/${id}`, created: new Date().toISOString(), added: 0, skipped: 0, total: 0, inputBytes: 0 }));
+  const server = await startServer({ home, cwd: mkdtempSync(join(home, 'cwd-')), flags });
+  t.after(() => server.close());
+  const { onPush, pushes, record } = watch(), client = await connect(server.url, onPush);
+  const { window } = await client.request('open', { profile: 'live' });
+  assert.deepEqual(await client.request('prompt', { window: window.id, text: 'Hello there' }), { disposition: 'handled' });
+  await record(window.id, r => r.method === 'notify' && String(r.message).startsWith('This profile has an import in progress'));
+  // The page shows it, and no run began: the message was not taken.
+  const live = pushes.reduce((live, push) => push.push === 'record' ? apply(live, push.record, push.seq) : live, idle());
+  assert.partialDeepStrictEqual(live.notices.at(-1), { kind: 'info' });
+  assert.equal(pushes.some(push => push.push === 'record' && push.record.type === 'agent_start'), false);
+  assert.deepEqual((await client.request('history', { profile: 'live' })).messages, []);
 });
 
 test('a connected window reads the profile\'s memory, and Complete hands its conversation to the main chat', { timeout: 180_000 }, async t => {

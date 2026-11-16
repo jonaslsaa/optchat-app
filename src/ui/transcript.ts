@@ -37,10 +37,14 @@ export interface Live {
   /** What Pi's extensions show: statuses by key, and the dialogs waiting for an answer. */
   status: Record<string, string>;
   dialogs: PiRecord[];
+  /** What Pi or an extension said in passing (`notify`): why a message was refused, a warning, a thing it did. Each is said
+   * once, and none is part of the chat or of memory. */
+  notices: Notice[];
   /** What Pi is doing besides answering: retrying, compacting. */
   activity?: string;
 }
-export const idle = (): Live => ({ seq: 0, running: false, messages: [], tools: {}, queued: { steering: [], followUp: [] }, status: {}, dialogs: [] });
+export interface Notice { text: string; kind: 'info' | 'warning' | 'error' }
+export const idle = (): Live => ({ seq: 0, running: false, messages: [], tools: {}, queued: { steering: [], followUp: [] }, status: {}, dialogs: [], notices: [] });
 
 export const isObject = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null;
 export const isMessage = (value: unknown): value is PiMessage => isObject(value) && typeof value.role === 'string' && typeof value.timestamp === 'number';
@@ -92,7 +96,8 @@ function written(blocks: Block[], event: Record<string, unknown>): Block[] {
   }
 }
 function shown(live: Live, record: PiRecord): Live {
-  const { method, statusKey, statusText } = record;
+  const { method, statusKey, statusText, message: text, notifyType: kind } = record;
+  if (method === 'notify') return typeof text === 'string' && text ? { ...live, notices: [...quiet(live, text).notices, { text, kind: kind === 'warning' || kind === 'error' ? kind : 'info' }] } : live;
   if (method === 'setStatus' && typeof statusKey === 'string') {
     const { [statusKey]: _, ...status } = live.status;
     return { ...live, status: typeof statusText === 'string' ? { ...status, [statusKey]: statusText } : status };
@@ -108,6 +113,8 @@ export function replay({ ui, records }: { ui: PiRecord[]; records: { seq: number
 /** A window whose Pi has stopped: what its run said stays, and nothing is running, being written or asked any more. Pi can die
  * in a run, and then no `agent_settled` says so. */
 export const stopped = (live: Live): Live => ({ ...live, running: false, streaming: undefined, tools: {}, dialogs: [], activity: undefined });
+/** Without a notice that was dismissed, or without any: they were read, or the next message is on its way. */
+export function quiet(live: Live, text?: string): Live { return { ...live, notices: text === undefined ? [] : live.notices.filter(notice => notice.text !== text) }; }
 /** Without the dialog `id`: it was answered, or its time ran out. */
 export const without = (live: Live, id: unknown): Live => ({ ...live, dialogs: live.dialogs.filter(dialog => dialog.id !== id) });
 

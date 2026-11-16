@@ -37,6 +37,7 @@ seed(picks, 4, NOW);
 keeps(picks, { provider: 'anthropic', model: 'claude-opus-5-5', thinking: 'high' }, { provider: 'openai', model: 'gpt-6-sol', thinking: 'medium' });
 seed(createProfile(home, 'work'), 95, NOW); // Ends with the turn that ran the tests.
 seed(createProfile(home, 'notes'), 2, NOW);
+seed(createProfile(home, 'importing'), 2, NOW); // Its import was paused: pi-optchat takes no message for it.
 // A chat of ten days with its summaries, for the memory view.
 const long = createProfile(home, 'long');
 seed(long, 95, NOW, undefined, 40 * 60_000);
@@ -392,6 +393,11 @@ async function pictures(browser: Browser, control: Client) {
   await lean.getByRole('button', { name: 'Model' }).click();
   await lean.getByRole('radio', { name: 'High', exact: true, checked: true }).waitFor();
   await shot(lean, '55-model-narrow');
+  // A message pi-optchat did not take: it says why above the composer, and the message is back in it.
+  const refused = await open(['importing']);
+  await say(refused, 'Summarise the release notes');
+  await refused.getByRole('status').filter({ hasText: 'import in progress' }).waitFor();
+  await shot(refused, '66-message-not-taken');
   // Not a picture: Esc closes the list and the run goes on, wherever the focus is. A click on a row once left the key to the
   // shortcut that stops the agent.
   await pick.getByText('Main chat', { exact: true }).last().click();

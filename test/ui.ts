@@ -17,7 +17,7 @@ process.env.FAKE_PI_HOME = join(home, 'pi');
 mkdirSync(join(home, 'pi', 'pi-optchat'), { recursive: true });
 writeFileSync(join(home, 'pi', 'pi-optchat', 'package.json'), JSON.stringify({ name: 'pi-optchat', version: '0.11.12' }));
 writeFileSync(join(home, 'pi', 'state.json'), JSON.stringify({ version: '1.5.2', providers: ['anthropic', 'openai'], packages: { 'npm:pi-optchat': join(home, 'pi', 'pi-optchat') } }));
-for (const name of ['chat', 'beside', 'sheet', 'memory', 'rows', 'menus', 'fields', 'asks', 'windows']) {
+for (const name of ['chat', 'beside', 'sheet', 'memory', 'rows', 'menus', 'fields', 'asks', 'windows', 'importing']) {
   const profile = createProfile(home, name);
   if (name === 'memory' || name === 'windows') { writeMemory(profile, 16); continue; }
   seed(profile, TEAM.length, Date.now(), TEAM);
@@ -125,6 +125,32 @@ test('Esc in a question Pi asks answers no, and the run goes on with that', asyn
   // A run that is stopped at its question says nothing more: this one answers with what it was told.
   await page.getByText('confirmed: false').waitFor({ timeout: 5000 }).catch(() => assert.fail('Esc in a question stopped the run.'));
   assert.equal(await question.count(), 0, 'the question is gone');
+});
+
+test('a message pi-optchat does not take is back in the box with what it said about it, which Esc or its button takes away', async () => {
+  const page = await open('importing'), box = page.getByRole('textbox', { name: 'Message' });
+  const said = page.getByRole('status').filter({ hasText: 'This profile has an import in progress.' });
+  await box.fill('Summarise the release notes');
+  await page.keyboard.press('Enter');
+  await said.waitFor({ timeout: 5000 }).catch(() => assert.fail('Nothing says why the message was not taken.'));
+  // The notice comes before Pi's answer to the message, and the message is back once that has come.
+  await page.locator('textarea:text-is("Summarise the release notes")').waitFor({ timeout: 5000 }).catch(() => assert.fail('The message is not back in the box.'));
+  // Esc is the chat's: with no run to stop, it takes the notice away, and from beside the chat it does not.
+  await page.getByRole('button', { name: 'Agents and GitHub' }).click();
+  await agent(page, 'How T3 Code reconnects').click();
+  await page.keyboard.press('Escape');
+  await back(page).waitFor({ state: 'detached' });
+  assert.equal(await said.count(), 1, 'Esc in the panel left the notice');
+  await box.focus();
+  await page.keyboard.press('Escape');
+  await said.waitFor({ state: 'detached', timeout: 5000 });
+  assert.equal(await box.inputValue(), 'Summarise the release notes');
+  // Sent again it is said again, once; its button takes it away and leaves the focus where you type.
+  await page.keyboard.press('Enter');
+  await said.waitFor();
+  await said.getByRole('button', { name: 'Dismiss' }).click();
+  await said.waitFor({ state: 'detached' });
+  assert.equal(await focused(page), 'Message');
 });
 
 test('Esc in the panel beside the chat is the panel\'s: back from an agent to the list, else nothing, and the run goes on', async () => {

@@ -18,7 +18,8 @@ import { clamp, levels, type Thinking } from '../src/models.ts';
  *   that word's turns and answer.
  * - Profile `busy` fails as a profile another Pi owns, `stuck` ignores the request to shut down, `mute` never answers a command,
  *   `bare` is a Pi without pi-optchat, `old` one whose pi-optchat is from before 0.11.9 and names no role, and in `noisy`
- *   another extension fails.
+ *   another extension fails. `importing` has an import that was paused: pi-optchat takes no message for it, says why
+ *   (`notify`) and answers the prompt as `handled`, as it answers a command it ran.
  * - It runs on a model, as Pi does: the one the profile keeps as its main chat's when it owns the profile, else the first it
  *   lists. `set_model` and `set_thinking_level` change it, and an owner keeps the pick in the profile, as pi-optchat does.
  * - It writes nowhere but in its profile and FAKE_PI_HOME, and in the file FAKE_PI_STOPPED names, where each one with a
@@ -75,6 +76,7 @@ if ((verb === 'install' || verb === 'update') && folder && kept) {
 
 const profile = process.argv[process.argv.indexOf('--optchat-profile') + 1], joins = process.argv[process.argv.indexOf('--optchat-connect') + 1] === 'join';
 const write = (record: object) => process.stdout.write(`${JSON.stringify(record)}\n`);
+let noticed = 0;
 const status = (statusKey: string, statusText: string) => write({ type: 'extension_ui_request', id: statusKey, method: 'setStatus', statusKey, statusText });
 /** pi-optchat's role. `after`: when the conversation before this one was handed off, which it says from the next message on. */
 const role = (completed = false, after?: number) => status('optchat.role', JSON.stringify(joins ? { role: 'window', profile, id: 'w1', connected: true, completed, ...after !== undefined && { after } } : { role: 'owner', profile }));
@@ -214,6 +216,10 @@ const commands: Record<string, (command: Record<string, unknown>) => unknown> = 
       if (running) { release?.({ aborted: true }); void settled.then(hand); } else hand();
       return { disposition: 'handled' };
     }
+    if (profile === 'importing') {
+      if (!text.startsWith('/')) write({ type: 'extension_ui_request', id: `notice-${++noticed}`, method: 'notify', message: 'This profile has an import in progress. Use /optchat import to resume or discard it, or switch profiles.', notifyType: 'info' });
+      return { disposition: 'handled' };
+    }
     if (completed) role(completed = false, after = marked); // The next message begins a new conversation, and pi-optchat says so, and from when, before the run.
     if (text.includes('crash')) { process.stderr.write('out of memory\n'); process.exit(3); }
     if (running) { (streamingBehavior === 'followUp' ? followUp : steering).push(text); write({ type: 'queue_update', steering, followUp }); return { disposition: 'queued' }; }
@@ -235,7 +241,7 @@ if (profile === 'busy') {
   write({ type: 'extension_error', extensionPath: 'pi-optchat', event: 'session_start', error: `Profile already running: ${profile} · PID 1 · a-terminal · /somewhere` });
 } else if (profile !== 'bare') {
   if (profile === 'noisy') write({ type: 'extension_error', extensionPath: 'something-else', event: 'session_start', error: 'No API key' });
-  status('optchat', joins ? `OptChat: ${profile} · connected window` : `OptChat: ${profile} · ${logged} messages · 0 pending · 0 agents`);
+  status('optchat', joins ? `OptChat: ${profile} · connected window` : `OptChat: ${profile} · ${logged} messages · 0 pending · 0 agents${profile === 'importing' ? ' · import paused: /optchat import' : ''}`);
   if (profile !== 'old') role();
 }
 // An owner has its profile before it answers anything, as Pi has once its session has started.

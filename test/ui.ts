@@ -18,9 +18,9 @@ process.env.FAKE_PI_HOME = join(home, 'pi');
 mkdirSync(join(home, 'pi', 'pi-optchat'), { recursive: true });
 writeFileSync(join(home, 'pi', 'pi-optchat', 'package.json'), JSON.stringify({ name: 'pi-optchat', version: '0.11.12' }));
 writeFileSync(join(home, 'pi', 'state.json'), JSON.stringify({ version: '1.5.2', providers: ['anthropic', 'openai'], packages: { 'npm:pi-optchat': join(home, 'pi', 'pi-optchat') } }));
-for (const name of ['chat', 'beside', 'sheet', 'memory', 'rows', 'menus', 'fields', 'asks', 'windows', 'importing', 'keys', 'spend']) {
+for (const name of ['chat', 'beside', 'sheet', 'memory', 'rows', 'menus', 'fields', 'asks', 'windows', 'importing', 'keys', 'spend', 'commands', 'arrows', 'mute']) {
   const profile = createProfile(home, name);
-  if (name === 'memory' || name === 'windows' || name === 'keys' || name === 'spend') { writeMemory(profile, 16); continue; }
+  if (['memory', 'windows', 'keys', 'spend', 'arrows'].includes(name)) { writeMemory(profile, 16); continue; }
   seed(profile, TEAM.length, Date.now(), TEAM);
   agents(profile, Date.now());
   // More that ended than the list shows at first.
@@ -181,6 +181,100 @@ test('a message pi-optchat does not take is back in the box with what it said ab
   assert.equal(await focused(page), 'Message');
 });
 
+test('a / at the start of a message lists Pi\'s commands: typing finds one, the arrows move, Tab or Enter takes it, and Esc closes the list and nothing else', async () => {
+  const page = await open('commands'), box = page.getByRole('textbox', { name: 'Message' }), list = page.getByRole('listbox', { name: 'Commands' });
+  const at = () => list.locator('[data-at]').innerText();
+  await run(page);
+  await box.pressSequentially('/');
+  await list.getByRole('option', { name: '/skill:sol-loop' }).waitFor({ timeout: 5000 }).catch(() => assert.fail('No list of commands opened.'));
+  assert.deepEqual(await list.getByRole('option').evaluateAll(rows => rows.map(row => row.firstElementChild?.textContent)),
+    ['/fix-tests', '/skill:sol-loop', '/skill:use-codex', '/skill:write-a-skill', '/optchat instructions', '/optchat import', '/mcp']);
+  // The arrows go round the list while the typing stays in the message.
+  await page.keyboard.press('ArrowUp');
+  assert.match(await at(), /^\/mcp/);
+  // With Shift an arrow is the text's: it selects, and the list stays where it is.
+  await page.keyboard.press('Shift+ArrowUp');
+  assert.match(await at(), /^\/mcp/);
+  await page.keyboard.press('ArrowRight'); // Nothing is selected again, with the caret at the end.
+  await page.keyboard.press('ArrowDown');
+  await page.keyboard.press('ArrowDown');
+  assert.match(await at(), /^\/skill:sol-loop/);
+  assert.equal(await focused(page), 'Message');
+  await box.pressSequentially('use');
+  assert.deepEqual(await list.getByRole('option').count(), 1);
+  // Esc closes the list and the list stays shut while the same command is typed on. The run goes on: the button that stops
+  // it is there again once the box is empty.
+  await page.keyboard.press('Escape');
+  await list.waitFor({ state: 'detached' });
+  await box.pressSequentially('-');
+  assert.equal(await list.count(), 0);
+  await box.fill('');
+  await page.waitForTimeout(400);
+  assert.ok(await stop(page).isVisible(), 'Esc in the list of commands stopped the run.');
+  // A click on the model beside it closes the list of commands: only one list is open.
+  await box.pressSequentially('/');
+  await list.waitFor();
+  await page.getByRole('button', { name: 'Model' }).click();
+  await list.waitFor({ state: 'detached', timeout: 5000 }).catch(() => assert.fail('The list of commands stayed open under the model list.'));
+  await page.keyboard.press('Escape');
+  await page.getByRole('dialog', { name: 'Model' }).waitFor({ state: 'detached' });
+  await box.fill('');
+  // A new command opens it again. Tab takes the row, with a space for what follows, and the list is gone.
+  await box.pressSequentially('/sol');
+  await page.keyboard.press('Tab');
+  assert.equal(await box.inputValue(), '/skill:sol-loop ');
+  assert.equal(await list.count(), 0);
+  assert.equal(await focused(page), 'Message');
+  // Enter takes it too, and does not send the half-typed name; Enter on a name typed in full sends it.
+  await box.fill('');
+  await box.pressSequentially('/fix');
+  await page.keyboard.press('Enter');
+  assert.equal(await box.inputValue(), '/fix-tests ');
+  await box.fill('');
+  await box.pressSequentially('/fix-tests');
+  await list.waitFor();
+  await page.keyboard.press('Enter');
+  await page.getByLabel('Messages waiting for the agent').getByText('/fix-tests').waitFor();
+  assert.equal(await box.inputValue(), '');
+});
+
+test('while Pi is still asked for its commands, Enter sends nothing: half a name is not a message', async () => {
+  // This Pi never answers, so the list never comes.
+  const page = await open('mute'), box = page.getByRole('textbox', { name: 'Message' });
+  await box.pressSequentially('/fix');
+  await page.getByText('Asking Pi for its commands…').waitFor();
+  await page.keyboard.press('Enter');
+  await page.waitForTimeout(300);
+  assert.equal(await box.inputValue(), '/fix', 'Enter sent the half-typed name.');
+  // Closed with Esc, the list is out of the way, and the keys are the message's again.
+  await page.keyboard.press('Escape');
+  await page.getByText('Asking Pi for its commands…').waitFor({ state: 'detached' });
+});
+
+test('with the list of commands open ↑ and ↓ are its own, and bring back what you said only once it is closed', async () => {
+  const page = await open('arrows'), box = page.getByRole('textbox', { name: 'Message' }), list = page.getByRole('listbox', { name: 'Commands' });
+  const press = async (key: string) => { await page.keyboard.press(key); return box.inputValue(); };
+  // A command you sent is the first message back, and being one, it opens the list.
+  await box.fill('/skill:use-codex');
+  await list.getByRole('option', { name: '/skill:use-codex' }).waitFor(); // Enter waits for the list, and sends a name typed in full.
+  await page.keyboard.press('Enter');
+  await list.waitFor({ state: 'detached' });
+  await page.getByRole('main').getByText('/skill:use-codex').waitFor();
+  assert.equal(await press('ArrowUp'), '/skill:use-codex');
+  await list.getByRole('option', { name: '/skill:use-codex' }).waitFor();
+  // The arrows are the list's now: the message stays as it is.
+  assert.deepEqual([await press('ArrowUp'), await press('ArrowDown')], ['/skill:use-codex', '/skill:use-codex']);
+  await box.fill('/');
+  await list.getByRole('option', { name: '/mcp' }).waitFor();
+  assert.deepEqual([await press('ArrowUp'), await list.locator('[data-at]').innerText()].map(text => text.split('\n')[0]), ['/', '/mcp']);
+  // Closed with Esc, the list leaves them to the message again: ↑ goes on to what you said before.
+  await box.fill('/skill:use-codex');
+  await list.waitFor();
+  await page.keyboard.press('Escape');
+  await list.waitFor({ state: 'detached' });
+  assert.equal(await press('ArrowUp'), 'message 14');
+});
+
 test('Esc in the panel beside the chat is the panel\'s: back from an agent to the list, else nothing, and the run goes on', async () => {
   const page = await open('beside');
   await run(page);
@@ -292,7 +386,7 @@ test('a menu that lies over the page takes Esc and gives the focus back to its b
   await page.getByRole('listbox', { name: 'Profiles' }).waitFor();
   assert.equal(await focused(page), 'menus');
   await page.keyboard.press('ArrowDown');
-  assert.equal(await focused(page), 'rows');
+  assert.equal(await focused(page), 'mute'); // The next profile by name.
   await page.keyboard.press('ArrowUp');
   await page.keyboard.press('ArrowUp');
   assert.equal(await focused(page), 'memory');

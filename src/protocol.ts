@@ -37,6 +37,10 @@ export type PiRecord = Static<typeof PiRecord>;
 const Thinking = Type.Enum([...THINKING]);
 export const ModelChoice = Type.Object({ provider: Type.String(), model: Type.String(), thinking: Thinking });
 export type ModelChoice = Static<typeof ModelChoice>;
+/** A command Pi runs for a message that begins with `/` and its name: an extension's, a prompt template, or a skill
+ * (`skill:<name>`). */
+export const Command = Type.Object({ name: Type.String(), description: Type.Optional(Type.String()), source: Type.Enum(['extension', 'prompt', 'skill']) });
+export type Command = Static<typeof Command>;
 /** A model Pi can use now, as Pi lists it: its `name`, and the `levels` it can think at (`off` alone for one that does not
  * reason). */
 export const Offered = Type.Object({ provider: Type.String(), id: Type.String(), name: Type.String(), levels: Type.Array(Thinking) });
@@ -247,6 +251,10 @@ export const methods = {
   /** Any other Pi RPC command (`get_state`, `set_model`, `get_messages`, ...), answered with Pi's `data`. Not a message to the
    * agent: that is `prompt`. */
   command: method(Type.Object({ window: Type.String(), command: PiRecord }), Type.Object({ data: Type.Optional(Type.Unknown()) })),
+  /** The commands the window's Pi knows (its `get_commands`). They come from its extensions, prompt templates and skills, so
+   * the window's Pi answers, and is started for it as for a first message: a main chat's Pi then goes on with what waited for
+   * it, as after any start (summaries still to write, a window's handoff, which begins a turn). */
+  commands: method(Type.Object({ window: Type.String() }), Type.Object({ commands: Type.Array(Command) })),
   /** The models the window's agent can run on: those of the providers Pi is logged in to. The window's Pi is asked; when it
    * has none yet, a Pi that only answers this is, and `preset` is then what a Pi started now runs on by itself. */
   models: method(Type.Object({ window: Type.String() }), Type.Object({ models: Type.Array(Offered), preset: Type.Optional(ModelChoice) })),

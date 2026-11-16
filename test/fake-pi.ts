@@ -199,6 +199,14 @@ const commands: Record<string, (command: Record<string, unknown>) => unknown> = 
   get_state: () => ({ model, thinkingLevel, isStreaming: running, pid: process.pid, args: process.argv.slice(2), home: process.env.OPTCHAT_HOME, cwd: process.cwd() }),
   get_messages: () => ({ messages }),
   get_available_models: () => ({ models }),
+  // As Pi lists them: what extensions add (pi-optchat's three, and Pi's own `mcp`), a prompt template, and skills.
+  get_commands: () => ({ commands: [
+    ...profile === 'bare' ? [] : [['complete', 'End this connected conversation and hand off to the main agent'], ['tell-main', 'Send a message to the main agent from this connected window'], ['optchat', 'OptChat profiles, settings, models, agents, instructions, memory browser, and imports']].map(([name, description]) => ({ name, description, source: 'extension', sourceInfo: { path: '/pi/pi-optchat/src/index.ts', source: 'npm:pi-optchat', scope: 'user', origin: 'package', baseDir: '/pi/pi-optchat' } })),
+    { name: 'mcp', description: 'Manage MCP servers: sign in, reconnect, enable or disable, and change exposure', source: 'extension', sourceInfo: { path: 'builtin:mcp', source: 'builtin', scope: 'temporary', origin: 'top-level' } },
+    { name: 'fix-tests', description: 'Fix failing tests', source: 'prompt', sourceInfo: { path: '/home/.pi/agent/prompts/fix-tests.md', source: 'local', scope: 'user', origin: 'top-level' } },
+    ...[['sol-loop', 'Review a code change in a loop with an OpenAI GPT Sol subagent and fix what it finds, before (or after) opening a PR. Use when the user says "sol loop".'], ['use-codex', 'Run the Codex CLI (a separate OpenAI coding agent) headlessly as an independent second opinion.'], ['write-a-skill', 'Create new agent skills with proper structure, progressive disclosure, and bundled resources.']]
+      .map(([name, description]) => ({ name: `skill:${name}`, description, source: 'skill', sourceInfo: { path: `/home/.agents/skills/${name}/SKILL.md`, source: 'auto', scope: 'user', origin: 'top-level', baseDir: '/home/.agents' } })),
+  ] }),
   // Pi answers with the model, and gives it a level it can think at; one it does not list is an error (below).
   set_model: ({ provider, modelId }) => {
     const found = models.find(model => model.provider === provider && model.id === modelId);

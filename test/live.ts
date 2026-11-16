@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { setTimeout as sleep } from 'node:timers/promises';
 import { test } from 'node:test';
 import { working } from '../src/agent.ts';
 import { connect } from '../src/client.ts';
@@ -109,6 +110,41 @@ test('pi-optchat does not take a message for a profile whose import is paused: i
   assert.partialDeepStrictEqual(live.notices.at(-1), { kind: 'info' });
   assert.equal(pushes.some(push => push.push === 'record' && push.record.type === 'agent_start'), false);
   assert.deepEqual((await client.request('history', { profile: 'live' })).messages, []);
+});
+
+test('asking a window for its commands starts its Pi and writes nothing to the profile\'s memory, nor does closing the window unused', { timeout: 120_000 }, async t => {
+  const home = temporaryHome(), profile = createProfile(home, 'live'), cwd = mkdtempSync(join(home, 'cwd-'));
+  // The profile's files with what is in them, without the sockets a Pi has while it runs.
+  const files = (directory = profile): string[] => readdirSync(directory).flatMap(name => {
+    const path = join(directory, name), stat = statSync(path);
+    return stat.isDirectory() ? [`${name}/`, ...files(path).map(file => `${name}/${file}`)] : stat.isFile() ? [`${name}: ${readFileSync(path, 'utf8')}`] : [];
+  });
+  const asked = async () => {
+    const server = await startServer({ home, cwd, flags });
+    t.after(() => server.close()); // Whatever fails here, no Pi is left holding the profile.
+    const { onPush, pushes } = watch(), client = await connect(server.url, onPush);
+    const { window: main } = await client.request('open', { profile: 'live' });
+    const { commands } = await client.request('commands', { window: main.id });
+    const first = files();
+    // A connected window is a second Pi, which tells the main one it is there: asked too, then closed without a message.
+    const { window: side } = await client.request('open', { profile: 'live', role: 'connected' });
+    const theirs = await client.request('commands', { window: side.id });
+    await client.request('close', { window: side.id });
+    await sleep(2000);
+    const then = files(), { total } = await client.request('history', { profile: 'live' });
+    client.close(); await server.close();
+    return { commands, theirs: theirs.commands, first, then, total, ran: pushes.some(push => push.push === 'record' && push.record.type === 'agent_start') };
+  };
+  const once = await asked();
+  // Pi's own list: pi-optchat's three commands among what else this Pi has, each with its kind.
+  for (const list of [once.commands, once.theirs]) assert.deepEqual(['complete', 'tell-main', 'optchat'].map(name => list.find(command => command.name === name)?.source), ['extension', 'extension', 'extension']);
+  // Opening a profile for the first time lays out its empty folders and lists, as a first message would. Nothing is said in
+  // it: no message in its log, no run, and the window that came and went left nothing.
+  assert.deepEqual([once.total, once.ran, once.first.filter(file => file.startsWith('main/'))], [0, false, ['main/']]);
+  assert.deepEqual(once.then, once.first);
+  // And on a profile that was opened before, nothing at all is written.
+  const again = await asked();
+  assert.deepEqual([again.first, again.then, again.total], [once.then, once.then, 0]);
 });
 
 test('a connected window reads the profile\'s memory, and Complete hands its conversation to the main chat', { timeout: 180_000 }, async t => {

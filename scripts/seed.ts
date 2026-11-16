@@ -69,6 +69,55 @@ export const TEAM: Said[][] = [
   ],
 ];
 
+/** A long edit, for a diff that is longer than the box it opens in: one function rewritten and its tests, most lines kept. */
+const STOP_BEFORE = `  async stop(grace: number) {
+    const pid = this.child.pid;
+    this.child.stdin?.end();
+    const kill = setTimeout(() => {
+      if (process.platform === 'win32') spawn('taskkill', ['/pid', String(pid), '/T', '/F']);
+      else try { process.kill(-pid, 'SIGKILL'); } catch {}
+    }, grace);
+    await this.exited;
+    this.closed = true;
+  }`;
+const STOP_AFTER = `  /** Ends Pi: its input first, which Pi takes as the end of the session, and after \`grace\` the whole process tree. */
+  async stop(grace: number) {
+    if (this.closed) return;
+    const pid = this.child.pid;
+    if (pid === undefined) return;
+    this.child.stdin?.end();
+    const kill = setTimeout(() => this.kill(pid), grace);
+    await this.exited;
+    clearTimeout(kill);
+    this.closed = true;
+  }
+
+  /** The process tree, at once: Windows has no process groups, so \`taskkill\` walks it. */
+  private kill(pid: number) {
+    if (process.platform === 'win32') spawn('taskkill', ['/pid', String(pid), '/T', '/F']);
+    else try { process.kill(-pid, 'SIGKILL'); } catch {}
+  }
+
+  /** Stops Pi if it is running, and says whether it had to. */
+  async ensureStopped(grace = 2_000) {
+    const running = !this.closed;
+    await this.stop(grace);
+    return running;
+  }
+
+  /** How long Pi has run, for the status line. */
+  get uptime() {
+    return this.closed ? 0 : Date.now() - this.started;
+  }`;
+export const CHANGES: Said[][] = [
+  [
+    ['user', 'Tidy up `stop()` in the Pi class: one way to kill, and nothing left running after it returns.'],
+    ['tool', `edit ${JSON.stringify({ path: 'src/server/pi.ts', edits: [{ oldText: STOP_BEFORE, newText: STOP_AFTER }] })}`],
+    ['echo', 'edit: Successfully replaced 1 block(s) in src/server/pi.ts.'],
+    ['talk', 'Done: `stop()` clears its timer, returns early when Pi is gone, and kills through one `kill()`.'],
+  ],
+];
+
 /** A chat that names issues and pull requests, for the GitHub list: by link in what was said, in an agent's report and in what
  * `gh pr create` printed, and one only by its number, which the list cannot know. */
 export const SHIPPING: Said[][] = [

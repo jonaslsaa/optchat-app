@@ -7,7 +7,7 @@ import { startServer } from '../src/server/server.ts';
 // pi-optchat's own lock, which only Pi takes: here it stands for a Pi in a terminal.
 import { describeOwner, lockProfile } from 'pi-optchat/files';
 import { createProfile } from '../test/support.ts';
-import { agents, demo, remember, seed, SHIPPED, SHIPPING, spend, TEAM } from './seed.ts';
+import { agents, CHANGES, demo, remember, seed, SHIPPED, SHIPPING, spend, TEAM } from './seed.ts';
 
 /** `npm run screenshots [directory] [--dark]`: a PNG of every main state of the UI, in /tmp/optchat-app-shots unless a directory
  * is named, and all of them in dark mode with `--dark`. It builds the UI, serves it against throwaway profiles under /tmp with
@@ -28,6 +28,7 @@ for (const signal of ['SIGINT', 'SIGTERM'] as const) process.once(signal, () => 
 createProfile(home, 'empty');
 const team = createProfile(home, 'team');
 seed(team, TEAM.length, NOW, TEAM);
+seed(createProfile(home, 'changes'), CHANGES.length, NOW, CHANGES);
 agents(team, NOW + 42_000);
 const terminal = createProfile(home, 'terminal');
 seed(terminal, 2, NOW);
@@ -212,6 +213,13 @@ async function pictures(browser: Browser, control: Client) {
   await changes.getByText('Edited test/pi.test.ts').click();
   await changes.getByText('Wrote docs/windows.md').click();
   await shot(changes, '23-edit-and-write-opened');
+  // A diff longer than the box it opens in scrolls there, light, dark and narrow.
+  for (const [name, options] of [['86-long-diff', {}], ['87-long-diff-dark', { dark: true }], ['88-long-diff-narrow', { width: 420 }]] as const) {
+    const page = await open(['changes'], options);
+    await page.getByRole('button', { name: /Worked/ }).first().click();
+    await page.getByText('Edited src/server/pi.ts').click();
+    await shot(page, name);
+  }
 
   // The main chat's agents, beside it. They are at work only while a Pi has the profile open, so one takes it here: after the
   // pages have opened the chat, which is therefore still the app's.

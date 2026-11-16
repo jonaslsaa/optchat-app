@@ -406,7 +406,11 @@ export class App {
   /** What is typed in a window and not sent yet. It is kept where the open profiles are, so it is there when the page is
    * opened again, and until it is sent or its window is closed. */
   draft(window: string) { return this.storage().getItem(`${SAVED}-draft:${window}`) ?? ''; }
-  keep(window: string, text: string) { if (text) this.storage().setItem(`${SAVED}-draft:${window}`, text); else this.storage().removeItem(`${SAVED}-draft:${window}`); }
+  keep(window: string, text: string) {
+    if (!text) { this.storage().removeItem(`${SAVED}-draft:${window}`); return; }
+    // A browser with no room left keeps nothing more: the text is in the box, and is lost only to a reload.
+    try { this.storage().setItem(`${SAVED}-draft:${window}`, text); } catch {}
+  }
   /** Sends your message. In a run it steers the agent, or with `later` waits until the agent has stopped. */
   async send(window: string, text: string, later = false) {
     return await this.ask('prompt', { window, text, whenBusy: later ? 'followUp' : 'steer' }) !== undefined;

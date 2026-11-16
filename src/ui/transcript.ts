@@ -19,6 +19,8 @@ export interface Line extends Pick<Message, 'kind' | 'text' | 'date'> {
   call?: string;
   /** Part of a connected window's handoff: what its agent wrote for the main chat when the conversation was completed. */
   handoff?: boolean;
+  /** The images of your message, as addresses the page can draw, while it is not in the log, which names them by their files. */
+  images?: string[];
 }
 /** A line in its place in the chat. `key` is its number in the profile's log (in a connected window, in its conversation), so it
  * is the same while the line streams, once it is logged, and whichever pages of the log are loaded. */
@@ -121,14 +123,15 @@ export const without = (live: Live, id: unknown): Live => ({ ...live, dialogs: l
 const date = (message: PiMessage) => new Date(message.timestamp).toISOString();
 /** What pi-optchat logs a message as, by its own `said`: your words as `user`, a reply's text as `talk` and its tool calls as
  * `tool`, a tool's result and a failed reply as `echo`. What OptChat itself puts in the chat (a subagent's report) is Pi's
- * custom message, which pi-optchat logs as `work` where it sends it. A tool call keeps its id, which the log does not have,
- * and an image is named as one: the log names it by its file, which is not written yet. */
+ * custom message, which pi-optchat logs as `work` where it sends it. A tool call keeps its id, which the log does not have.
+ * The log names an image by its file, which is not written yet: your message keeps its images, and a tool's is named as one. */
 export function said(message: PiMessage, streaming = false): Line[] {
   const report = message.role === 'custom' && message.display !== false && words(message.content);
   const calls = Array.isArray(message.content) ? message.content.flatMap(block => isObject(block) && block.type === 'toolCall' ? String(block.id) : []) : [];
-  return (report ? [['work', report] as const] : recorded(message, { imageRef: () => '[image]' })).map(([kind, text]) => {
+  const images = message.role === 'user' && Array.isArray(message.content) ? message.content.flatMap(block => isObject(block) && block.type === 'image' ? `data:${String(block.mimeType)};base64,${String(block.data)}` : []) : [];
+  return (report ? [['work', report] as const] : recorded(message, { imageRef: () => images.length ? '' : '[image]' })).map(([kind, text]) => {
     const call = kind === 'tool' ? calls.shift() : undefined;
-    return { kind, text, date: date(message), ...streaming && { streaming }, ...call && { call } };
+    return { kind, text, date: date(message), ...streaming && { streaming }, ...call && { call }, ...images.length && { images } };
   });
 }
 /** The reply being written, as the lines it will become. A tool call is shown with its arguments as far as they parse. */
@@ -196,7 +199,7 @@ export type Tool = Extract<Step, { type: 'tool' }>;
  * started under, where the chat has its start), the agent's reply, which is its work and then its answer, or the handoff a
  * connected window's agent wrote for the main chat (`body`, empty until it is written). `items` is what the part was made from. */
 export type Part = { key: number; items: readonly Item[] } & (
-  | { type: 'user'; date: string; text: string; images: string[] }
+  | { type: 'user'; date: string; text: string; /** Each by its name in the profile, or as an address where it is not kept there. */ images: string[] }
   | { type: 'note'; text: string }
   | { type: 'work'; date: string; agent?: string; title?: string; body: string }
   | { type: 'handoff'; date: string; body: string }
@@ -246,7 +249,7 @@ function part(items: readonly Item[]): Part {
     const written = !last.streaming && !items.some(item => item.kind === 'tool' && item.date === last.date);
     return { ...common, type: 'handoff', date: last.date, body: written ? text(closing(items)) : '' };
   }
-  if (first.kind === 'user') return { ...common, type: 'user', date: first.date, text: first.text.replace(IMAGE, '').trim(), images: [...first.text.matchAll(IMAGE)].map(match => match[1]) };
+  if (first.kind === 'user') return { ...common, type: 'user', date: first.date, text: first.text.replace(IMAGE, '').trim(), images: first.images ?? [...first.text.matchAll(IMAGE)].map(match => match[1]) };
   if (first.kind === 'note') return { ...common, type: 'note', text: first.text };
   if (first.kind === 'work') {
     // pi-optchat names the agent in front of its report, with its title if it has one (`[1a2b3c4d · Why it flakes] …`), and

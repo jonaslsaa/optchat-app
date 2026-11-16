@@ -307,10 +307,13 @@ test('what is quoted goes under what is typed, a > before each of its lines, wit
   assert.equal(quoted('About the second one:\n', 'one\n\ntwo'), 'About the second one:\n\n> one\n>\n> two\n\n');
 });
 
-test('a message says what pi-optchat would log, with an image named as one and a tool call by its id', () => {
+test('a message says what pi-optchat would log, with your image to draw, a tool\'s named as one, and a tool call by its id', () => {
   const picture = { type: 'image', data: 'aGk=', mimeType: 'image/png' };
-  // A connected window's messages are drawn from Pi, not from the log: one that is only a picture is not an empty bubble.
-  assert.deepEqual(spoken([{ role: 'user', timestamp: T, content: [picture] }]).map(item => [item.kind, item.text]), [['user', '[image]']]);
+  // A message of yours that is not in the log yet, or never is (a connected window's), is drawn from Pi: with its pictures,
+  // which the log would name by their files, and so one that is only a picture is not an empty bubble.
+  const shown = spoken([{ role: 'user', timestamp: T, content: [text('this one'), picture] }, { role: 'user', timestamp: T + 1, content: [picture] }]);
+  assert.deepEqual(shown.map(item => [item.kind, item.text, item.images]), [['user', 'this one', ['data:image/png;base64,aGk=']], ['user', '', ['data:image/png;base64,aGk=']]]);
+  assert.partialDeepStrictEqual(parts(shown), [{ type: 'user', text: 'this one', images: ['data:image/png;base64,aGk='] }, { type: 'user', text: '', images: ['data:image/png;base64,aGk='] }]);
   assert.deepEqual(spoken([{ role: 'toolResult', timestamp: T, toolName: 'read', content: [text('a chart'), picture] }]).map(item => [item.kind, item.text]), [['echo', 'read: a chart\n[image]']]);
   assert.deepEqual(spoken([reply(1, text('Looking.'), bash('call-1', 'ls'), bash('call-2', 'pwd'))]).map(item => [item.kind, item.text, item.call]),
     [['talk', 'Looking.', undefined], ['tool', 'bash {"command":"ls"}', 'call-1'], ['tool', 'bash {"command":"pwd"}', 'call-2']]);

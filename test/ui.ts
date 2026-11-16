@@ -7,7 +7,7 @@ import { build } from 'vite';
 import { agents, CHANGES, FORMULAS, seed, TEAM } from '../scripts/seed.ts';
 import { connect } from '../src/client.ts';
 import { startServer } from '../src/server/server.ts';
-import { createProfile, temporaryHome, writeMemory, writeRun } from './support.ts';
+import { createProfile, give, png, temporaryHome, writeMemory, writeRun, type Given } from './support.ts';
 
 /** `npm run test:ui`: whose a key is and where the focus goes, which only a browser decides. The page is built and driven in
  * your installed Chrome, headless, against the fake Pi and throwaway profiles under /tmp: no model, no network, nothing of
@@ -18,7 +18,7 @@ process.env.FAKE_PI_HOME = join(home, 'pi');
 mkdirSync(join(home, 'pi', 'pi-optchat'), { recursive: true });
 writeFileSync(join(home, 'pi', 'pi-optchat', 'package.json'), JSON.stringify({ name: 'pi-optchat', version: '0.11.12' }));
 writeFileSync(join(home, 'pi', 'state.json'), JSON.stringify({ version: '1.5.2', providers: ['anthropic', 'openai'], packages: { 'npm:pi-optchat': join(home, 'pi', 'pi-optchat') } }));
-for (const name of ['chat', 'beside', 'sheet', 'memory', 'rows', 'menus', 'fields', 'asks', 'windows', 'importing', 'keys', 'spend', 'commands', 'arrows', 'mute', 'said']) {
+for (const name of ['chat', 'beside', 'sheet', 'memory', 'rows', 'menus', 'fields', 'asks', 'windows', 'importing', 'keys', 'spend', 'commands', 'arrows', 'mute', 'said', 'images']) {
   const profile = createProfile(home, name);
   if (['memory', 'windows', 'keys', 'spend', 'arrows'].includes(name)) { writeMemory(profile, 16); continue; }
   seed(profile, TEAM.length, Date.now(), TEAM);
@@ -157,11 +157,15 @@ test('Esc in a question Pi asks answers no, and the run goes on with that', asyn
 test('a message pi-optchat does not take is back in the box with what it said about it, which Esc or its button takes away', async () => {
   const page = await open('importing'), box = page.getByRole('textbox', { name: 'Message' });
   const said = page.getByRole('status').filter({ hasText: 'This profile has an import in progress.' });
+  const waiting = page.getByRole('list', { name: 'Images to send' }).getByRole('listitem');
+  await give(page, 'paste', [{ name: 'notes.png', type: 'image/png', data: png(64, [220, 60, 60]) }]);
+  await waiting.waitFor();
   await box.fill('Summarise the release notes');
   await page.keyboard.press('Enter');
   await said.waitFor({ timeout: 5000 }).catch(() => assert.fail('Nothing says why the message was not taken.'));
-  // The notice comes before Pi's answer to the message, and the message is back once that has come.
+  // The notice comes before Pi's answer to the message, and the message is back once that has come, with its image.
   await page.locator('textarea:text-is("Summarise the release notes")').waitFor({ timeout: 5000 }).catch(() => assert.fail('The message is not back in the box.'));
+  assert.equal(await waiting.count(), 1, 'The image is not back with the message.');
   // Esc is the chat's: with no run to stop, it takes the notice away, and from beside the chat it does not.
   await page.getByRole('button', { name: 'Agents and GitHub' }).click();
   await agent(page, 'How T3 Code reconnects').click();
@@ -588,4 +592,65 @@ test('a formula is drawn by KaTeX and a price stays as written, and a table copi
   await page.getByRole('button', { name: 'Copy as Markdown' }).click();
   assert.match(await clipboard(), /^\| Role \| Cost \| Cache read \|\n\| --- \| ---: \| ---: \|\n[^]*\| Compactor \| \$2\.02 \| 71% \|$/);
   await page.context().close();
+});
+
+test('an image that is pasted, dropped or chosen goes with the message, one that cannot says why, and in the chat it is shown large, where Esc is the picture\'s', async () => {
+  const page = await open('images'), message = page.getByRole('textbox', { name: 'Message' });
+  const red: Given = { name: 'red.png', type: 'image/png', data: png(64, [220, 60, 60]) }, blue: Given = { name: 'blue.png', type: 'image/png', data: png(64, [60, 90, 220]) };
+  const waiting = page.getByRole('list', { name: 'Images to send' }).getByRole('listitem'), kept = page.locator('img[src^="/images/images/"]'), large = page.getByRole('button', { name: 'Show the image large' });
+  await give(page, 'paste', [red]);
+  await waiting.nth(0).waitFor();
+  // Copied cells are text and a table with a picture of them: the text is what is wanted.
+  await give(page, 'paste', [blue], { 'text/plain': 'a\tb', 'text/html': '<table><tr><td>a</td><td>b</td></tr></table>' });
+  // A drop of two, one of them no image: the image goes along, and the other is refused in words.
+  await give(page, 'drop', [blue, { name: 'notes.pdf', type: 'application/pdf', data: Buffer.from('%PDF') }]);
+  await page.getByRole('alert').filter({ hasText: 'notes.pdf is not a PNG, JPEG, GIF or WebP image. Only those can be sent.' }).waitFor();
+  assert.equal(await waiting.count(), 2);
+  // Chosen with the button, and too large.
+  await page.locator('input[type=file]').setInputFiles({ name: 'huge.png', mimeType: 'image/png', buffer: Buffer.alloc(10 * 1024 * 1024 + 1) });
+  await page.getByRole('alert').filter({ hasText: 'huge.png is 10.0 MB. An image can be 10 MB at most.' }).waitFor();
+  assert.equal(await waiting.count(), 2);
+  // They wait while another window is looked at, and the one taken off does not go.
+  await page.getByRole('button', { name: 'New window' }).click();
+  await page.getByRole('button', { name: 'Main chat' }).click();
+  assert.equal(await waiting.count(), 2);
+  await waiting.nth(0).getByRole('button', { name: 'Remove the image' }).click();
+  assert.equal(await waiting.count(), 1);
+  await message.fill('wait');
+  await page.keyboard.press('Enter');
+  await stop(page).waitFor();
+  assert.equal(await waiting.count(), 0);
+  // What was sent is in the chat at once, before the profile has it. Large over the page, Esc puts that away and nothing else.
+  await large.click();
+  await page.getByRole('dialog', { name: 'The image, large' }).waitFor();
+  assert.equal(await focused(page), 'The image, large');
+  await goesOn(page, 'with an image shown large');
+  assert.equal(await page.getByRole('dialog', { name: 'The image, large' }).count(), 0);
+  assert.equal(await focused(page), 'Show the image large');
+  await message.focus();
+  await stops(page, 'in the composer');
+  // Once the run is over it is the profile's: the blue one, as it was sent.
+  await kept.waitFor();
+  assert.equal(await large.count(), 1);
+  assert.deepEqual(Buffer.from(await (await page.request.get(new URL(await kept.getAttribute('src') ?? '', server.page).href)).body()), blue.data);
+  // A file copied in Finder comes with its name, and the file is what is pasted. Enter before it is read sends nothing: the
+  // message does not go without its image.
+  await message.fill('and this one');
+  await give(page, 'paste', [red], { 'text/plain': 'red.png' }, 'Enter');
+  await waiting.nth(0).waitFor();
+  assert.equal(await message.inputValue(), 'and this one');
+  // An image is a message without a word.
+  await message.fill('');
+  await page.getByRole('button', { name: 'Send', exact: true }).click();
+  await kept.nth(1).waitFor();
+  // An image in a reply is shown large too, when it is one the reply may draw: the profile's own.
+  await give(page, 'paste', [red]);
+  await waiting.nth(0).waitFor();
+  await message.fill('a picture');
+  await page.keyboard.press('Enter');
+  await page.getByRole('button', { name: 'Show the image large: yours' }).click();
+  await page.getByRole('dialog', { name: 'The image, large' }).waitFor();
+  await page.mouse.click(5, 5); // Beside the picture.
+  await page.getByRole('dialog', { name: 'The image, large' }).waitFor({ state: 'detached' });
+  // A reply draws no other: an address elsewhere stays a link, which is the rule of `safe.ts` (test/markdown.test.ts).
 });

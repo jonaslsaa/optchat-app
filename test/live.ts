@@ -11,7 +11,7 @@ import { PROMPT } from '../src/server/windows.ts';
 import { transcript } from '../src/ui/agents.ts';
 import { apply, chat, idle, isMessage, isObject, logged, parts, words, type Part } from '../src/ui/transcript.ts';
 import { current } from '../src/window.ts';
-import { createProfile, temporaryHome } from './support.ts';
+import { createProfile, png, temporaryHome } from './support.ts';
 
 /** `npm run test:live`: real turns through the installed Pi with pi-optchat, on throwaway profiles. It needs Pi logged in to
  * Anthropic and costs about a cent. Pi keeps no session file, and the real ~/.optchat is never opened.
@@ -145,6 +145,28 @@ test('asking a window for its commands starts its Pi and writes nothing to the p
   // And on a profile that was opened before, nothing at all is written.
   const again = await asked();
   assert.deepEqual([again.first, again.then, again.total], [once.then, once.then, 0]);
+});
+
+test('an image sent with a message reaches the model, in the main chat and in a connected window, and the main chat\'s is the profile\'s', { timeout: 180_000 }, async t => {
+  const home = temporaryHome();
+  createProfile(home, 'live');
+  const server = await startServer({ home, cwd: mkdtempSync(join(home, 'cwd-')), flags });
+  t.after(() => server.close());
+  const { pushes, record, onPush } = watch(), client = await connect(server.url, onPush);
+  const ask = async (role: 'main' | 'connected', colour: [number, number, number]) => {
+    const { window } = await client.request('open', { profile: 'live', role }), data = png(200, colour);
+    await client.request('prompt', { window: window.id, text: 'What colour is this square? Answer with the one word.', images: [{ type: 'image', data: data.toString('base64'), mimeType: 'image/png' }] });
+    await record(window.id, r => r.type === 'agent_settled');
+    const replies = pushes.flatMap(push => push.push === 'record' && push.window === window.id && said(push.record, 'assistant') && isMessage(push.record.message) ? [words(push.record.message.content)] : []);
+    return { data, reply: replies.at(-1) };
+  };
+  const main = await ask('main', [220, 40, 40]);
+  assert.match(main.reply ?? '', /^red\.?$/i);
+  // pi-optchat keeps it in the profile and names it in the log, which is where the chat draws it from.
+  const [{ text }] = (await client.request('history', { profile: 'live' })).messages;
+  const [, name] = /^What colour is this square\? Answer with the one word\.\n\[image ([0-9a-f]{16})\]$/.exec(text) ?? [];
+  assert.deepEqual(Buffer.from(await (await fetch(`${server.page}images/live/${name}`)).arrayBuffer()), main.data);
+  assert.match((await ask('connected', [40, 70, 220])).reply ?? '', /^blue\.?$/i);
 });
 
 test('a connected window reads the profile\'s memory, and Complete hands its conversation to the main chat', { timeout: 180_000 }, async t => {

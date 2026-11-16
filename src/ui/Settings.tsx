@@ -95,6 +95,19 @@ export function Settings({ state, onClose }: { state: State; onClose: () => void
     pick(next);
     document.getElementById(`${id}-${next}`)?.focus();
   };
+  const pages: Record<Tab, ReactNode> = {
+    general: <>{state.settings && <Choices settings={state.settings} />}<Needs state={state} /></>,
+    profile: profile !== undefined && config && (
+      <Section title={`Profile: ${profile}`} hint="pi-optchat's settings for this profile. A change is saved when you leave its field, and a chat that is running picks it up without a restart.">
+        <Config key={profile} profile={profile} config={config} models={state.models[mainOf(profile)]?.models ?? []} />
+      </Section>
+    ),
+    instructions: profile !== undefined && config && (
+      <Section title="Instructions" hint={`What the agents of ${profile} are told every turn: the profile's AGENTS.md.`}>
+        <Instructions key={profile} profile={profile} kept={config.instructions} />
+      </Section>
+    ),
+  };
   return (
     <Page title="Settings" action={<Button variant="ghost-muted" size="icon-sm" aria-label="Close the settings" onClick={onClose}><XIcon /></Button>}>
       {tabbed && (
@@ -102,7 +115,7 @@ export function Settings({ state, onClose }: { state: State; onClose: () => void
           {ORDER.map(name => {
             const [title, Icon] = TABS[name];
             return (
-              <button key={name} id={`${id}-${name}`} type="button" role="tab" aria-selected={name === tab} aria-controls={`${id}-panel`} tabIndex={name === tab ? 0 : -1} onClick={() => pick(name)}
+              <button key={name} id={`${id}-${name}`} type="button" role="tab" aria-selected={name === tab} aria-controls={`${id}-${name}-panel`} tabIndex={name === tab ? 0 : -1} onClick={() => pick(name)}
                 className="flex h-8 cursor-pointer items-center gap-2 rounded-[var(--control-radius)] px-2.5 font-medium text-muted-foreground text-sm outline-none hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring aria-selected:bg-accent aria-selected:text-foreground [&>svg]:size-4">
                 <Icon />{title}
               </button>
@@ -110,18 +123,10 @@ export function Settings({ state, onClose }: { state: State; onClose: () => void
           })}
         </div>
       )}
-      <div id={`${id}-panel`} role={tabbed ? 'tabpanel' : undefined} aria-labelledby={tabbed ? `${id}-${tab}` : undefined}>
-        {tab === 'general' ? <>{state.settings && <Choices settings={state.settings} />}<Needs state={state} /></>
-          : profile !== undefined && config && (tab === 'profile' ? (
-            <Section title={`Profile: ${profile}`} hint="pi-optchat's settings for this profile. A change is saved when you leave its field, and a chat that is running picks it up without a restart.">
-              <Config key={profile} profile={profile} config={config} models={state.models[mainOf(profile)]?.models ?? []} />
-            </Section>
-          ) : (
-            <Section title="Instructions" hint={`What the agents of ${profile} are told every turn: the profile's AGENTS.md.`}>
-              <Instructions key={profile} profile={profile} kept={config.instructions} />
-            </Section>
-          ))}
-      </div>
+      {/* Every tab's page stays, hidden when it is not shown: what was typed in one, and not saved yet, is there on the way back. */}
+      {ORDER.map(name => (
+        <div key={name} id={`${id}-${name}-panel`} role={tabbed ? 'tabpanel' : undefined} aria-labelledby={tabbed ? `${id}-${name}` : undefined} hidden={name !== tab}>{pages[name]}</div>
+      ))}
     </Page>
   );
 }

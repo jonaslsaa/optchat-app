@@ -575,7 +575,14 @@ test('the settings are in tabs: the arrows go from one to the next, the page ope
   assert.equal(await focused(page), 'Profile');
   await page.keyboard.press('ArrowLeft');
   await page.keyboard.press('ArrowLeft'); // Round, from the first to the last.
-  await page.getByRole('textbox', { name: 'Instructions' }).waitFor();
+  const instructions = page.getByRole('textbox', { name: 'Instructions' });
+  await instructions.fill('Not saved yet.');
+  await page.getByRole('tab', { name: 'Instructions' }).focus();
+  // What was typed and not saved is there again on the way back.
+  await page.keyboard.press('ArrowRight');
+  await theme.waitFor();
+  await page.keyboard.press('ArrowLeft');
+  assert.equal(await instructions.inputValue(), 'Not saved yet.');
   assert.equal(await focused(page), 'Instructions');
   await goesOn(page, 'on a tab of the settings');
   await settings.click();

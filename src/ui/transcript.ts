@@ -320,20 +320,21 @@ const NAMED = ['command', 'pattern', 'query', 'path', 'file_path', 'url', 'title
 /** A piece of what an opened call shows of itself. `change`: text an edit took out of the file, or put in. */
 export type Shown = { text: string; change?: 'removed' | 'added' };
 const MARKS = { removed: '−', added: '+' };
-const changed = (change: 'removed' | 'added', text: unknown): Shown[] =>
-  typeof text === 'string' && text ? [{ change, text: text.split('\n').map(line => `${MARKS[change]} ${line}`).join('\n') }] : [];
 /** How many lines a change put in and took out. */
-export interface Stat { added: number; removed: number }
+interface Stat { added: number; removed: number }
 const counted = (lines: Shown[]): Stat => ({ added: lines.filter(line => line.change === 'added').length, removed: lines.filter(line => line.change === 'removed').length });
 /** A line of a diff: one a change kept, or took out or put in. */
-const marked = (text: string, change?: Shown['change']): Shown => ({ text: `${change ? MARKS[change] : ' '} ${text}`, ...change && { change } });
-/** A text's lines. The line break that ends its last line begins none. */
-const linesOf = (text: string) => text ? text.replace(/\n$/, '').split('\n') : [];
+const marked = (line: string, change?: Shown['change']): Shown => ({ text: `${change ? MARKS[change] : ' '} ${line}`, ...change && { change } });
+/** What an edit that is on its way or failed was given: each line of `text`, as taken out or put in. */
+const changed = (change: 'removed' | 'added', text: unknown): Shown[] => typeof text === 'string' && text ? text.split('\n').map(line => marked(line, change)) : [];
 /** The lines `before` and `after` have in common, and those taken out and put in: around the longest run of lines both have, as the
- * `diff` command finds it. Pi's edits are a few lines each; past a million pairs to compare, all go out and come in. */
+ * `diff` command finds it. Pi's edits are a few lines each; past a million pairs to compare, all go out and come in. An edit's
+ * text ends in the middle of a line of the file, at the line break the text has last or none, so that last piece is a line too:
+ * a line break put in or taken out there is a line put in or taken out. When both end on one, the empty pieces after it are no news. */
 export function diff(before: string, after: string): Shown[] {
-  const a = linesOf(before), b = linesOf(after);
-  if (a.length * b.length > 1e6) return [...a.map(text => marked(text, 'removed')), ...b.map(text => marked(text, 'added'))];
+  const a = before.split('\n'), b = after.split('\n');
+  if (a.at(-1) === '' && b.at(-1) === '') { a.pop(); b.pop(); }
+  if (a.length * b.length > 1e6) return [{ text: 'Too long to compare line by line: all of it was taken out, and this put in.' }, ...a.map(text => marked(text, 'removed')), ...b.map(text => marked(text, 'added'))];
   // common[i][j]: how many lines a[i…] and b[j…] have in common.
   const common = Array.from({ length: a.length + 1 }, () => new Uint32Array(b.length + 1)), lines: Shown[] = [];
   for (let i = a.length - 1; i >= 0; i--) for (let j = b.length - 1; j >= 0; j--) common[i][j] = a[i] === b[j] ? common[i + 1][j + 1] + 1 : Math.max(common[i + 1][j], common[i][j + 1]);
@@ -377,7 +378,8 @@ export function act({ name, args, output, failed }: Tool, live: boolean): { verb
     if (done && pairs.length === edits.length) stat = counted(detail = pairs.flatMap(([before, after], index) => [...index ? [{ text: '…' }] : [], ...diff(before, after)]));
     else detail = edits.filter(isObject).flatMap((edit, index) => [...index ? [{ text: '…' }] : [], ...changed('removed', edit.oldText), ...changed('added', edit.newText)]);
   } else if (name === 'write' && typeof content === 'string') {
-    detail = done ? diff('', content) : [{ text: content }];
+    // The line break that ends a file begins no line.
+    detail = done ? (content ? content.replace(/\n$/, '').split('\n') : []).map(line => marked(line, 'added')) : [{ text: content }];
     if (done) stat = counted(detail);
   }
   else if (name === 'tell' && typeof message === 'string') detail = [{ text: message }];

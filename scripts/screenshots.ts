@@ -214,7 +214,7 @@ async function pictures(browser: Browser, control: Client) {
   await changes.getByText('Wrote docs/windows.md').click();
   await shot(changes, '23-edit-and-write-opened');
   // A diff longer than the box it opens in scrolls there, light, dark and narrow.
-  for (const [name, options] of [['72-long-diff', {}], ['73-long-diff-dark', { dark: true }], ['74-long-diff-narrow', { width: 420 }]] as const) {
+  for (const [name, options] of [['86-long-diff', {}], ['87-long-diff-dark', { dark: true }], ['88-long-diff-narrow', { width: 420 }]] as const) {
     const page = await open(['changes'], options);
     await page.getByRole('button', { name: /Worked/ }).first().click();
     await page.getByText('Edited src/server/pi.ts').click();

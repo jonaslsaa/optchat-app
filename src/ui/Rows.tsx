@@ -89,7 +89,7 @@ function ToolRow({ step, live, running }: { step: Tool; live: boolean; running?:
       onKeyDown={event => { if (event.target === event.currentTarget && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); setOpen(!open); } }}
       icon={<span className="flex size-4 items-center justify-center text-icon-muted"><Icon className="block size-4 shrink-0 stroke-2" /></span>}
       label={<><span className={cn('font-medium', step.failed && 'text-destructive')}>{verb}</span> <span className={cn('opacity-80', step.name === 'bash' && 'font-mono')}>{subject}</span>
-        {stat && <span className="ms-1.5 font-mono text-xs tabular-nums"><span className="text-success-foreground">+{stat.added}</span>{stat.removed > 0 && <span className="ms-1 text-destructive-foreground">−{stat.removed}</span>}</span>}</>}
+        {stat && <span className="ms-1.5 font-mono text-xs tabular-nums">{stat.added > 0 && <span className="me-1 text-success-foreground">+{stat.added}</span>}{stat.removed > 0 && <span className="text-destructive-foreground">−{stat.removed}</span>}</span>}</>}
       trailing={<span className="flex h-6 items-center gap-1 self-start">
         {running !== undefined && step.output === undefined && <Spinner className="text-icon-muted" />}
         {step.failed && <XIcon aria-label="Failed" className="size-3 shrink-0 text-tool-error-icon/60" />}

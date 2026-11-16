@@ -182,6 +182,15 @@ test('an opened tool call shows what its line does not say, and no JSON for a ca
     { change: 'removed', text: '− let a = 1;' }, { change: 'removed', text: '− let b;' }, { change: 'added', text: '+ const a = 1;' }, { text: '  run(a);' }, { change: 'added', text: '+ done();' },
     { text: '…' }, { change: 'removed', text: '− unused();' },
   ]);
+  // An edit's text ends where the file goes on, so a line break put in or taken out at its end is a line put in or taken out.
+  assert.deepEqual([shown('edit', { path: 'a', edits: [{ oldText: 'hello', newText: 'hello\n' }] }), shown('edit', { path: 'a', edits: [{ oldText: 'a\nb\n', newText: 'a\nb' }] })], [
+    [{ text: '  hello' }, { change: 'added', text: '+ ' }], [{ text: '  a' }, { text: '  b' }, { change: 'removed', text: '− ' }],
+  ]);
+  // Past a million pairs of lines to compare, all go out and come in, and the diff says so.
+  const long = shown('edit', { path: 'a', edits: [{ oldText: 'x\n'.repeat(1001), newText: 'y\n'.repeat(1001) }] });
+  assert.deepEqual([long[0], long.length, long.at(-1)], [{ text: 'Too long to compare line by line: all of it was taken out, and this put in.' }, 1 + 1001 * 2, { change: 'added', text: '+ y' }]);
+  // Texts alike, line breaks and all, are no change.
+  assert.deepEqual(shown('edit', { path: 'a', edits: [{ oldText: 'a\n', newText: 'a\n' }] }), [{ text: '  a' }]);
   // A file written is every line put in. The line break that ends a text begins no line.
   assert.deepEqual(shown('write', { path: 'notes.md', content: '# Notes\n\nOne.\n' }), [{ change: 'added', text: '+ # Notes' }, { change: 'added', text: '+ ' }, { change: 'added', text: '+ One.' }]);
   // A command is said by its line, unless it is more than a line: then the line has its first.
@@ -205,7 +214,7 @@ test('a real edit and write are their diff, live and from the log alike, and a f
   ]);
   const edit = (output?: string): Tool => ({ key: 0, type: 'tool', name: 'edit', args: { path: 'a.ts', edits: [{ oldText: 'a\nb', newText: 'a\nc' }] }, failed: false, ...output !== undefined && { output } });
   // While it runs, and before its arguments are whole, an edit is what it was given so far.
-  assert.deepEqual(act(edit(), true), { verb: 'Editing', subject: 'a.ts', detail: [{ change: 'removed', text: '− a\n− b' }, { change: 'added', text: '+ a\n+ c' }] });
+  assert.deepEqual(act(edit(), true), { verb: 'Editing', subject: 'a.ts', detail: [{ change: 'removed', text: '− a' }, { change: 'removed', text: '− b' }, { change: 'added', text: '+ a' }, { change: 'added', text: '+ c' }] });
   assert.deepEqual(act({ ...edit(), args: { path: 'a.ts', edits: [{ oldText: 'a' }] } }, true).detail, [{ change: 'removed', text: '− a' }]);
 });
 

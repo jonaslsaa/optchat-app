@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import type { Agent } from '../src/protocol.ts';
-import { among, atWork, busy, controls, doing, listed, named, polled, stood } from '../src/ui/agents.ts';
+import { among, busy, controls, doing, listed, named, ownAtWork, polled, stood } from '../src/ui/agents.ts';
 
 const agent = (id: string, state: Agent['state'], started: number, more: Partial<Agent> = {}): Agent => ({ id, task: `Task of ${id}\nand more`, model: 'm', state, started, doing: [], ...more });
 
@@ -59,5 +59,5 @@ test('the chat shows the agents a call started as the list has them, and over th
   assert.deepEqual(among(['a', 'gone', 'done'], agents).map(agent => agent.id), ['a', 'done']);
   assert.deepEqual(among(['gone'], agents), []);
   // An agent's own agents are the panel's, and pi-optchat's count leaves them out too.
-  assert.deepEqual(atWork(agents).map(agent => agent.id), ['a', 'b']);
+  assert.deepEqual(ownAtWork(agents).map(agent => agent.id), ['a', 'b']);
 });

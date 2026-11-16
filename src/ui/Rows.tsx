@@ -1,7 +1,7 @@
 import { BotIcon, CheckIcon, ChevronRightIcon, CircleSlashIcon, EyeIcon, GlobeIcon, HistoryIcon, SearchIcon, SquarePenIcon, StickyNoteIcon, TerminalIcon, WrenchIcon, XIcon, type LucideIcon } from 'lucide-react';
 import { createContext, memo, useContext, useEffect, useState, type ReactNode } from 'react';
 import { flushSync } from 'react-dom';
-import { working as atWork } from '../agent.ts';
+import { working as agentWorks } from '../agent.ts';
 import type { Agent } from '../protocol.ts';
 import { among, doing, named, stood } from './agents.ts';
 import { CiteCard } from './Cite.tsx';
@@ -133,12 +133,12 @@ export function Timer({ from }: { from: string }) {
 }
 const iso = (time: number) => new Date(time).toISOString();
 /** How long an agent has worked, counting while it does. */
-export const Took = ({ agent }: { agent: Agent }) => atWork(agent) ? <Timer from={iso(agent.started)} /> : agent.ended !== undefined ? <>{took(iso(agent.started), iso(agent.ended))}</> : null;
+export const Took = ({ agent }: { agent: Agent }) => agentWorks(agent) ? <Timer from={iso(agent.started)} /> : agent.ended !== undefined ? <>{took(iso(agent.started), iso(agent.ended))}</> : null;
 /** The colours an agent's state is said in, and the only ones it has: at work (the dot's blue), done, failed. */
 export const TONES = { working: 'text-info-foreground', done: 'text-success-foreground', failed: 'text-error-foreground' };
 /** How an agent stands: a dot while it works, a mark for how it ended. */
 export function Mark({ agent }: { agent: Agent }) {
-  if (atWork(agent)) return <StatusDot tone="working" pulse={agent.state !== 'paused'} />;
+  if (agentWorks(agent)) return <StatusDot tone="working" pulse={agent.state !== 'paused'} />;
   const Icon = agent.state === 'completed' ? CheckIcon : agent.state === 'failed' ? XIcon : CircleSlashIcon, { tone } = stood(agent);
   return <Icon role="img" aria-label={agent.state} className={cn('size-3.5 shrink-0 text-muted-foreground/70', tone && TONES[tone])} />;
 }
@@ -151,7 +151,7 @@ export const AgentsInChat = createContext<{ agents: readonly Agent[]; onAgent?: 
  * they are shown under it only while one of them works. They are the page's words, which find leaves out. */
 function Spawned({ ids, folded = false }: { ids: readonly string[]; folded?: boolean }) {
   const { agents, onAgent } = useContext(AgentsInChat), shown = among(ids, agents);
-  if (!shown.length || folded && !shown.some(atWork)) return null;
+  if (!shown.length || folded && !shown.some(agentWorks)) return null;
   return (
     <ul data-no-find aria-label="The agents it started" className={cn('ms-3 mb-1 flex flex-col border-border/70 border-s ps-2', folded && 'mt-1.5')}>
       {shown.map(agent => {

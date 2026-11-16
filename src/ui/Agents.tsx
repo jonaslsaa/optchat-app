@@ -2,7 +2,7 @@ import { ArrowLeftIcon } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { working } from '../agent.ts';
 import type { Agent } from '../protocol.ts';
-import { atWork, controls, doing, listed, named, polled, stood, transcript } from './agents.ts';
+import { controls, doing, listed, named, ownAtWork, polled, stood, transcript } from './agents.ts';
 import { Queued, SendButton } from './Composer.tsx';
 import { Mark, Took, TONES } from './Rows.tsx';
 import { escapes } from './keys.ts';
@@ -130,7 +130,7 @@ export function Agents({ state, profile, agent: id, pulse, outside, onAgent }: {
   );
 }
 /** The main chat's agents while the panel is closed: read when the chat changes (`pulse`), as the open panel reads them, and
- * every two seconds while the status line counts agents at work (`busy`), for the lines under the calls that started them and
+ * every two seconds while the status line counts agents at work or a Pi in a terminal has the chat (`busy`, by the panel's rule), for the lines under the calls that started them and
  * the line over the composer. Then the panel is the one that reads them. */
 export function useAgents(profile: string, { closed, pulse, busy, connected }: { closed: boolean; pulse: string; busy: boolean; connected: boolean }) {
   useEffect(() => { if (closed && connected) void app.readAgents(profile, SHOWN); }, [profile, closed, pulse, connected]);
@@ -143,13 +143,13 @@ export function useAgents(profile: string, { closed, pulse, busy, connected }: {
 /** Over the composer while the main chat's agents work and the panel is closed: how many, and each one's title and how long it
  * has worked, on one line, cut short where it is full. A click opens the panel's list. Quiet, as the line under the box is. */
 export function AtWork({ agents, onOpen }: { agents: readonly Agent[]; onOpen: () => void }) {
-  const shown = atWork(agents);
+  const shown = ownAtWork(agents);
   if (!shown.length) return null;
   return (
     <div data-no-find className="shrink-0 px-3 sm:px-12">
       <button type="button" title="Open the agents" onClick={onOpen}
         className="enter mx-auto flex h-6 w-full min-w-0 max-w-(--chat-content-max-width) cursor-pointer items-center gap-2 rounded-md px-2 text-left text-muted-foreground text-xs outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/70">
-        <StatusDot tone="working" pulse />
+        <StatusDot tone="working" pulse={shown.some(agent => agent.state !== 'paused')} />
         <span className="min-w-0 flex-1 truncate tabular-nums">
           <span className="text-secondary-label">{shown.length === 1 ? '1 agent working' : `${shown.length} agents working`}</span>
           {shown.map(agent => <span key={agent.id}> · {named(agent)} <Took agent={agent} /></span>)}

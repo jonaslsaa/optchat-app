@@ -2,7 +2,7 @@ import { ChartColumnIcon, CheckIcon, PanelLeftIcon, PanelRightIcon, SettingsIcon
 import { Fragment, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, type ComponentRef, type Ref } from 'react';
 import { flushSync } from 'react-dom';
 import { canComplete, current } from '../window.ts';
-import { busy } from './agents.ts';
+import { busy, polled } from './agents.ts';
 import { AtWork, useAgents } from './Agents.tsx';
 import type { Cite, Place } from './cite.ts';
 import { Composer } from './Composer.tsx';
@@ -85,7 +85,7 @@ function Profile({ state, profile, onSettings, onUsage, onNewProfile, ref }: { s
   const turn = [window?.status, log?.total, state.connection].join(' ');
   // A Pi that has stopped counts nothing: its last status line still stands, and is about agents that went with it.
   const agents = state.agents[profile]?.agents, agentsWork = busy(window?.status === 'stopped' ? undefined : live.status.optchat, panel && agents);
-  useAgents(profile, { closed: !panel && !own, pulse, busy: agentsWork, connected: state.connection === 'open' });
+  useAgents(profile, { closed: !panel && !own, pulse, busy: agentsWork || polled(agents ?? [], window?.outside !== undefined), connected: state.connection === 'open' });
   if (!window) return <p className="m-auto text-muted-foreground text-sm">Opening {profile}…</p>;
   const more = !own && log && log.entries.length > 0 && log.entries[0].i > 0;
   // Nothing has been said here, as far as is known: a window that may have a conversation waits for it rather than say so.

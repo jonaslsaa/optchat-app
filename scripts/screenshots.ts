@@ -32,6 +32,10 @@ writeFileSync(join(team, 'config.json'), JSON.stringify({ ...JSON.parse(readFile
 seed(team, TEAM.length, NOW, TEAM);
 seed(createProfile(home, 'changes'), CHANGES.length, NOW, CHANGES);
 agents(team, NOW + 42_000);
+// The same chat with its agents as they were left, for them in the chat: none told, paused or started again yet.
+const begun = createProfile(home, 'started');
+seed(begun, TEAM.length, NOW, TEAM);
+agents(begun, NOW + 42_000);
 // The same chat once both its agents have reported, and no Pi has it.
 const reported = createProfile(home, 'reported');
 seed(reported, TEAM.length, NOW, TEAM);
@@ -440,8 +444,10 @@ async function pictures(browser: Browser, control: Client) {
   await shot(crew, '50-agent-refused');
   // The agents in the chat that started them, with the panel closed: while one works, a line each under the reply that started
   // them, and a line over the composer, which opens the list. Light, dark and narrow; and in the reply opened, under the call.
+  // Its Pi is started by asking it for its commands, which says nothing in the chat: its agents are then at work with it.
   for (const [name, options] of [['156-agents-in-chat', {}], ['157-agents-in-chat-dark', { dark: true }], ['158-agents-in-chat-narrow', { width: 420, height: 800 }]] as const) {
-    const page = await open(['team'], options);
+    const page = await open(['started'], options);
+    await control.request('commands', { window: 'started/main' });
     await page.getByRole('button', { name: /agents working/ }).waitFor();
     await shot(page, name);
     if (name !== '156-agents-in-chat') continue;

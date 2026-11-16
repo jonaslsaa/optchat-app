@@ -9,6 +9,7 @@ import type { Launch } from '../src/server/files.ts';
 import { connect } from '../src/client.ts';
 import { startServer } from '../src/server/server.ts';
 import { cited, named } from '../src/ui/cite.ts';
+import { describeOwner, lockProfile } from 'pi-optchat/files';
 import { createProfile, give, png, temporaryHome, writeMemory, writeRun, type Given } from './support.ts';
 
 /** `npm run test:ui`: whose a key is and where the focus goes, which only a browser decides. The page is built and driven in
@@ -20,7 +21,7 @@ process.env.FAKE_PI_HOME = join(home, 'pi');
 mkdirSync(join(home, 'pi', 'pi-optchat'), { recursive: true });
 writeFileSync(join(home, 'pi', 'pi-optchat', 'package.json'), JSON.stringify({ name: 'pi-optchat', version: '0.11.13' }));
 writeFileSync(join(home, 'pi', 'state.json'), JSON.stringify({ version: '1.5.2', providers: ['anthropic', 'openai'], packages: { 'npm:pi-optchat': join(home, 'pi', 'pi-optchat') } }));
-for (const name of ['bar', 'cold', 'colder', 'chat', 'beside', 'sheet', 'memory', 'rows', 'menus', 'fields', 'asks', 'windows', 'importing', 'keys', 'spend', 'commands', 'arrows', 'mute', 'said', 'images', 'tabs', 'slow', 'inline']) {
+for (const name of ['bar', 'cold', 'colder', 'chat', 'beside', 'sheet', 'memory', 'rows', 'menus', 'fields', 'asks', 'windows', 'importing', 'keys', 'spend', 'commands', 'arrows', 'mute', 'said', 'images', 'tabs', 'slow', 'inline', 'held']) {
   const profile = createProfile(home, name);
   if (['bar', 'cold', 'colder', 'memory', 'windows', 'keys', 'spend', 'arrows'].includes(name)) { writeMemory(profile, 16); continue; }
   seed(profile, TEAM.length, Date.now(), TEAM);
@@ -411,6 +412,19 @@ test('with the panel closed the agents a call started are under it, and over the
   await narrow.keyboard.press('Escape');
   assert.equal(await narrow.locator('dialog[open]').count(), 0, 'the sheet has closed');
   assert.equal(await focused(narrow), 'Agents and GitHub');
+});
+
+test('with a Pi in a terminal on the chat, which tells the app nothing, its agents are read every two seconds with the panel closed', async () => {
+  const profile = join(home, 'profiles', 'held'), unlock = await lockProfile(profile, describeOwner({ profile: 'held', pid: process.pid, host: 'a-terminal', cwd: home }));
+  try {
+    const context = await browser.newContext({ viewport: WIDE, reducedMotion: 'reduce' });
+    await context.addInitScript(saved => localStorage.setItem('optchat-app', saved), JSON.stringify({ tabs: ['held'], profile: 'held', selected: {} }));
+    const page = await context.newPage(), started = page.getByRole('list', { name: 'The agents it started' });
+    await page.goto(server.page);
+    await started.getByRole('button', { name: /Run the shutdown test on Windows/ }).waitFor();
+    writeRun(profile, { id: 'a41f09c2', title: 'Run the shutdown test on Windows', state: 'completed', started: Date.now() - 60_000, ended: Date.now(), report: 'Green.' });
+    await started.waitFor({ state: 'detached', timeout: 5000 });
+  } finally { await unlock(); }
 });
 
 test('Esc in the memory view does nothing to the run; in the composer under it, it stops it', async () => {

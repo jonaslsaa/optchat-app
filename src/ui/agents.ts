@@ -8,14 +8,14 @@ import { act, spoken, words, type Item, type PiMessage } from './transcript.ts';
 export const named = ({ title, task }: Pick<Agent, 'title' | 'task'>) => title ?? task.trim().split('\n')[0];
 /** Whether agents are at work, for the dot on the agents' button. pi-optchat's status line counts them (`OptChat: work · 350
  * messages · 0 pending · 2 agents`), and its count is the word on it. Only where it has none (no Pi of the app's has the chat)
- * does the list say: `listed` is the list while the panel is open, which is the only time it is read for itself. */
+ * does the list say: `listed` is the list while the panel is open, which reads it every two seconds while it says one works. */
 export function busy(status = '', listed?: readonly Agent[]): boolean {
   const count = / · (\d+) agents\b/.exec(status)?.[1];
   return count === undefined ? listed?.some(working) ?? false : count !== '0';
 }
 /** The main chat's own agents at work, oldest first: what stands over the composer while the panel is closed. Their own
  * agents are left out, as pi-optchat's count leaves them out; the panel has them. */
-export const atWork = (agents: readonly Agent[]) => agents.filter(agent => working(agent) && agent.parent === undefined).toSorted((a, b) => a.started - b.started);
+export const ownAtWork = (agents: readonly Agent[]) => agents.filter(agent => working(agent) && agent.parent === undefined).toSorted((a, b) => a.started - b.started);
 /** The agents a `spawn` call started (`ids`), as the list has them, in its order. One the list does not have is left out: its
  * record is gone, or it ended before the newest the list keeps. */
 export const among = (ids: readonly string[], agents: readonly Agent[]) => ids.flatMap(id => agents.find(agent => agent.id === id) ?? []);

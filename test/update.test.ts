@@ -58,11 +58,12 @@ async function feed(version: string, zip: Buffer, served: (zip: Buffer) => Buffe
       { name, size: zip.length, digest: `sha256:${createHash('sha256').update(zip).digest('hex')}`, browser_download_url: `${at}/${name}` },
     ] }));
     else if (request.url === `/${name}`) { downloads++; response.end(served(zip)); }
+    else if (request.url === '/limited') response.writeHead(403).end('{"message":"API rate limit exceeded"}');
     else response.writeHead(404).end('{"message":"Not Found"}');
   });
   await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
   const at = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
-  return { latest: `${at}/latest`, missing: `${at}/none`, downloads: () => downloads, close: () => new Promise(resolve => server.close(resolve)) };
+  return { latest: `${at}/latest`, missing: `${at}/none`, limited: `${at}/limited`, downloads: () => downloads, close: () => new Promise(resolve => server.close(resolve)) };
 }
 /** A folder with the app at `version` in it, an updater for it, and what the updater said. */
 function installed(name: string, version: string, feed: string) {
@@ -78,14 +79,17 @@ test('a newer release is downloaded and made ready beside the app, and takes its
   const github = await feed('0.2.0', release('new', '0.2.0')), { app, said, start, beside } = installed('installed', '0.1.0', github.latest), updates = start();
   try {
     assert.equal(updates.install(), false, 'nothing is ready, so quitting installs nothing');
-    await updates.look();
+    assert.equal(await updates.look(), 'found');
     assert.deepEqual(said, ['ready 0.2.0']);
     // The app that runs is untouched until it quits: it is what the agents at work run from.
     assert.equal(versionOf(app), '0.1.0');
     assert.deepEqual(readdirSync(beside), ['OptChat.app'], 'the zip is gone, and the new app waits');
     // Another look while one waits asks nobody and says nothing again.
-    await updates.look();
+    assert.equal(await updates.look(), 'found');
     assert.deepEqual([said.length, github.downloads()], [1, 1]);
+    // A look you asked for says it again, and downloads nothing again.
+    assert.equal(await updates.look(true), 'found');
+    assert.deepEqual([said.splice(1), github.downloads()], [['ready 0.2.0'], 1]);
 
     assert.equal(updates.install(), true);
     assert.equal(versionOf(app), '0.2.0');
@@ -97,7 +101,7 @@ test('a newer release is downloaded and made ready beside the app, and takes its
 
     // The new app's first look removes the old one, and finds nothing newer than itself.
     const next = updater({ bundle: app, version: '0.2.0', feed: github.latest, failed: join(home, 'none'), ready: () => said.push('again'), manual: () => said.push('again') });
-    await next.look();
+    assert.equal(await next.look(true), 'none');
     assert.equal(existsSync(beside), false);
     assert.equal(said.length, 1);
   } finally { await github.close(); }
@@ -141,7 +145,10 @@ test('a download that is not the release\'s file, or an app that is not whole, i
 test('no answer is no update: a private repository, no release yet, or no network', mac, async () => {
   const github = await feed('0.2.0', Buffer.from('never asked for')), { said, start, app } = installed('quiet', '0.1.0', github.missing);
   try {
-    await start().look();
+    assert.equal(await start().look(), 'none');
+    // GitHub refuses, as when it was asked too often: that is no answer, and not "nothing newer", which a look you asked
+    // for would say.
+    await assert.rejects(updater({ bundle: app, version: '0.1.0', feed: github.limited, failed: join(home, 'none'), ready: () => {}, manual: () => {} }).look(true), /GitHub answered 403/);
     await github.close();
     // Nobody is there at all: the look fails, which the app lets pass in silence.
     await assert.rejects(start().look());
@@ -160,6 +167,9 @@ test('an app that cannot be replaced where it is downloads nothing and offers th
     await updates.look();
     await updates.look();
     assert.deepEqual(said, [`manual 0.2.0 ${github.latest.replace('/latest', '/release')}`]);
+    // Asked for, the page is offered again.
+    assert.equal(await updates.look(true), 'found');
+    assert.equal(said.splice(1).length, 1);
     assert.deepEqual([github.downloads(), updates.install(), versionOf(app)], [0, false, '0.1.0']);
     // An app opened from where it was downloaded runs from a copy macOS makes elsewhere, which is gone when it quits.
     const copy = join(home, 'AppTranslocation', 'd');

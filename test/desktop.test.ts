@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { awake } from '../src/desktop/awake.ts';
 import { loginEnvironment, parseEnvironment } from '../src/desktop/environment.ts';
 import { destination } from '../src/desktop/links.ts';
+import { appMenu } from '../src/desktop/menu.ts';
 import { quitter } from '../src/desktop/quit.ts';
 import { contextMenu, placed, recovery } from '../src/desktop/window.ts';
 import { temporaryHome } from './support.ts';
@@ -212,4 +213,36 @@ test('the Mac is kept awake while agents work, and let go a little after the las
   one.state.working = new Error('No answer.');
   await one.looks(3);
   assert.deepEqual(one.did.at(-1), 'stop 3');
+});
+
+test('the menu bar names the app, asks the page for what the page does, and leaves a key to the page that has it', () => {
+  const did: string[] = [], state = { keys: true };
+  const does = { page: (action: string) => { did.push(action); }, keys: () => state.keys, browse: (url: string) => { did.push(url); } };
+  const menu = appMenu({ ...does, update: () => { did.push('update'); } });
+  const under = (top: typeof menu[number]) => top.submenu instanceof Array ? top.submenu : [];
+  const shown = (label: string, from = menu) => from.flatMap(top => (top.label ?? top.role) === label ? under(top) : [])
+    .map(item => item.type === 'separator' ? '-' : `${item.label ?? item.role}${item.accelerator ? ` [${item.accelerator}]` : ''}${item.enabled === false ? ' (off)' : ''}`);
+  assert.deepEqual(menu.map(top => top.label ?? top.role), ['OptChat', 'File', 'editMenu', 'View', 'windowMenu', 'help']);
+  // Electron's own entries would name the app by its package: every one that names it is written out.
+  assert.deepEqual(shown('OptChat'), ['About OptChat', 'Check for Updates…', '-', 'Settings… [Cmd+,]', '-', 'services', '-', 'Hide OptChat', 'hideOthers', 'unhide', '-', 'Quit OptChat']);
+  assert.deepEqual(shown('File'), ['New Connected Window [Shift+Cmd+O]', '-', 'close']);
+  assert.deepEqual(shown('View').slice(0, 5), ['Search Memory [Cmd+F]', 'Chat or Memory [Alt+M]', 'Usage', 'Show or Hide Sidebar [Cmd+B]', '-']);
+  assert.deepEqual(shown('help'), ['Report a Problem', 'OptChat on GitHub']);
+  // Run from the checkout the app does not update itself, and the entry says so by being off.
+  assert.equal(shown('OptChat', appMenu(does))[1], 'Check for Updates… (off)');
+
+  const items = menu.flatMap(under), entry = (label: string) => items.find(item => item.label === label);
+  const click = (label: string, triggeredByAccelerator = false) => entry(label)?.click?.(undefined as never, undefined, { triggeredByAccelerator });
+  // A click asks the page, wherever the focus is.
+  for (const label of ['Settings…', 'New Connected Window', 'Search Memory', 'Chat or Memory', 'Usage', 'Show or Hide Sidebar']) click(label);
+  assert.deepEqual(did.splice(0), ['settings', 'newWindow', 'search', 'memory', 'usage', 'sidebar']);
+  // A key the page had first and left, as it leaves ⌘F in the panel beside the chat, is not run behind its back, and a key it
+  // took never gets here: nothing runs twice. With no window, or the focus outside the page, the menu is all that hears it.
+  click('Settings…', true); click('Search Memory', true);
+  assert.deepEqual(did, []);
+  state.keys = false;
+  click('Settings…', true);
+  assert.deepEqual(did.splice(0), ['settings']);
+  click('Check for Updates…'); click('Report a Problem'); click('OptChat on GitHub');
+  assert.deepEqual(did, ['update', 'https://github.com/jonaslsaa/optchat-app/issues/new', 'https://github.com/jonaslsaa/optchat-app']);
 });

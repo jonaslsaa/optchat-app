@@ -7,7 +7,7 @@ import type { State } from './store.ts';
 import { Button, cn, useMedia } from './ui.tsx';
 
 /** Where the page has room for the panel beside the chat: Tailwind's `lg`. */
-const BESIDE = '(min-width: 64rem)';
+export const BESIDE = '(min-width: 64rem)';
 /** What the open panel shows: the chat of `agent` in place of its lists, when one is opened. */
 export interface Shown { agent?: string }
 

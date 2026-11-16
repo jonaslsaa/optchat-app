@@ -240,7 +240,7 @@ export const methods = {
   stopAgent: method(Type.Object({ profile: Type.String(), id: Type.String() }), none),
 
   /** The issues and pull requests the profile's main chat named by their address on github.com, with what GitHub says of
-   * them: the open ones first, then the latest named, `limit` of them (30 unless said), and `more` for how many that leaves
+   * them: the latest named first, `limit` of them (30 unless said), and `more` for how many that leaves
    * out. They are found in the log each time, so nothing of them is kept. What GitHub says is asked through the GitHub CLI
    * (`gh`) with the login it has, after the answer: `pending` is how many items it is being asked about, which a look a
    * moment later has the news of. `gh` says how the last asking went: `missing` (no `gh`), `signed_out`, or `failed`

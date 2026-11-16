@@ -131,8 +131,7 @@ export class GitHub {
     if (this.said.gh === 'ok') void this.refresh(due());
     else if (fresh || now - this.failed >= RETRY) await this.refresh(due());
 
-    const open = (mention: Mention) => Number(status(mention) !== undefined && !done(status(mention)));
-    const items = found.toSorted((a, b) => open(b) - open(a) || b.at - a.at).slice(0, limit).map((mention): GitHubItem => {
+    const items = found.toSorted((a, b) => b.at - a.at).slice(0, limit).map((mention): GitHubItem => {
       const { owner, repo, number, at } = mention, kind = status(mention)?.kind ?? mention.kind;
       return { repo: `${owner}/${repo}`, number, url: `https://github.com/${owner}/${repo}/${kind === 'pull' ? 'pull' : 'issues'}/${number}`, at, ...status(mention), kind };
     });

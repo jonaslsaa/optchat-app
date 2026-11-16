@@ -39,7 +39,7 @@ async function settled(client: Client, profile: string, limit?: number): Promise
 }
 const names = (list: Result<'github'>) => list.items.map(item => `${item.repo}#${item.number}`);
 
-test('the issues and pull requests the chat named by link are listed with what GitHub says: the open ones first, then the latest named', { timeout: 30_000 }, async t => {
+test('the issues and pull requests the chat named by link are listed with what GitHub says, the latest named first', { timeout: 30_000 }, async t => {
   const directory = createProfile(home, 'work');
   log(directory, [
     ['user', 'Look at https://github.com/acme/app/pull/1 and at https://github.com/acme/app/issues/2, please.'],
@@ -72,8 +72,8 @@ test('the issues and pull requests the chat named by link are listed with what G
   const first = await client.request('github', { profile: 'work' });
   assert.deepEqual([first.items.length, first.pending, first.items.some(item => item.title !== undefined)], [8, 8, false]);
   const list = await settled(client, 'work');
-  // Open ones first, the latest named first among them; then the rest, the latest named first.
-  assert.deepEqual(names(list), ['acme/app#4', 'acme/app#5', 'acme/app#6', 'acme/tools#30', 'secret/repo#8', 'acme/app#999', 'acme/app#1', 'acme/app#2']);
+  // The latest named first, open or not: the two the last message names are above the open ones named before it.
+  assert.deepEqual(names(list), ['secret/repo#8', 'acme/app#999', 'acme/app#4', 'acme/app#5', 'acme/app#6', 'acme/app#1', 'acme/tools#30', 'acme/app#2']);
   assert.deepEqual([list.more, list.pending, list.gh], [0, 0, 'ok']);
   const item = (name: string) => { const { at: _at, ...rest } = list.items[names(list).indexOf(name)]; return rest; };
   assert.deepEqual(item('acme/app#5'), { repo: 'acme/app', number: 5, url: 'https://github.com/acme/app/pull/5', kind: 'pull', title: 'Docs', state: 'open', checks: 'failing', review: 'changes_requested' });
@@ -106,7 +106,8 @@ test('the issues and pull requests the chat named by link are listed with what G
   assert.equal((await client.request('github', { profile: 'work' })).pending, 6);
   const again = await settled(client, 'work');
   assert.deepEqual([...later()[0].at(-1)!.matchAll(/issueOrPullRequest\(number: (\d+)\)/g)].map(([, number]) => Number(number)).sort((a, b) => a - b), [4, 5, 6, 8, 30, 999]);
-  assert.deepEqual(names(again).slice(0, 4), ['acme/app#4', 'acme/app#6', 'acme/tools#30', 'secret/repo#8']);
+  // One that was merged stays where it was.
+  assert.deepEqual(names(again), names(list));
   assert.partialDeepStrictEqual(again.items.find(item => item.number === 5), { state: 'merged' });
   assert.partialDeepStrictEqual(again.items.find(item => item.number === 4), { state: 'open', checks: 'passing' });
 
@@ -114,7 +115,7 @@ test('the issues and pull requests the chat named by link are listed with what G
   log(directory, [['talk', 'And https://github.com/acme/app/issues/7 is the follow-up.']], 21);
   set({ items: { 'acme/app#7': issue('Follow-up', 'OPEN') } });
   const more = await settled(client, 'work', 2);
-  assert.deepEqual([names(more), more.more], [['acme/app#7', 'acme/app#4'], 7]);
+  assert.deepEqual([names(more), more.more], [['acme/app#7', 'secret/repo#8'], 7]);
   assert.deepEqual([...later().at(-1)!.at(-1)!.matchAll(/issueOrPullRequest\(number: (\d+)\)/g)].map(([, number]) => number), ['7']);
 });
 

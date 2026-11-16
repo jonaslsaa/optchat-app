@@ -15,8 +15,7 @@ import { createProfile, temporaryHome, writeMemory, writeRun } from './support.t
 
 const pi = { command: process.execPath, args: [join(import.meta.dirname, 'fake-pi.ts')] };
 /** The page's store, without a page: what it would keep in the browser stays in `saved`. */
-function page(t: TestContext, retry = 1000, poll = 3000) {
-  const saved = new Map<string, string>();
+function page(t: TestContext, retry = 1000, poll = 3000, saved = new Map<string, string>()) {
   const app = new App({ retry, poll, storage: () => ({ getItem: key => saved.get(key) ?? null, setItem: (key, value) => { saved.set(key, value); } }) });
   t.after(() => app.close());
   const until = (met: (state: State) => boolean) => new Promise<State>(resolve => {
@@ -86,6 +85,28 @@ test('a dialog goes when its time is up, when its answer has arrived, and with i
   assert.deepEqual([app.state.live['work/1'].dialogs.length, app.state.error], [1, 'Not connected to the server.']);
   app.receive(window('closed'));
   assert.deepEqual([app.state.windows, app.state.live], [[], {}]);
+});
+
+test('what is typed and not sent is there when the page is opened again, until it is sent or its window is gone', async t => {
+  const { app, saved } = page(t);
+  app.keep('work/main', 'half a thought');
+  app.keep('work/1', 'for the other window');
+  app.keep('work/2', 'sent in a moment');
+  // The page opened again: another store over what the browser kept.
+  const { app: again, until } = page(t, undefined, undefined, saved);
+  assert.deepEqual([again.draft('work/main'), again.draft('work/1'), again.draft('work/3')], ['half a thought', 'for the other window', '']);
+  // Sent, the box is empty, and nothing of it is kept; nor of a window that is closed.
+  again.keep('work/2', '');
+  again.receive({ push: 'window', window: { id: 'work/1', profile: 'work', role: 'connected', cwd: '/tmp', status: 'closed', seq: 0 } });
+  assert.deepEqual(JSON.parse(saved.get('optchat-app-drafts')!), { 'work/main': 'half a thought' });
+  // A server that started again has the main chat and none of the other windows, and numbers new ones from one. What was
+  // typed in a window it does not have is let go before a new window can have its number; the main chat's stays.
+  again.keep('work/1', 'typed before the server started again');
+  const server = await startServer({ home: directory, cwd: directory, pi });
+  t.after(() => server.close());
+  await again.start(server.url);
+  await until(state => state.connection === 'open');
+  assert.deepEqual([again.draft('work/1'), again.draft('work/main')], ['', 'half a thought']);
 });
 
 test('records the page missed are read again from the server, so it shows what a page that saw them all shows', async t => {

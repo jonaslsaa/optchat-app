@@ -29,6 +29,7 @@ for (const name of ['chat', 'beside', 'sheet', 'memory', 'rows', 'menus', 'field
 }
 seed(createProfile(home, 'diffs'), CHANGES.length, Date.now(), CHANGES);
 seed(createProfile(home, 'formulas'), 1, Date.now(), FORMULAS);
+createProfile(home, 'paced');
 // A chat that names files, and those files in the folder its windows run in.
 seed(createProfile(home, 'files'), 1, Date.now(), NAMED);
 seed(createProfile(home, 'linked'), 1, Date.now(), [[['user', 'Show me.'], ['talk', '[![the preview](/images/linked/0123456789abcdef)](test/pi.test.ts)']]]);
@@ -49,8 +50,8 @@ after(async () => { await browser?.close(); await Promise.all([server?.close(), 
 
 const WIDE = { width: 1280, height: 800 }, NARROW = { width: 420, height: 800 };
 /** A page with one profile open, or the first run's page where there is none. */
-async function open(profile?: string, viewport = WIDE) {
-  const context = await browser.newContext({ viewport, reducedMotion: 'reduce' });
+async function open(profile?: string, viewport = WIDE, reducedMotion: 'reduce' | 'no-preference' = 'reduce') {
+  const context = await browser.newContext({ viewport, reducedMotion });
   if (profile) await context.addInitScript(saved => localStorage.setItem('optchat-app', saved), JSON.stringify({ tabs: [profile], profile, selected: {} }));
   const page = await context.newPage();
   await page.goto(profile ? server.page : fresh.page);
@@ -744,4 +745,13 @@ test('a file the chat names opens in your editor when it is in the window\'s fol
   await linked.locator('.file-link').waitFor();
   assert.equal(await linked.locator('.file-link button').count(), 0);
   await linked.context().close();
+});
+
+test('with motion on, a reply that streamed at a pace is all there once it has ended', async () => {
+  const page = await open('paced', WIDE, 'no-preference');
+  await page.getByRole('textbox', { name: 'Message' }).fill('hello');
+  await page.keyboard.press('Enter');
+  await page.getByRole('button', { name: 'Copy reply' }).waitFor();
+  assert.equal(await page.locator('[data-quote] .chat-markdown').last().innerText(), 'reply');
+  await page.context().close();
 });

@@ -361,6 +361,12 @@ test('what a streaming reply has opened and not closed on its end is held back, 
   // A table shows once the line under its head has come, and only then.
   assert.equal(closed('Zones:\n\n| Zone | Exposure |\n|---'), 'Zones:\n\n');
   assert.equal(closed('Zones:\n\n| Zone | Exposure |\n|---|---|\n| High | Dr'), 'Zones:\n\n| Zone | Exposure |\n|---|---|\n| High | Dr');
+  assert.equal(closed('It is ***very'), 'It is ');
+  assert.equal(closed('Zones:\n| Zone |\n'), 'Zones:\n');
+  // Many rows that are no table are read once, not once for each row.
+  const rows = `${'| a |\n'.repeat(20_000)}done`, from = performance.now();
+  assert.equal(closed(rows), rows);
+  assert.ok(performance.now() - from < 100);
   // In a code block all of it is code.
   assert.equal(closed('Run `echo $HOME` and `a ** b` here'), 'Run `echo $HOME` and `a ** b` here');
   assert.equal(closed('Run `echo $HO'), 'Run ');

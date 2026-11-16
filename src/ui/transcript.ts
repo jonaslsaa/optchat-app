@@ -159,7 +159,7 @@ export const LAG = 200;
  * steady pace instead, faster the further it is behind, so all that has come is out within about `LAG`, up to a word's end. */
 export function paced(text: string, shown: number, ms: number): number {
   if (shown >= text.length) return text.length;
-  const to = shown + Math.ceil((text.length - shown) * Math.min(1, ms / LAG)), end = text.slice(to).search(/\s/);
+  const to = shown + Math.ceil((text.length - shown) * Math.min(1, Math.max(1, ms) / LAG)), end = text.slice(to).search(/\s/);
   return end < 0 ? to : to + end;
 }
 /** A reply that streams, without the Markdown its end has opened and not closed yet, so it never shows as it was written: a
@@ -182,12 +182,16 @@ export function closed(text: string): string {
   const last = lines.at(-1) ?? '', start = text.length - last.length, bare = last.replace(/(`+)(?:[^]*?[^`])?\1(?!`)/g, span => '\0'.repeat(span.length));
   const tick = bare.indexOf('`'), prose = tick < 0 ? bare : bare.slice(0, tick), cuts = tick < 0 ? [] : [start + tick];
   for (const mark of ['**', '$']) {
-    const at = prose.lastIndexOf(mark);
-    if (prose.split(mark).length % 2 === 0 && !(mark === '$' && /[\s\d]/.test(prose.charAt(at + 1)))) cuts.push(start + at);
+    const at = prose.lastIndexOf(mark), run = mark === '**' ? prose.slice(0, at).match(/\**$/)![0].length : 0;
+    if (prose.split(mark).length % 2 === 0 && !(mark === '$' && /[\s\d]/.test(prose.charAt(at + 1)))) cuts.push(start + at - run);
   }
   if (display.length % 2) cuts.push(display.at(-1) ?? 0);
-  const rows = /(?:^|\n)((?:[ \t]*\|.*(?:\n|$))+)$/.exec(text.slice(text.lastIndexOf('\n\n') + 1));
-  if (rows && !/^[ \t|:-]*-[ \t|:-]*\n/m.test(rows[1])) cuts.push(text.length - rows[1].length);
+  // The table rows the text ends in (the last may be half written, or the empty line after a row), read from the end.
+  const end = lines.length - (last === '' ? 1 : 0);
+  let row = end;
+  while (row > 0 && /^[ \t]*\|/.test(lines[row - 1])) row--;
+  const table = lines.slice(row);
+  if (row < end && !table.slice(0, -1).some(line => /^[ \t|:-]*-[ \t|:-]*$/.test(line))) cuts.push(text.length - table.join('\n').length);
   const cut = Math.min(...cuts.filter(cut => text.length - cut <= HOLD));
   return cut < text.length ? text.slice(0, cut) : text;
 }

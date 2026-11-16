@@ -2,8 +2,8 @@ name: Release
 
 # Builds the macOS app (Apple Silicon) and attaches it to a GitHub release twice: as the dmg you download, and as the zip the
 # app updates itself from (docs/desktop.md). A tag `v<version>` releases; a run started by hand only builds, also when it is
-# started on a tag, and keeps both as an artifact of the run. Nothing builds on a push or a pull request: a macOS runner's
-# minutes count ten times in a private repository.
+# started on a tag, and keeps both as an artifact of the run. Nothing builds on a push or a pull request: a build takes a
+# macOS runner several minutes, and only a release needs one.
 on:
   push:
     tags: ['v*']

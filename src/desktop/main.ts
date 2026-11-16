@@ -1,9 +1,10 @@
-import { app, BrowserWindow, clipboard, dialog, Menu, screen, shell, type MessageBoxOptions } from 'electron';
+import { app, BrowserWindow, clipboard, dialog, Menu, powerSaveBlocker, screen, shell, type MessageBoxOptions } from 'electron';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { startServer } from '../server/server.ts';
 import { terminal } from '../server/setup.ts';
+import { awake } from './awake.ts';
 import { loginEnvironment } from './environment.ts';
 import { destination } from './links.ts';
 import { quitter } from './quit.ts';
@@ -25,6 +26,13 @@ else {
   const options = { ui: join(import.meta.dirname, '../ui'), cwd: homedir(), opener: terminal() };
   const server = await startServer({ ...options, port: PORT }).catch(() => startServer(options));
   let updates: ReturnType<typeof updater> | undefined;
+  // The Mac does not fall asleep under agents at work (awake.ts): looked at every ten seconds, which is soon enough for a
+  // Mac that takes minutes to sleep. The screen may still go dark.
+  const look = awake({
+    wanted: () => server.settings().awake, working: () => server.working(),
+    blocker: { start: () => powerSaveBlocker.start('prevent-app-suspension'), stop: id => powerSaveBlocker.stop(id) },
+  });
+  setInterval(() => void look(), 10_000);
   /** A quit that is not asked about: a restart into an update, which its own question was about, or a signal, which nobody
    * may be there to answer. */
   let sure = false, leaving = false;

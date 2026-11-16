@@ -2,7 +2,7 @@ import { useEffect, useId, useRef, useState, type ReactNode, type Ref } from 're
 import type { Config as Kept, ModelChoice, Offered, Params, Setting } from '../protocol.ts';
 import { asked, field, LEVELS, model, named, offered, said, THINKING, typed, unit } from './config.ts';
 import { app } from './store.ts';
-import { Button, cn } from './ui.tsx';
+import { Button, cn, Switch } from './ui.tsx';
 
 /** A profile's settings as pi-optchat keeps them, a row for each one it has (`config.ts` has what a field shows and what
  * was typed in it), and the profile's instructions. A change is kept when you leave its field or press Enter, and pi-optchat
@@ -54,10 +54,7 @@ function One({ profile, setting }: { profile: string; setting: Setting }) {
   return (
     <Row label={label} description={`${setting.description} Default: ${said(setting, setting.default)}.`} applies={setting.applies} outcome={outcome}>
       {typeof value === 'boolean' ? (
-        <label className={cn('relative inline-flex h-5 w-9 cursor-pointer items-center rounded-full p-0.5 transition-colors has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring has-[:focus-visible]:ring-offset-1 has-[:focus-visible]:ring-offset-background', value ? 'bg-primary' : 'bg-input')}>
-          <input type="checkbox" role="switch" aria-label={label} className="absolute inset-0 cursor-pointer opacity-0" checked={value} onChange={event => void keep(event.target.checked)} />
-          <span className={cn('size-4 rounded-full bg-background shadow-sm transition-transform', value ? 'translate-x-4' : 'dark:bg-muted-foreground')} />
-        </label>
+        <Switch label={label} checked={value} onChange={on => void keep(on)} />
       ) : (
         <Typed label={label} kept={field(setting, value)} unit={unit(setting)} className="w-28 text-right tabular-nums" onSame={() => setOutcome(undefined)} onKeep={text => {
           const number = typed(setting, text);

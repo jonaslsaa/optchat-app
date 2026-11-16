@@ -48,12 +48,19 @@ export class Agents {
   }
   /** The profile's agents: connected windows are runs to pi-optchat too, and are windows here. */
   private runs(profile: string) { return readRuns(profileDirectory(this.home, profile)).filter(run => !run.connected); }
+  /** Whether a Pi has the profile open, the app's or one in a terminal. A holder that does not answer is there all the same. */
+  private owned(profile: string) { return profileOwner(profileDirectory(this.home, profile)).then(owner => owner !== undefined, () => true); }
+  /** How many of the profile's agents are running, by their records alone: no chat is read, so it can be asked often. */
+  async running(profile: string) {
+    const count = this.runs(profile).filter(run => run.state === 'running').length;
+    return count > 0 && await this.owned(profile) ? count : 0;
+  }
 
   async list({ profile, limit = SHOWN }: Params<'agents'>): Promise<Result<'agents'>> {
     const runs = this.runs(profile).sort((a, b) => b.started - a.started);
     // A run saved as working is at work only if a Pi has the profile open, the app's or one in a terminal: a Pi that died
-    // corrects its runs' records only when the profile is next opened. A holder that does not answer is there all the same.
-    const owned = !runs.some(working) || await profileOwner(profileDirectory(this.home, profile)).then(owner => owner !== undefined, () => true);
+    // corrects its runs' records only when the profile is next opened.
+    const owned = !runs.some(working) || await this.owned(profile);
     const agents = runs.map((run): Agent => {
       const { id, title, task, model, started, ended, parentId, report } = run, state = working(run) && !owned ? 'interrupted' : run.state;
       const headline = report?.split('\n').find(line => line.trim())?.trim().slice(0, 200);

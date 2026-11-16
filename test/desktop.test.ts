@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { chmodSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { awake } from '../src/desktop/awake.ts';
 import { loginEnvironment, parseEnvironment } from '../src/desktop/environment.ts';
 import { destination } from '../src/desktop/links.ts';
 import { quitter } from '../src/desktop/quit.ts';
@@ -162,4 +163,53 @@ test('a quit waits until everything is stopped, and asks first only while agents
   unknown.quit.request();
   await unknown.settle();
   assert.deepEqual(unknown.did, ['close']);
+});
+
+test('the Mac is kept awake while agents work, and let go a little after the last one', async () => {
+  /** A Mac as far as its sleep goes: what was done to it, and what the app sees of its agents and its setting. */
+  const mac = () => {
+    const did: string[] = [], state = { working: 0 as number | Error, wanted: true };
+    let ids = 0;
+    const look = awake({
+      wanted: () => state.wanted, working: async () => { if (state.working instanceof Error) throw state.working; return state.working; },
+      blocker: { start: () => { did.push(`start ${++ids}`); return ids; }, stop: id => { did.push(`stop ${id}`); } },
+    });
+    const looks = async (times: number) => { for (let i = 0; i < times; i++) await look(); };
+    return { did, state, looks };
+  };
+  // Nothing works: nothing is held. An agent works: held once, however often it is looked (a look every few seconds for hours).
+  const one = mac();
+  await one.looks(5);
+  assert.deepEqual(one.did, []);
+  one.state.working = 2;
+  await one.looks(50);
+  assert.deepEqual(one.did, ['start 1']);
+  // Between an agent's end and the turn its report starts, nothing works for a moment: the Mac is not let go for that.
+  one.state.working = 0;
+  await one.looks(1);
+  one.state.working = 1;
+  await one.looks(1);
+  one.state.working = 0;
+  await one.looks(1);
+  assert.deepEqual(one.did, ['start 1']);
+  // A second look in a row with nothing at work lets it sleep again, and the next run holds it anew.
+  await one.looks(1);
+  assert.deepEqual(one.did, ['start 1', 'stop 1']);
+  await one.looks(10);
+  one.state.working = 1;
+  await one.looks(1);
+  assert.deepEqual(one.did, ['start 1', 'stop 1', 'start 2']);
+  // Turned off in the settings, it is let go at the next look, agents at work or not, and not held while it is off.
+  one.state.wanted = false;
+  await one.looks(1);
+  assert.deepEqual(one.did, ['start 1', 'stop 1', 'start 2', 'stop 2']);
+  await one.looks(3);
+  assert.equal(one.did.length, 4);
+  one.state.wanted = true;
+  await one.looks(1);
+  assert.deepEqual(one.did.at(-1), 'start 3');
+  // A count that fails is nothing at work.
+  one.state.working = new Error('No answer.');
+  await one.looks(3);
+  assert.deepEqual(one.did.at(-1), 'stop 3');
 });

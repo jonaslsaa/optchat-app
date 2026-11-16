@@ -68,6 +68,15 @@ export function Options<T>({ id, label, rows, at, selected, head, empty, onPick,
 }
 /** The row an arrow moves to from `at`, round the ends of the list. */
 export const stepped = (key: 'ArrowDown' | 'ArrowUp', at: number, rows: number) => (at + (key === 'ArrowDown' ? 1 : rows - 1)) % Math.max(1, rows);
+/** An on/off switch: the browser's own checkbox under a drawn one, so the keys and a screen reader have it as it is. */
+export function Switch({ label, checked, onChange }: { label: string; checked: boolean; onChange: (checked: boolean) => void }) {
+  return (
+    <label className={cn('relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full p-0.5 transition-colors has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring has-[:focus-visible]:ring-offset-1 has-[:focus-visible]:ring-offset-background', checked ? 'bg-primary' : 'bg-input')}>
+      <input type="checkbox" role="switch" aria-label={label} className="absolute inset-0 cursor-pointer opacity-0" checked={checked} onChange={event => onChange(event.target.checked)} />
+      <span className={cn('size-4 rounded-full bg-background shadow-sm transition-transform', checked ? 'translate-x-4' : 'dark:bg-muted-foreground')} />
+    </label>
+  );
+}
 /** "Show 8 more", under a list (the `ul` before it) that shows `step` at a time and has `more` left. It keeps the focus while
  * there are more to show. Once there are none it is gone, and the focus it had goes to the list's last row and not to the page. */
 export function More({ more, step, onMore }: { more: number; step: number; onMore: () => void }) {

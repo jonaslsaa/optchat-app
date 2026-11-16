@@ -79,9 +79,10 @@ export const GitHubItem = Type.Object({
 export type GitHubItem = Static<typeof GitHubItem>;
 
 /** The app's own settings, kept in its own folder (never in pi-optchat's). `cwd`: where new windows run; your home directory
- * when it is not set. `theme`: the page's colours, the system's by default. */
+ * when it is not set. `theme`: the page's colours, the system's by default. `awake`: whether the desktop app keeps the Mac
+ * from sleeping while agents work, which it does until you turn it off; a browser cannot. */
 const Theme = Type.Enum(['system', 'light', 'dark']);
-export const Settings = Type.Object({ cwd: Type.Optional(Type.String()), theme: Theme });
+export const Settings = Type.Object({ cwd: Type.Optional(Type.String()), theme: Theme, awake: Type.Boolean() });
 export type Settings = Static<typeof Settings>;
 
 /** One thing the app needs before it can run a chat. `ok`: there and new enough. `missing`: not there. `old`: there, and too
@@ -285,7 +286,7 @@ export const methods = {
   settings: method(none, Settings),
   /** Changes the settings it names and leaves the others, and answers them all as they are kept. A `cwd` has to be a directory
    * that exists (`~` is your home folder); `null` puts back the default. */
-  setSettings: method(Type.Object({ theme: Type.Optional(Theme), cwd: Type.Optional(Type.Union([Type.String(), Type.Null()])) }), Settings),
+  setSettings: method(Type.Object({ theme: Type.Optional(Theme), cwd: Type.Optional(Type.Union([Type.String(), Type.Null()])), awake: Type.Optional(Type.Boolean()) }), Settings),
   /** What the app needs and whether it is there, as last checked; `fresh` checks again now. */
   setup: method(Type.Object({ fresh: Type.Optional(Type.Boolean()) }), Setup),
   /** Installs what is missing, or updates what is too old, where the setup says `installable`: Pi into the app's own folder,

@@ -7,7 +7,7 @@ import { test, type TestContext } from 'node:test';
 import { connect } from '../src/client.ts';
 import type { Push, Setup } from '../src/protocol.ts';
 import { startServer, type ServerOptions } from '../src/server/server.ts';
-import { appHome } from '../src/server/settings.ts';
+import { appHome, readSettings } from '../src/server/settings.ts';
 import { createProfile, temporaryHome } from './support.ts';
 
 const home = temporaryHome();
@@ -35,22 +35,29 @@ async function setup(t: TestContext, options: Partial<ServerOptions> = {}, pi?: 
 
 test('the settings are kept in the app\'s own folder, reach every page, and name where new windows run', async t => {
   const { app, request } = await setup(t), elsewhere = mkdtempSync(join(home, 'elsewhere-'));
-  assert.deepEqual(await request('settings', {}), { theme: 'system' });
+  assert.deepEqual(await request('settings', {}), { theme: 'system', awake: true });
   assert.equal((await request('open', { profile: 'work', role: 'connected' })).window.cwd, home);
 
   // Each is changed by itself: the theme stays when only the folder is named. A folder is kept as its whole path.
-  assert.deepEqual(await request('setSettings', { theme: 'dark' }), { theme: 'dark' });
-  assert.deepEqual(await request('setSettings', { cwd: relative(process.cwd(), elsewhere) }), { theme: 'dark', cwd: elsewhere });
-  assert.deepEqual(JSON.parse(readFileSync(join(app, 'settings.json'), 'utf8')), { theme: 'dark', cwd: elsewhere });
+  assert.deepEqual(await request('setSettings', { theme: 'dark' }), { theme: 'dark', awake: true });
+  assert.deepEqual(await request('setSettings', { cwd: relative(process.cwd(), elsewhere) }), { theme: 'dark', cwd: elsewhere, awake: true });
+  assert.deepEqual(await request('setSettings', { awake: false }), { theme: 'dark', cwd: elsewhere, awake: false });
+  assert.deepEqual(JSON.parse(readFileSync(join(app, 'settings.json'), 'utf8')), { theme: 'dark', cwd: elsewhere, awake: false });
   assert.equal((await request('open', { profile: 'work', role: 'connected' })).window.cwd, elsewhere);
   // A folder that is not there is refused, and what was kept stays.
   await assert.rejects(request('setSettings', { theme: 'light', cwd: join(home, 'missing') }), /No such directory/);
-  assert.deepEqual(await request('settings', {}), { theme: 'dark', cwd: elsewhere });
+  assert.deepEqual(await request('settings', {}), { theme: 'dark', cwd: elsewhere, awake: false });
 
   // A folder that is gone since it was kept does not stop a window from opening: it runs where it would with none kept.
   rmSync(elsewhere, { recursive: true });
   assert.equal((await request('open', { profile: 'work', role: 'connected' })).window.cwd, home);
-  assert.deepEqual(await request('setSettings', { cwd: null }), { theme: 'dark' });
+  assert.deepEqual(await request('setSettings', { cwd: null }), { theme: 'dark', awake: false });
+  // A file from before a setting was there keeps what it has, and has that setting as it is before it is changed.
+  writeFileSync(join(app, 'settings.json'), JSON.stringify({ theme: 'light', cwd: home }));
+  assert.deepEqual(readSettings(app), { theme: 'light', cwd: home, awake: true });
+  // And a file that is no settings at all is none.
+  writeFileSync(join(app, 'settings.json'), '["dark"]');
+  assert.deepEqual(readSettings(app), { theme: 'system', awake: true });
 
   // The app's own folder may be named with `~` too, as in a file that sets the environment.
   const kept = process.env.OPTCHAT_APP_HOME;

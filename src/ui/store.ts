@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from 'react';
 import { connect, type Client } from '../client.ts';
-import type { Config, Line, Message, Method, ModelChoice, Params, Push, Result, Settings, Setup, WindowState } from '../protocol.ts';
+import type { Config, Line, Message, Method, ModelChoice, Params, Push, Result, Settings, Setup, Usage, WindowState } from '../protocol.ts';
 import { current } from '../window.ts';
 import { calling, key, NO_TREE, path, read, toggled, type Tree } from './memory.ts';
 import { apply, idle, isMessage, isObject, merged, quiet, replay, stopped, without, words, type Live, type PiMessage } from './transcript.ts';
@@ -35,6 +35,8 @@ export interface State {
   memory: Record<string, Tree>;
   /** Each profile's settings and instructions as pi-optchat keeps them, once the settings page has shown them. */
   config: Record<string, Config>;
+  /** What each profile used, as last read: in the range that was last asked for. */
+  usage: Record<string, Usage>;
   /** Why the last thing you asked for failed. */
   error?: string;
   /** The app's settings, and what a chat needs with whether it is there, once the server has said. */
@@ -56,7 +58,7 @@ export function title(window: WindowState, state: State) {
 }
 
 export class App {
-  state: State = { connection: 'connecting', profiles: [], tabs: [], windows: [], selected: {}, logs: {}, live: {}, sessions: {}, agents: {}, github: {}, models: {}, chats: {}, memory: {}, config: {} };
+  state: State = { connection: 'connecting', profiles: [], tabs: [], windows: [], selected: {}, logs: {}, live: {}, sessions: {}, agents: {}, github: {}, models: {}, chats: {}, memory: {}, config: {}, usage: {} };
   private client?: Client;
   private retrying?: ReturnType<typeof setTimeout>;
   private closed = false;
@@ -314,6 +316,11 @@ export class App {
   async readGitHub(profile: string, limit?: number, fresh?: boolean) {
     const github = await this.ask('github', { profile, limit, fresh });
     if (github && JSON.stringify(github) !== JSON.stringify(this.state.github[profile])) this.set({ github: { ...this.state.github, [profile]: github } });
+  }
+  /** What a profile used in `range`, from its ledger as it is now. */
+  async readUsage(profile: string, range?: string) {
+    const usage = await this.ask('usage', { profile, range });
+    if (usage && JSON.stringify(usage) !== JSON.stringify(this.state.usage[profile])) this.set({ usage: { ...this.state.usage, [profile]: usage } });
   }
   /** The models a window's agent can run on. Asked quietly, and none where Pi cannot be asked: the page already says what
    * is missing then. */

@@ -207,3 +207,28 @@ export const demo = (clock: number): Script => ({
     'pull request': { turns: [], answer: 'Opened the pull request: the UI, its tests and the screenshot script.' },
   },
 });
+
+/** What a million tokens cost, by model: in, out, read from the cache, written to it. */
+const PRICES: Record<string, [input: number, output: number, read: number, write: number]> = {
+  'claude-opus-5-5': [5, 25, 0.5, 6.25], 'claude-sonnet-5-5': [3, 15, 0.3, 3.75], 'claude-haiku-5-5': [1, 5, 0.1, 1.25],
+};
+/** A profile's usage ledger as pi-optchat writes one, for the `days` before `now`: the main chat's answers through each day's
+ * working hours, its agents' and its summaries', and an import on the first day. The same lines every time. */
+export function spend(directory: string, now: number, days = 10) {
+  let state = 7;
+  const chance = () => (state = state * 16807 % 2147483647) / 2147483647, between = (low: number, high: number) => Math.round(low + chance() * (high - low));
+  const line = (at: number, role: string, model: string, input: number, output: number, cacheRead: number, cacheWrite: number) => {
+    const [i, o, r, w] = PRICES[model], cost = { input: input * i / 1e6, output: output * o / 1e6, cacheRead: cacheRead * r / 1e6, cacheWrite: cacheWrite * w / 1e6 };
+    return JSON.stringify({ id: `entry:${at}:${role}`, date: new Date(at).toISOString(), role, session: 'seeded', provider: 'anthropic', model,
+      usage: { input, output, cacheRead, cacheWrite, totalTokens: input + output + cacheRead + cacheWrite, cost: { ...cost, total: cost.input + cost.output + cost.cacheRead + cost.cacheWrite } } });
+  };
+  const first = now - days * 86400_000, lines = [line(first, 'import', 'claude-sonnet-5-5', 912_000, 71_400, 0, 0)];
+  for (let at = first + 1200_000; at <= now; at += 1200_000) {
+    const hour = new Date(at).getUTCHours();
+    if (hour < 7 || hour > 17 || chance() < 0.35) continue;
+    lines.push(line(at, 'main', 'claude-opus-5-5', between(8, 40), between(400, 5200), between(90_000, 260_000), between(1500, 22_000)));
+    if (chance() < 0.45) lines.push(line(at + 60_000, 'subagent', chance() < 0.7 ? 'claude-opus-5-5' : 'claude-haiku-5-5', between(10, 60), between(900, 9000), between(40_000, 420_000), between(4000, 60_000)));
+    if (chance() < 0.5) lines.push(line(at + 90_000, 'compactor', 'claude-sonnet-5-5', between(1200, 6400), between(300, 900), between(9000, 24_000), between(0, 2600)));
+  }
+  writeFileSync(join(directory, 'usage.jsonl'), lines.join('\n') + '\n');
+}

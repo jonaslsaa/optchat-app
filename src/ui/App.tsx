@@ -1,4 +1,4 @@
-import { CheckIcon, PanelLeftIcon, PanelRightIcon, SettingsIcon, XIcon } from 'lucide-react';
+import { ChartColumnIcon, CheckIcon, PanelLeftIcon, PanelRightIcon, SettingsIcon, XIcon } from 'lucide-react';
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 import { canComplete, current } from '../window.ts';
@@ -17,6 +17,7 @@ import { app, mainOf, title, UNTITLED, useApp, type State } from './store.ts';
 import { Timeline } from './Timeline.tsx';
 import { chat, idle, logged, spoken } from './transcript.ts';
 import { Button, Choice, cn, useMedia } from './ui.tsx';
+import { UsagePage } from './Usage.tsx';
 
 /** A window that has not run yet. */
 const NOTHING = idle();
@@ -24,7 +25,7 @@ const SHOWS = [['Chat', false], ['Memory', true]] as const;
 
 /** One profile: its windows on the left, the selected window's chat, and beside the main chat its agents or what it named on
  * GitHub, when they are opened. */
-function Profile({ state, profile, onSettings }: { state: State; profile: string; onSettings: () => void }) {
+function Profile({ state, profile, onSettings, onUsage }: { state: State; profile: string; onSettings: () => void; onUsage: () => void }) {
   // The sidebar stands beside the chat in a wide window. In a narrow one it lies over the chat and is opened for one pick: a
   // window picked, a new one, Esc and a press beside it close it (`useOverlay`), and it is closed again whenever the window
   // is narrow anew. Its top row is then not what the desktop app's window is dragged by: Electron goes by the order in the
@@ -90,6 +91,7 @@ function Profile({ state, profile, onSettings }: { state: State; profile: string
               <PanelRightIcon />{agentsWork && <span className="absolute top-0.5 right-0.5 size-1.5 rounded-full bg-sky-500 dark:bg-sky-300/80" />}
             </Button>
           )}
+          <Button variant="ghost-muted" size="icon-sm" aria-label="Usage" title="Usage: what this profile cost" onClick={onUsage}><ChartColumnIcon /></Button>
           <Button variant="ghost-muted" size="icon-sm" aria-label="Settings" title="Settings" onClick={onSettings}><SettingsIcon /></Button>
         </header>
         <Fragment key={window.id}>
@@ -111,9 +113,10 @@ function Profile({ state, profile, onSettings }: { state: State; profile: string
   );
 }
 export function App() {
-  const state = useApp(), [settings, setSettings] = useState(false), needs = missing(state);
-  // The settings are in place of the chat, so Esc there closes them: a run is stopped from the chat, where it can be seen.
-  useShortcuts(() => ({ 'mod+,': () => setSettings(open => !open), ...settings && { escape: () => setSettings(false) } }), [settings]);
+  // The page in the chat's place, if one is: the settings, or what the profile in front used.
+  const state = useApp(), [page, setPage] = useState<'settings' | 'usage'>(), settings = page === 'settings', needs = missing(state);
+  // Such a page is in place of the chat, so Esc there closes it: a run is stopped from the chat, where it can be seen.
+  useShortcuts(() => ({ 'mod+,': () => setPage(page => page === 'settings' ? undefined : 'settings'), ...page && { escape: () => setPage(undefined) } }), [page]);
   return (
     <div className="flex h-dvh flex-col">
       {state.tabs.length > 1 && <Tabs state={state} />}
@@ -126,11 +129,12 @@ export function App() {
       )}
       {needs && !settings && state.profile && (
         <p role="status" className="notice flex shrink-0 items-center justify-center gap-2 bg-warning-surface px-4 py-1.5 text-warning-foreground text-xs">
-          {needs}.<button type="button" onClick={() => setSettings(true)} className="rounded-sm font-medium underline underline-offset-2">Set up</button>
+          {needs}.<button type="button" onClick={() => setPage('settings')} className="rounded-sm font-medium underline underline-offset-2">Set up</button>
         </p>
       )}
-      {settings ? <Settings state={state} onClose={() => setSettings(false)} />
-        : state.profile ? <Profile key={state.profile} state={state} profile={state.profile} onSettings={() => setSettings(true)} />
+      {settings ? <Settings state={state} onClose={() => setPage(undefined)} />
+        : page && state.profile ? <UsagePage key={state.profile} state={state} profile={state.profile} onClose={() => setPage(undefined)} />
+        : state.profile ? <Profile key={state.profile} state={state} profile={state.profile} onSettings={() => setPage('settings')} onUsage={() => setPage('usage')} />
         : state.connection === 'connecting' ? <p className="m-auto text-muted-foreground text-sm">Connecting…</p>
         : <Welcome state={state} />}
     </div>

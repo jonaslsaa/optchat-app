@@ -57,6 +57,7 @@ The client sends `{ id, method, params }` and gets `{ id, result }` or `{ id, er
 | `config { profile }` | A profile's settings as pi-optchat keeps them: every setting it has, as it describes it (its `SETTINGS`: a toggle, a whole number or a percent, with its label, what it does, its default, its range and when a change applies) with the profile's `value`; the models that write its summaries (`compactor`, and `standard`, a new profile's) and that its agents run on (`subagent`); and its `instructions` (its AGENTS.md). See [A profile's settings](#a-profiles-settings). |
 | `configure { profile, key, value }` | Changes one of them, a setting by its `key` or the model `compactor` or `subagent`, and answers them all as they then are. Refused in pi-optchat's words. |
 | `instruct { profile, text }` | Keeps the profile's instructions. |
+| `usage { profile, range? }` | What the profile used in a range (`Last hour`, `Today` unless said, `Last 7 days`, `All time`), in tokens and dollars: all of it, each role's and each of a role's models', and its cost over time. Read from pi-optchat's usage ledger each time; nothing is written. See [Usage](#usage). |
 | `settings`, `setSettings { theme?, cwd? }` | The app's own settings, and a change to the ones it names ([setup.md](setup.md)). |
 | `setup { fresh? }` | What a chat needs and whether it is there: Pi, pi-optchat in it, a model that is logged in. `fresh` looks again. |
 | `install { what }` | Installs or updates `pi` or `optchat` where the setup says `installable`: only the app's own Pi, and a pi-optchat from npm. Answers once it has started; the rest is pushed. |
@@ -137,6 +138,18 @@ An agent lives in the Pi that has its profile open, and only that Pi reaches it.
 - **Which Pi.** The one that has the profile: the main window's, or one in a terminal. `tellAgent` starts the main window's Pi first when no Pi has the profile, since an agent that has ended can only go on in one; the other two start nothing, as there is then nothing to interrupt or stop.
 - **Told or resumed.** pi-optchat has two words for a message to an agent: `say` reaches one at work and does not wake one that has ended, and `resume` wakes one that has ended and refuses one at work. The server reads the agent's record as it is at that moment and uses the one that fits. Should the agent end in between, pi-optchat refuses, and the message can be sent again.
 - **What pi-optchat refuses** comes back as the request's error, in its own words. An agent that has ended is resumed only if the main agent started it: an agent's own agent is its parent's to resume ("Only <id>'s parent <parent> can resume it…"), though it is told, interrupted and stopped like any other while it works.
+
+## Usage
+
+What a profile cost is pi-optchat's to count, and the server only reads it (`src/server/usage.ts`, `test/usage.test.ts`).
+
+- **Where it comes from.** pi-optchat keeps a ledger in the profile's folder, a line for every answer of a model: the main chat's, an agent's, a summary's (the compactor), an import's. The Pi that has the profile writes it as each answer ends. The server reads it with pi-optchat's `readUsage`, which writes nothing and leaves out a line that Pi is halfway through writing.
+- **pi-optchat does the sums.** The range is picked by its `selectUsage`, the total and the rows by its `summarizeUsage`, and the cached share by its `cacheShare`: the code `/optchat usage` shows its numbers with in a terminal. So the page and the terminal say the same, which a test holds them to: `test/usage-terminal.txt` is what pi-optchat's own page printed for the ledger in `test/usage.jsonl`, and the app's figures for that ledger have to be those, range by range.
+- **The ranges are pi-optchat's**, but for "This session": that is one Pi process's, and the app shows a profile, not a process. "Today" is since midnight by the clock of this machine.
+- **The dollars are an estimate**, at the provider's API prices as Pi knows them. A subscription bills none of it.
+- **The bars over time** are made here, from the same records: from the first spending in the range to now, by five minutes while that is within three hours, by the hour within three days, by the day within three months, and by the month beyond. A bar with nothing in it is there too. Minutes and hours are counted in time gone by, so the hour that comes twice when the clocks go back has its bars twice. "Last 7 days" is the last 7 times 24 hours, which reach into eight days: its first bar is the part of a day that is in them.
+- **Nothing is kept, and nothing is watched.** Every look reads the ledger whole. A ledger of 100,000 records (42 MB, far more than a profile of 20,000 messages has) takes 0.2 s to read and 25 ms to sum; one of 300,000 takes 0.6 s.
+- **What is unreadable** is left out, and pi-optchat says how many lines that was (`warnings`). A last line cut short by a Pi that died is not counted until that Pi's profile is opened again, which ends the line.
 
 ## Who may connect
 

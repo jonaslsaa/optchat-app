@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { appendFileSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { after, before, test } from 'node:test';
 import { chromium, type Browser, type Page } from 'playwright-core';
 import { build } from 'vite';
 import { agents, seed, TEAM } from '../scripts/seed.ts';
+import { connect } from '../src/client.ts';
 import { startServer } from '../src/server/server.ts';
 import { createProfile, temporaryHome, writeMemory, writeRun } from './support.ts';
 
@@ -17,9 +18,9 @@ process.env.FAKE_PI_HOME = join(home, 'pi');
 mkdirSync(join(home, 'pi', 'pi-optchat'), { recursive: true });
 writeFileSync(join(home, 'pi', 'pi-optchat', 'package.json'), JSON.stringify({ name: 'pi-optchat', version: '0.11.12' }));
 writeFileSync(join(home, 'pi', 'state.json'), JSON.stringify({ version: '1.5.2', providers: ['anthropic', 'openai'], packages: { 'npm:pi-optchat': join(home, 'pi', 'pi-optchat') } }));
-for (const name of ['chat', 'beside', 'sheet', 'memory', 'rows', 'menus', 'fields', 'asks', 'windows', 'importing', 'keys']) {
+for (const name of ['chat', 'beside', 'sheet', 'memory', 'rows', 'menus', 'fields', 'asks', 'windows', 'importing', 'keys', 'spend']) {
   const profile = createProfile(home, name);
-  if (name === 'memory' || name === 'windows' || name === 'keys') { writeMemory(profile, 16); continue; }
+  if (name === 'memory' || name === 'windows' || name === 'keys' || name === 'spend') { writeMemory(profile, 16); continue; }
   seed(profile, TEAM.length, Date.now(), TEAM);
   agents(profile, Date.now());
   // More that ended than the list shows at first.
@@ -113,6 +114,30 @@ test('Esc stops the run when the keys are in the chat, or outside every part tha
   await stop(page).click();
   await stop(page).waitFor({ state: 'detached' });
   assert.equal(await focused(page), 'Message');
+});
+
+test('the usage page closes on Esc and the run goes on, and it reads the ledger again when the main chat changes', async () => {
+  // An answer of a model as pi-optchat writes it to a profile's ledger, a minute ago.
+  const ledger = join(home, 'profiles', 'spend', 'usage.jsonl'), spent = (id: string, total: number) => appendFileSync(ledger, `${JSON.stringify({ id, date: new Date(Date.now() - 60_000).toISOString(), role: 'main', model: 'claude-opus-5-5',
+    usage: { input: 10, output: 20, cacheRead: 70, cacheWrite: 0, totalTokens: 100, cost: { input: 0, output: total, cacheRead: 0, cacheWrite: 0, total } } })}\n`);
+  spent('one', 1);
+  const page = await open('spend'), usage = page.getByRole('button', { name: 'Usage' });
+  await run(page);
+  await usage.click();
+  await page.getByText('$1.00').first().waitFor();
+  assert.ok(await page.getByRole('radio', { name: 'Last hour' }).isVisible());
+  await page.keyboard.press('Escape');
+  await usage.waitFor();
+  await page.waitForTimeout(400);
+  assert.ok(await stop(page).isVisible(), 'Esc on the usage page stopped the run.');
+  // The ledger grows while the page is open: it is read again when the run ends, which the server pushes.
+  await usage.click();
+  await page.getByText('$1.00').first().waitFor();
+  spent('two', 2.5);
+  const client = await connect(server.url);
+  await client.request('abort', { window: 'spend/main' });
+  client.close();
+  await page.getByText('$3.50').first().waitFor({ timeout: 5000 });
 });
 
 test('Esc in a question Pi asks answers no, and the run goes on with that', async () => {

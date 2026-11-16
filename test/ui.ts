@@ -573,8 +573,8 @@ test('the settings are in tabs: the arrows go from one to the next, the page ope
   await page.getByRole('textbox', { name: 'Max active agents' }).waitFor();
   assert.equal(await theme.count(), 0);
   assert.equal(await focused(page), 'Profile');
-  await page.keyboard.press('ArrowLeft');
-  await page.keyboard.press('ArrowLeft'); // Round, from the first to the last.
+  assert.deepEqual(await page.getByRole('tab').evaluateAll(tabs => tabs.map(tab => (tab as HTMLElement).tabIndex)), [-1, 0, -1]); // One stop for Tab.
+  await page.keyboard.press('End');
   const instructions = page.getByRole('textbox', { name: 'Instructions' });
   await instructions.fill('Not saved yet.');
   await page.getByRole('tab', { name: 'Instructions' }).focus();
@@ -587,6 +587,19 @@ test('the settings are in tabs: the arrows go from one to the next, the page ope
   await goesOn(page, 'on a tab of the settings');
   await settings.click();
   await page.getByRole('tab', { name: 'Instructions', selected: true }).waitFor();
+  // While a chat still needs something, the page opens on General, where that is said.
+  const optchat = join(home, 'pi', 'pi-optchat', 'package.json'), again = page.getByRole('button', { name: 'Check again' }), old = page.getByText('Older than').first();
+  writeFileSync(optchat, JSON.stringify({ name: 'pi-optchat', version: '0.11.0' }));
+  await page.getByRole('tab', { name: 'General' }).click();
+  await again.click();
+  await old.waitFor();
+  await page.getByRole('tab', { name: 'Instructions' }).click();
+  await page.getByRole('button', { name: 'Close the settings' }).click();
+  await settings.click();
+  await page.getByRole('tab', { name: 'General', selected: true }).waitFor();
+  writeFileSync(optchat, JSON.stringify({ name: 'pi-optchat', version: '0.11.13' }));
+  await again.click();
+  await old.waitFor({ state: 'detached' });
 });
 
 test('a field keeps the focus when Enter saves it, and when what was typed is refused', async () => {

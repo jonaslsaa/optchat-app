@@ -87,10 +87,11 @@ export function Settings({ state, onClose }: { state: State; onClose: () => void
   // run on, which its Pi lists while it runs.
   useEffect(() => { if (profile !== undefined) { void app.readConfig(profile); void app.readModels(mainOf(profile)); } }, [profile]);
   const pick = (next: Tab) => { chosen = next; setPicked(next); };
-  // The arrows go from tab to tab, round, as a tab list's do; the tab gone to is shown at once.
+  // The arrows go from tab to tab, round, and Home and End to the first and the last, as a tab list's do; the tab gone to is
+  // shown at once.
   const arrow = (event: KeyboardEvent) => {
-    const step = event.key === 'ArrowRight' ? 1 : event.key === 'ArrowLeft' ? -1 : 0, next = ORDER[(ORDER.indexOf(tab) + step + ORDER.length) % ORDER.length];
-    if (!step || !next) return;
+    const at = ORDER.indexOf(tab), to = { ArrowLeft: at - 1, ArrowRight: at + 1, Home: 0, End: -1 }[event.key], next = to === undefined ? undefined : ORDER.at(to % ORDER.length);
+    if (!next) return;
     event.preventDefault();
     pick(next);
     document.getElementById(`${id}-${next}`)?.focus();

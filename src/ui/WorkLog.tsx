@@ -7,13 +7,11 @@ type RowContent = {
   icon?: ReactNode;
   label: ReactNode;
   trailing?: ReactNode;
-  /** The line comes in (`enter`): a call that has just begun, not one that was there when the chat was opened. */
-  arriving?: boolean;
 };
 
-function WorkLogLine({ icon, label, trailing, arriving }: RowContent) {
+function WorkLogLine({ icon, label, trailing }: RowContent) {
   return (
-    <div className={cn("flex min-h-6 min-w-0 items-center gap-1.5 text-sm leading-relaxed select-none [&_*]:select-none", arriving && "enter")}>
+    <div className="flex min-h-6 min-w-0 items-center gap-1.5 text-sm leading-relaxed select-none [&_*]:select-none">
       <div className="flex min-w-0 flex-1 items-baseline gap-1.5">
         {icon ? (
           <span className="relative w-6 shrink-0 leading-0">
@@ -38,7 +36,6 @@ export function WorkLogRow({
   icon,
   label,
   trailing,
-  arriving,
   children,
   ...rowProps
 }: RowContent & Omit<ComponentProps<"div">, "className" | "style">) {
@@ -50,7 +47,7 @@ export function WorkLogRow({
         rowProps.onClick !== undefined && interactionClassName,
       )}
     >
-      <WorkLogLine icon={icon} label={label} trailing={trailing} arriving={arriving} />
+      <WorkLogLine icon={icon} label={label} trailing={trailing} />
       {children}
     </div>
   );

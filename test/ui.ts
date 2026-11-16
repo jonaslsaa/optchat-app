@@ -897,6 +897,14 @@ test('with motion on, what you open comes in, and with less motion it is there a
     const sheet = page.locator('dialog[aria-label="Agents and GitHub"]');
     seen(await sheet.evaluate(sheet => getComputedStyle(sheet).opacity), 'the sheet');
     seen(await sheet.evaluate(sheet => getComputedStyle(sheet, '::backdrop').opacity), 'the shade behind the sheet');
+    // What was there does not come in again when the chat does: back from Settings, with a run going.
+    await page.keyboard.press('Escape');
+    await run(page);
+    await page.getByRole('button', { name: 'Settings' }).click();
+    await page.getByRole('heading', { name: 'Settings' }).waitFor();
+    await page.keyboard.press('Escape');
+    await stop(page).waitFor();
+    assert.deepEqual(await page.evaluate(() => [...document.querySelectorAll('[class~="enter"]')].filter(entering => getComputedStyle(entering).opacity !== '1').map(entering => entering.outerHTML.slice(0, 80))), []);
     await page.context().close();
   }
 });

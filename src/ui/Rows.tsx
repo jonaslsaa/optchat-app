@@ -81,12 +81,11 @@ const CHANGES = { removed: 'bg-destructive/8 text-destructive-foreground dark:bg
 /** A tool call as one line saying what it did. Opened, the line is there whole and can be selected, with under it what it does
  * not say of the call (the lines an edit changed, the text of a file) and what the call printed. `live`: the agent is still at work; `running` is the call's output so far, while Pi runs it. */
 function ToolRow({ step, live, running }: { step: Tool; live: boolean; running?: string }) {
-  // A call that has nothing to show yet as its row is first drawn has just begun: that one comes in. The others were there.
-  const [open, setOpen] = useState(false), [arriving] = useState(live && step.output === undefined);
+  const [open, setOpen] = useState(false);
   const Icon = ICONS.find(([pattern]) => pattern.test(step.name))?.[1] ?? WrenchIcon, printed = step.output ?? running, { verb, subject, detail, stat } = act(step, live);
   return (
     <WorkLogRow
-      role="button" tabIndex={0} aria-expanded={open} arriving={arriving}
+      role="button" tabIndex={0} aria-expanded={open}
       // Selecting the opened line, to copy a command, is no click on the row.
       onClick={event => { const selected = document.getSelection(); if (!selected || selected.isCollapsed || !event.currentTarget.contains(selected.anchorNode)) setOpen(!open); }}
       onKeyDown={event => { if (event.target === event.currentTarget && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); setOpen(!open); } }}

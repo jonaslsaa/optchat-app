@@ -121,7 +121,7 @@ export function useMedia(query: string) {
 export function CopyButton({ text, label, children }: { text: string; label: string; children?: ReactNode }) {
   const [copied, setCopied] = useState(false);
   const copy = () => void navigator.clipboard.writeText(text).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1200); });
-  return <Button variant="ghost-muted" size={children ? 'xs' : 'icon-xs'} aria-label={label} title={label} onClick={copy}>{copied ? <CheckIcon className="enter size-3" /> : <CopyIcon className="enter size-3" />}{children}</Button>;
+  return <Button variant="ghost-muted" size={children ? 'xs' : 'icon-xs'} aria-label={label} title={label} onClick={copy}>{copied ? <CheckIcon className="enter size-3" /> : <CopyIcon className="size-3" />}{children}</Button>;
 }
 /** A picture, and the same one large over the page once it is clicked: Esc puts that away, or a press beside it (`useOverlay`). */
 export function Picture({ src, alt = '', className }: { src: string; alt?: string; className?: string }) {

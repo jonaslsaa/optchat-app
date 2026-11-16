@@ -63,8 +63,9 @@ What you open comes in over 150 ms instead of being there at once, and leaves at
 
 - **Fades and grows:** the lists over the page (profiles, models, commands), the Quote button, the image shown large.
 - **Fades and slides:** the panel as a sheet and the windows over a narrow chat, each with the shade behind it; the "Scroll to end" pill.
-- **Fades:** the panel beside the chat; Settings, Usage and the memory view; what opens under a line (a reply's work, a tool call's details, a handoff, a line of the memory); a tool call as it arrives in a run; what Pi says, asks and fails with above the composer, and the app's own notices; the tick of a copy.
-- **Not, on purpose:** a switch of profile tab or of window, and the chat coming back from Settings (that is the page you were on: it should be there); the sidebar beside the chat, which is there when the page opens; heights, so a fold opens at once and what is in it fades; messages arriving and text as it streams, which fades by the block already; anything leaving.
+- **Fades:** the panel beside the chat; Settings, Usage and the memory view; what opens under a line (a reply's work, a tool call's details, a handoff, a line of the memory); what Pi says, asks and fails with above the composer, and the app's own notices; the tick of a copy.
+- **Not, on purpose:** a switch of profile tab or of window, and the chat coming back from Settings (that is the page you were on: it should be there); the sidebar beside the chat, which is there when the page opens; heights, so a fold opens at once and what is in it fades; messages and tool calls arriving, and text as it streams, which fades by the block already; anything leaving.
+- **What comes in again:** `enter` is for the moment a thing is first drawn, which is also when the chat is: a notice, a question or a failure that stands above the composer when you come back to the chat (from Settings, from another tab) fades in once more, and so does the app's "Set up" notice, which Settings hides. Nothing else that was there does.
 
 A thing with a transition of its own (a `Button`) is put in something that enters, since one element has one `transition`.
 

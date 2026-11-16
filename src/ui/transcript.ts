@@ -1,5 +1,6 @@
 import { said as recorded } from 'pi-optchat/core';
 import type { Message, PiRecord } from '../protocol.ts';
+import { cited, citing, type Cite } from './cite.ts';
 
 /** What the chat shows, and how it gets there. The chat is the profile's log: every item is a log entry, or what a message Pi
  * has not logged yet will be logged as, so a reply looks the same while it streams, after it is logged, and a year later.
@@ -249,13 +250,14 @@ export type Step = { key: number } & (
 export type Tool = Extract<Step, { type: 'tool' }>;
 /** The chat in the blocks it is drawn as: your message with its images, a note, a report from an agent (with the `title` it was
  * started under, where the chat has its start), the agent's reply, which is its work and then its answer, or the handoff a
- * connected window's agent wrote for the main chat (`body`, empty until it is written). `items` is what the part was made from. */
+ * connected window's agent wrote for the main chat (`body`, empty until it is written). `items` is what the part was made from.
+ * Your message is what you typed, apart from what it `cites`; an answer's `said` is the messages it is, one for each of its blocks. */
 export type Part = { key: number; items: readonly Item[] } & (
-  | { type: 'user'; date: string; text: string; /** Each by its name in the profile, or as an address where it is not kept there. */ images: string[] }
+  | { type: 'user'; date: string; text: string; cites: Cite[]; /** Each by its name in the profile, or as an address where it is not kept there. */ images: string[] }
   | { type: 'note'; text: string }
   | { type: 'work'; date: string; agent?: string; title?: string; body: string }
   | { type: 'handoff'; date: string; body: string }
-  | { type: 'reply'; steps: Step[]; answer?: { text: string; streaming?: boolean }; from: string; to: string; stopped: boolean });
+  | { type: 'reply'; steps: Step[]; answer?: { text: string; said: readonly Item[]; streaming?: boolean }; from: string; to: string; stopped: boolean });
 
 const inReply = ({ kind }: Item) => kind === 'talk' || kind === 'tool' || kind === 'echo';
 const same = (a: Item, b: Item) => a === b || a.key === b.key && a.kind === b.kind && a.date === b.date && a.text === b.text && a.streaming === b.streaming && a.call === b.call && a.handoff === b.handoff;
@@ -301,7 +303,11 @@ function part(items: readonly Item[]): Part {
     const written = !last.streaming && !items.some(item => item.kind === 'tool' && item.date === last.date);
     return { ...common, type: 'handoff', date: last.date, body: written ? text(closing(items)) : '' };
   }
-  if (first.kind === 'user') return { ...common, type: 'user', date: first.date, text: first.text.replace(IMAGE, '').trim(), images: first.images ?? [...first.text.matchAll(IMAGE)].map(match => match[1]) };
+  if (first.kind === 'user') {
+    // A picture is named under what was typed. One that is named in what the message cites is the cited message's.
+    const { cites, text } = cited(first.text);
+    return { ...common, type: 'user', date: first.date, cites, text: text.replace(IMAGE, '').trim(), images: first.images ?? [...text.matchAll(IMAGE)].map(match => match[1]) };
+  }
   if (first.kind === 'note') return { ...common, type: 'note', text: first.text };
   if (first.kind === 'work') {
     // pi-optchat names the agent in front of its report, with its title if it has one (`[1a2b3c4d · Why it flakes] …`), and
@@ -314,7 +320,7 @@ function part(items: readonly Item[]): Part {
   const work = steps(items.filter(item => !answer.includes(item)));
   return {
     ...common, type: 'reply', steps: work, from: first.date, to: last.date, stopped: cut || work.some(step => step.type === 'fault' && step.text.startsWith('Agent aborted')),
-    ...answer.length > 0 && { answer: { text: text(answer), ...answer.at(-1)?.streaming && { streaming: true } } },
+    ...answer.length > 0 && { answer: { text: text(answer), said: answer, ...answer.at(-1)?.streaming && { streaming: true } } },
   };
 }
 /** What Pi's bash adds under a command's output when it failed. */
@@ -351,19 +357,17 @@ export function worked({ from, to, stopped, steps }: Extract<Part, { type: 'repl
 }
 /** What ↑ (`back`) or ↓ in the composer brings back of what you said in the chat: the message before the one in the box or the
  * one after it, and an empty box after the newest. Only while the box is empty or holds one of them as it was sent, so the
- * key never takes what you are typing. A message sent twice is there once, where it was sent last. */
+ * key never takes what you are typing. A message sent twice is there once, where it was sent last. A message is here as it was
+ * sent, with what it cites (`citing`). */
 export function recalled(chat: readonly Item[], text: string, back: boolean) {
   // A picture you sent is not text to send again: the log names it, and a message as Pi has it says only that there was one.
-  const said = chat.flatMap(item => item.kind === 'user' ? item.text.replace(/\[image(?: [0-9a-f]{16})?\]/g, '').trim() || [] : []);
+  const said = chat.flatMap(item => {
+    const { cites, text } = cited(item.kind === 'user' ? item.text : '');
+    return citing(cites, text.replace(/\[image(?: [0-9a-f]{16})?\]/g, '').trim()).trim() || [];
+  });
   const past = [...new Set(said.reverse())], at = past.indexOf(text);
   if (text ? at < 0 : !back) return;
   return past[at + (back ? 1 : -1)] ?? (back ? undefined : '');
-}
-/** What is `typed` in the composer with something `said` in the chat under it as a quote, a `>` before each line of it, and
- * an empty line after it to answer on. */
-export function quoted(typed: string, said: string) {
-  const quote = said.trim().split('\n').map(line => `> ${line}`.trimEnd()).join('\n');
-  return `${typed.trim() ? `${typed.trimEnd()}\n\n` : ''}${quote}\n\n`;
 }
 /** How long something took, as 42s, 3m 05s or 1h 15m. */
 export function took(from: string, to: string) {

@@ -1,30 +1,23 @@
-import { ChevronDownIcon, QuoteIcon } from 'lucide-react';
+import { ChevronDownIcon } from 'lucide-react';
 import { useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState, type Ref } from 'react';
+import { CiteSelection } from './Cite.tsx';
+import type { Cite, Place } from './cite.ts';
 import { Find } from './Find.tsx';
 import { Doing, HandoffRow, NoteRow, ReplyRow, ReportRow, UserRow, type Working } from './Rows.tsx';
 import { parts, thinking, type Item, type Live, type Part } from './transcript.ts';
-import { escapes } from './keys.ts';
 import { Button, cn } from './ui.tsx';
 
 /** How near the end counts as at the end, in pixels. */
 const EDGE = 48;
-/** What is selected, when it begins in a reply's answer or in a report (`data-quote`), and where its last line there ends in
- * `content`: that is where the button that quotes it stands. A paragraph selected with three clicks ends at the start of what
- * is under it, so where a selection ends is not asked, and the lines it has outside the answer or the report do not count. */
-function selected(content: HTMLElement) {
-  const selection = getSelection(), text = selection?.toString().trim(), range = selection?.rangeCount ? selection.getRangeAt(0) : undefined;
-  const from = range?.startContainer, said = (from instanceof Element ? from : from?.parentElement)?.closest('[data-quote]')?.getBoundingClientRect();
-  if (!range || !text || !said || !content.contains(from ?? null)) return;
-  const line = [...range.getClientRects()].findLast(line => line.top >= said.top - 1 && line.bottom <= said.bottom + 1), frame = content.getBoundingClientRect();
-  return line && { text, left: Math.min(line.right - frame.left, frame.width - 80), top: line.bottom - frame.top };
-}
 
 /** The chat, oldest at the top. It stays at the end while you are there, and stays where you are while you read back; older
  * pages of the log are read as you reach the top. `running` says the agent is in a run, and `live` what it is doing in it.
  * `onAgent` opens the agent a report is from; `narrow` is for a chat in a panel, which has no room for wide margins. Where
- * there is a composer to quote into (`onQuote`), a "Quote" button stands by what is selected in a reply or a report. Where the
- * memory can be searched from (`onMemory`), the chat can be found in: `ref.find` shows the bar for it (`Find`). */
-export function Timeline({ items, live, running, starting = false, profile, older, loading, onAgent, onQuote, onMemory, ref, narrow = false }: { items: Item[]; live: Live; running: boolean; starting?: boolean; profile: string; older?: () => void; loading?: boolean; onAgent?: (agent: string) => void; onQuote?: (said: string) => void; onMemory?: (text: string) => void; ref?: Ref<{ find: () => void }>; narrow?: boolean }) {
+ * there is a composer to cite into (`onCite`), a "Cite" button stands by what is selected in a message, a reply or a report;
+ * `logged` is the last message of the chat that the profile's log has, where the chat is the log. `onPlace` shows what a
+ * message cites in the memory view. Where the memory can be searched from (`onMemory`), the chat can be found in: `ref.find`
+ * shows the bar for it (`Find`). */
+export function Timeline({ items, live, running, starting = false, profile, older, loading, onAgent, onCite, logged, onPlace, onMemory, ref, narrow = false }: { items: Item[]; live: Live; running: boolean; starting?: boolean; profile: string; older?: () => void; loading?: boolean; onAgent?: (agent: string) => void; onCite?: (cite: Cite) => void; logged?: number; onPlace?: (at: Place) => void; onMemory?: (text: string) => void; ref?: Ref<{ find: () => void }>; narrow?: boolean }) {
   const scroller = useRef<HTMLDivElement>(null), content = useRef<HTMLDivElement>(null);
   const atEnd = useRef(true), before = useRef({ first: items[0]?.key, height: 0, top: 0, sent: -1 });
   // Find scrolls the chat to what it found (`found` is where it put it), which is not you reading back to the top: no older
@@ -60,13 +53,6 @@ export function Timeline({ items, live, running, starting = false, profile, olde
     if (content.current) observer.observe(content.current);
     return () => observer.disconnect();
   }, []);
-  // The button is there once a selection is made (the pointer is let go), and gone with the selection.
-  const [quote, setQuote] = useState<ReturnType<typeof selected>>();
-  useEffect(() => {
-    const made = () => setQuote(content.current ? selected(content.current) : undefined), gone = () => { if (getSelection()?.isCollapsed) setQuote(undefined); };
-    document.addEventListener('pointerup', made); document.addEventListener('selectionchange', gone);
-    return () => { document.removeEventListener('pointerup', made); document.removeEventListener('selectionchange', gone); };
-  }, []);
   const scrolled = () => {
     const element = scroller.current!, near = element.scrollHeight - element.scrollTop - element.clientHeight <= EDGE;
     // Only you moving up takes the chat off its end: the chat growing under it leaves it short of the end for a moment too.
@@ -89,7 +75,7 @@ export function Timeline({ items, live, running, starting = false, profile, olde
               <span className="h-px flex-1 bg-border/70" />{loading ? 'Loading earlier messages…' : 'Load earlier messages'}<span className="h-px flex-1 bg-border/70" />
             </button>
           )}
-          {blocks.map(part => part.type === 'user' ? <UserRow key={part.key} part={part} profile={profile} />
+          {blocks.map(part => part.type === 'user' ? <UserRow key={part.key} part={part} profile={profile} onPlace={onPlace} />
             : part.type === 'work' ? <ReportRow key={part.key} part={part} onAgent={onAgent} />
             : part.type === 'note' ? <NoteRow key={part.key} part={part} />
             : part.type === 'handoff' ? <HandoffRow key={part.key} part={part} writing={running && part === last} />
@@ -98,17 +84,7 @@ export function Timeline({ items, live, running, starting = false, profile, olde
               message is in the chat before Pi has it (`live.sent`), and the agent is at work on it from then: its Pi may still be
               starting. */}
           {(running || live.sent) && last && last.type !== 'handoff' && <div className="pb-4"><Doing from={last.type === 'reply' ? last.from : last.items[0].date} activity={live.activity ?? (starting ? 'Starting Pi' : undefined)} thinking={working.thinking} /></div>}
-          {quote && onQuote && (
-            // The press does not take the selection away, and the click that follows it quotes it. Esc on the button takes
-            // both away, and is then not the chat's key.
-            <span className="enter enter-grow absolute z-20 mt-1 flex" style={{ left: quote.left, top: quote.top }}>
-              <Button size="xs" variant="glass" onPointerDown={event => event.preventDefault()}
-                onClick={() => { onQuote(quote.text); getSelection()?.removeAllRanges(); setQuote(undefined); }}
-                onKeyDown={event => escapes(event, () => { getSelection()?.removeAllRanges(); setQuote(undefined); })}>
-                <QuoteIcon className="size-3.5" />Quote
-              </Button>
-            </span>
-          )}
+          {onCite && <CiteSelection content={content} logged={logged} onCite={onCite} />}
         </div>
       </div>
       {finding > 0 && onMemory && <Find asked={finding} content={content} scroller={scroller} onClose={() => setFinding(0)} onMemory={onMemory} onMoved={() => { found.current = scroller.current?.scrollTop ?? NaN; }} />}

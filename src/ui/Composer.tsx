@@ -1,12 +1,14 @@
-import { CircleAlertIcon, CornerUpRightIcon, ImagePlusIcon, ListPlusIcon, XIcon } from 'lucide-react';
-import { useEffect, useImperativeHandle, useRef, useState, type Ref } from 'react';
+import { CircleAlertIcon, CornerUpRightIcon, ImagePlusIcon, ListPlusIcon, QuoteIcon, XIcon } from 'lucide-react';
+import { useEffect, useImperativeHandle, useMemo, useRef, useState, type Ref } from 'react';
 import type { PiRecord, WindowState } from '../protocol.ts';
+import { CiteCard } from './Cite.tsx';
+import { called, cited, citing, joined, type Cite } from './cite.ts';
 import { useCommands } from './Commands.tsx';
 import { address, image, KINDS, sorted } from './images.ts';
 import { escapes, label, useShortcuts } from './keys.ts';
 import { Model } from './Model.tsx';
 import { app, type State } from './store.ts';
-import { failure, news, quoted, recalled, type Item, type Live, type Notice } from './transcript.ts';
+import { failure, news, recalled, type Item, type Live, type Notice } from './transcript.ts';
 import { Button, cn, Kbd, Picture, Spinner } from './ui.tsx';
 
 /** A question from Pi or one of its extensions (`extension_ui_request`): a choice, a yes or no, or a line of text. Esc in it
@@ -69,12 +71,14 @@ export function Queued({ messages, later = 0 }: { messages: readonly string[]; l
   if (!messages.length) return null;
   return (
     <ol aria-label="Messages waiting for the agent" className="flex flex-col items-end gap-2 pb-1">
-      {messages.map((message, index) => (
+      {messages.map(cited).map(({ cites, text }, index) => (
         <li key={index} className="flex min-w-0 max-w-[80%] flex-col items-end gap-0.5">
           <span className="me-1 flex items-center gap-1 text-muted-foreground text-xs leading-none">
             {index < messages.length - later ? <><CornerUpRightIcon className="size-3" />Steer · waiting to be read</> : <><ListPlusIcon className="size-3" />Queued for after this run</>}
           </span>
-          <p className="whitespace-pre-wrap rounded-2xl border border-muted-foreground/40 border-dashed px-3 py-2 text-muted-foreground text-sm [overflow-wrap:anywhere]">{message || 'Image'}</p>
+          <p className="flex flex-col gap-1.5 whitespace-pre-wrap rounded-2xl border border-muted-foreground/40 border-dashed px-3 py-2 text-muted-foreground text-sm [overflow-wrap:anywhere]">
+            {cites.map((cite, at) => <CiteCard key={at} cite={cite} />)}{(text || !cites.length) && <span>{text || 'Image'}</span>}
+          </p>
         </li>
       ))}
     </ol>
@@ -94,14 +98,16 @@ export function SendButton({ steer, ...props }: { steer: boolean; disabled: bool
  * work. ↑ in an empty box brings back what you said last in the `chat`, and ↑ and ↓ go on through it (`recalled`), from the
  * first and the last line of what is in the box. Beside the button that
  * sends is the model the agent runs on, which is picked there. The look is T3 Code's composer
- * (MIT, see THIRD_PARTY_NOTICES.md), over a plain textarea. */
-export function Composer({ state, window, live, chat, onSend, ref }: { state: State; window: WindowState; live: Live; chat: readonly Item[]; onSend?: () => void; ref?: Ref<{ quote: (said: string) => void }> }) {
-  const [text, setText] = useState(() => app.draft(window.id)), [sending, setSending] = useState(false);
+ * (MIT, see THIRD_PARTY_NOTICES.md), over a plain textarea. What the message cites (`ref.cite` adds to it) stands over the
+ * box as chips, as its images do, and is sent in front of what is typed (`citing`). */
+export function Composer({ state, window, live, chat, onSend, ref }: { state: State; window: WindowState; live: Live; chat: readonly Item[]; onSend?: () => void; ref?: Ref<{ cite: (cite: Cite) => void }> }) {
+  // The message as it would be sent: what is typed, under what it cites. The box holds the one, and the chips are the other.
+  const [draft, setDraft] = useState(() => app.draft(window.id)), [sending, setSending] = useState(false), { cites, text } = useMemo(() => cited(draft), [draft]);
   const images = state.attached[window.id] ?? [], [refused, setRefused] = useState<string>(), [reading, setReading] = useState(0);
   const area = useRef<HTMLTextAreaElement>(null), picker = useRef<HTMLInputElement>(null);
   const running = window.status === 'running', queued = [...live.queued.steering, ...live.queued.followUp];
-  // What is typed is kept as it is typed (`app.draft`): while you look at another window, and when the page is opened again.
-  const change = (value: string) => { setText(value); app.keep(window.id, value); };
+  // It is kept as it is typed (`app.draft`): while you look at another window, and when the page is opened again.
+  const keep = (message: string) => { setDraft(message); app.keep(window.id, message); }, change = (typed: string) => keep(citing(cites, typed));
   const attached = () => app.state.attached[window.id] ?? [];
   /** Files that were pasted, dropped or chosen go with the message as images; one that cannot says why, and the rest still do.
    * Nothing is sent while one is being read, so a message never leaves without the image that was given first. */
@@ -112,23 +118,25 @@ export function Composer({ state, window, live, chat, onSend, ref }: { state: St
     app.attach(window.id, [...attached(), ...added]);
   };
   useEffect(() => area.current?.focus(), [window.id]);
-  const commands = useCommands(state, window, text, change, area);
-  // What was selected in the chat goes under what is typed, as a quote, and the keys are after it.
-  useImperativeHandle(ref, () => ({ quote: said => { change(quoted(text, said)); area.current?.focus(); } }));
+  // A message that cites begins with what it cites, which is no command to Pi: a `/` is then a letter, and lists nothing.
+  const commands = useCommands(state, window, cites.length ? '' : text, change, area);
+  // What was cited in the chat or in the memory view is one more chip, and the keys are where the message is typed.
+  useImperativeHandle(ref, () => ({ cite: cite => { keep(citing([...cites, cite], text)); area.current?.focus(); } }));
+  const empty = !text.trim() && !images.length && !cites.length;
 
   const send = async (later: boolean) => {
-    const message = text.trim();
-    if (!message && !images.length || sending || reading) return;
-    setSending(true); change(''); app.attach(window.id, []); setRefused(undefined); onSend?.();
+    const message = citing(cites, text.trim()).trim();
+    if (empty || sending || reading) return;
+    setSending(true); keep(''); app.attach(window.id, []); setRefused(undefined); onSend?.();
     // A message the server refused goes back where it was typed, with its images, before what was typed since.
-    if (!await app.send(window.id, message, later, images)) { change([message, app.draft(window.id)].filter(Boolean).join('\n\n')); app.attach(window.id, [...images, ...attached()]); }
+    if (!await app.send(window.id, message, later, images)) { keep(joined([message, app.draft(window.id)])); app.attach(window.id, [...images, ...attached()]); }
     setSending(false);
   };
   const stop = async () => {
     // The button that stops is gone once it has: the focus is where the next message is typed.
     area.current?.focus();
     const waiting = await app.stop(window.id);
-    if (waiting.length) change([...waiting, app.draft(window.id)].filter(Boolean).join('\n\n'));
+    if (waiting.length) keep(joined([...waiting, app.draft(window.id)]));
   };
   // The button that dismissed is gone with its notice: the focus is where the next message is typed.
   const quiet = (text?: string) => { area.current?.focus(); app.quiet(window.id, text); };
@@ -155,6 +163,17 @@ export function Composer({ state, window, live, chat, onSend, ref }: { state: St
               ))}
             </ul>
           )}
+          {cites.length > 0 && (
+            <ul aria-label="Cited in the message" className="flex flex-wrap gap-1.5 px-4 pt-3.5">
+              {cites.map((cite, at) => (
+                <li key={at} title={called(cite) === cite.text ? undefined : cite.text} className="enter flex min-w-0 max-w-64 items-center gap-1 rounded-md bg-black/6 py-0.5 ps-1.5 pe-0.5 text-muted-foreground text-xs dark:bg-white/8">
+                  <QuoteIcon className="size-3 shrink-0" />
+                  <span className="min-w-0 truncate text-foreground/90">{called(cite)}</span>
+                  <button type="button" aria-label="Remove the citation" onClick={() => { keep(citing(cites.filter(other => other !== cite), text)); area.current?.focus(); }} className="shrink-0 rounded-sm p-0.5 hover:bg-foreground/10 hover:text-foreground"><XIcon className="size-3" /></button>
+                </li>
+              ))}
+            </ul>
+          )}
           {refused && <p role="alert" className="px-4 pt-3 text-error-foreground text-xs">{refused}</p>}
           <div ref={commands.root} className="relative px-4 pt-3.5 pb-2">
             {commands.menu}
@@ -168,12 +187,14 @@ export function Composer({ state, window, live, chat, onSend, ref }: { state: St
               onKeyDown={event => {
                 // The list a `/` opens gets its keys first: the arrows, Tab and Enter.
                 if (commands.keyed(event)) return;
+                // Backspace in an empty box takes the last citation off, as it would the letter before the caret.
+                if (event.key === 'Backspace' && !text && cites.length) { event.preventDefault(); keep(citing(cites.slice(0, -1), '')); return; }
                 if (event.shiftKey || event.altKey || event.nativeEvent.isComposing) return;
                 if (event.key === 'Enter') { event.preventDefault(); void send(event.metaKey || event.ctrlKey); }
                 // ↑ on the first line and ↓ on the last go through what you said; on a line between, they move in the text.
                 const up = event.key === 'ArrowUp', { selectionStart, selectionEnd } = event.currentTarget, edge = !(up ? text.slice(0, selectionStart) : text.slice(selectionEnd)).includes('\n');
-                const past = (up || event.key === 'ArrowDown') && edge && !event.metaKey && !event.ctrlKey ? recalled(chat, text, up) : undefined;
-                if (past !== undefined) { event.preventDefault(); change(past); }
+                const past = (up || event.key === 'ArrowDown') && edge && !event.metaKey && !event.ctrlKey ? recalled(chat, draft, up) : undefined;
+                if (past !== undefined) { event.preventDefault(); keep(past); }
               }}
               className="field-sizing-content block max-h-52 min-h-[2lh] w-full resize-none overflow-y-auto bg-transparent text-foreground text-sm leading-relaxed placeholder:text-placeholder focus:outline-none"
             />
@@ -188,12 +209,12 @@ export function Composer({ state, window, live, chat, onSend, ref }: { state: St
             <input ref={picker} type="file" hidden multiple accept={KINDS.join()} onChange={event => { void add(event.target.files ?? []); event.target.value = ''; }} />
             <Button variant="ghost-muted" size="icon-sm" aria-label="Attach an image" title="Attach an image" onClick={() => picker.current?.click()}><ImagePlusIcon /></Button>
             <Model state={state} window={window} />
-            {running && !text.trim() && !images.length ? (
+            {running && empty ? (
               <button type="button" aria-label="Stop the agent" title="Stop (Esc)" onClick={() => void stop()} className="flex size-8 shrink-0 items-center justify-center rounded-full bg-destructive/90 text-white shadow-destructive/24 shadow-xs inset-shadow-control-highlight transition-colors duration-150 hover:bg-destructive active:shadow-none">
                 <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor" aria-hidden="true"><rect x="2" y="2" width="8" height="8" rx="1.5" /></svg>
               </button>
             ) : (
-              <SendButton steer={running} disabled={!text.trim() && !images.length || sending || reading > 0} onClick={() => void send(false)} />
+              <SendButton steer={running} disabled={empty || sending || reading > 0} onClick={() => void send(false)} />
             )}
           </div>
         </div>

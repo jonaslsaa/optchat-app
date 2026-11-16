@@ -9,9 +9,10 @@ import type { Agent, PiRecord, Push, Result, Setup } from '../src/protocol.ts';
 import { startServer } from '../src/server/server.ts';
 import { PROMPT } from '../src/server/windows.ts';
 import { transcript } from '../src/ui/agents.ts';
+import { cite, citing } from '../src/ui/cite.ts';
 import { apply, chat, idle, isMessage, isObject, logged, parts, words, type Live, type Part } from '../src/ui/transcript.ts';
 import { current } from '../src/window.ts';
-import { createProfile, png, temporaryHome } from './support.ts';
+import { createProfile, png, temporaryHome, writeMemory } from './support.ts';
 
 /** `npm run test:live`: real turns through the installed Pi with pi-optchat, on throwaway profiles. It needs Pi logged in to
  * Anthropic and costs about a cent. Pi keeps no session file, and the real ~/.optchat is never opened.
@@ -171,6 +172,22 @@ test('an image sent with a message reaches the model, in the main chat and in a 
   const [, name] = /^What colour is this square\? Answer with the one word\.\n\[image ([0-9a-f]{16})\]$/.exec(text) ?? [];
   assert.deepEqual(Buffer.from(await (await fetch(new URL(`images/live/${name}`, server.page))).arrayBuffer()), main.data);
   assert.match((await ask('connected', [40, 70, 220])).reply ?? '', /^blue\.?$/i);
+});
+
+test('a message that cites an older one has the agent zoom to it: it reads there what its memory\'s lines do not say', { timeout: 120_000 }, async t => {
+  const home = temporaryHome(), profile = createProfile(home, 'cites'), colours: Record<number, string> = { 3: '#111111', 5: '#222222', 9: '#DF73FF', 11: '#444444' };
+  // Four old messages name a colour, and the agent's view of them says only that they did: which of them is meant is in
+  // the citation's place alone, and what it says is in the message, which the agent has to open.
+  writeMemory(profile, 16, i => colours[i] ? `The colour for the banner is ${colours[i]}.` : `message ${i}`, i => colours[i] ? 'named a colour for the banner' : `message ${i}`);
+  const server = await startServer({ home, cwd: mkdtempSync(join(home, 'cwd-')), flags });
+  t.after(() => server.close());
+  const { pushes, record, onPush } = watch(), client = await connect(server.url, onPush);
+  const { window } = await client.request('open', { profile: 'cites' });
+  await client.request('prompt', { window: window.id, text: citing([cite('the banner', { id: 9, n: 1 })], 'Which hex colour was that? Answer with the hex only.') });
+  await record(window.id, r => r.type === 'agent_settled');
+  const records = pushes.flatMap(push => push.push === 'record' ? [push.record] : []);
+  assert.deepEqual(records.flatMap(r => r.type === 'tool_execution_start' && r.toolName === 'zoom' && isObject(r.args) ? [r.args.id] : []), [9]);
+  assert.match(records.flatMap(r => said(r, 'assistant') && isMessage(r.message) ? [words(r.message.content)] : []).at(-1) ?? '', /#DF73FF/i);
 });
 
 test('a connected window reads the profile\'s memory, and Complete hands its conversation to the main chat', { timeout: 180_000 }, async t => {

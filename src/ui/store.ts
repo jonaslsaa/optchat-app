@@ -3,6 +3,7 @@ import { connect, type Client } from '../client.ts';
 import type { Command, Config, Line, Message, Method, ModelChoice, Params, Push, Result, Settings, Setup, Updating, Usage, WindowState } from '../protocol.ts';
 import { current } from '../window.ts';
 import type { Image } from './images.ts';
+import { cited } from './cite.ts';
 import { calling, key, NO_TREE, path, read, toggled, type Tree } from './memory.ts';
 import { apply, idle, isMessage, isObject, merged, quiet, replay, stopped, without, words, type Live, type PiMessage } from './transcript.ts';
 
@@ -61,7 +62,9 @@ export const UNTITLED = 'Untitled window';
 export function title(window: WindowState, state: State) {
   if (window.role === 'main') return 'Main chat';
   const first = current(window, [...state.sessions[window.id] ?? [], ...state.live[window.id]?.messages ?? []]).find(message => message.role === 'user');
-  return first ? words(first.content).split('\n')[0] : UNTITLED;
+  // A message that only cites something is called by what it cites.
+  const { cites, text } = cited(first ? words(first.content) : '');
+  return first ? (text || cites[0]?.text || '').split('\n')[0] : UNTITLED;
 }
 
 export class App {
@@ -422,20 +425,20 @@ export class App {
     const page = await this.ask('search', { profile, text, before });
     if (page) this.tree(profile, tree => tree.search?.answer !== answer ? tree : { ...tree, search: { text, answer: { of: text, hits: [...answer.hits, ...page.hits], more: page.more } } });
   }
-  /** Shows message `id` in the tree: every line from the view down to it is opened, and it is the one that was `found`. With
-   * no message, what the search found is shown again. */
-  async find(profile: string, id?: number) {
+  /** Shows message `id` in the tree, or the line of `n` messages from it on: every line from the view down to it is opened,
+   * and it is the one that was `found`. With no message, what the search found is shown again. */
+  async find(profile: string, id?: number, n = 1) {
     if (id === undefined) return this.tree(profile, ({ found, ...tree }) => tree);
-    const reach = () => path(this.state.memory[profile]?.view?.lines ?? [], id);
+    const reach = () => path(this.state.memory[profile]?.view?.lines ?? [], id, n);
     // The search reads the log as it is now, which can be longer than the view the page has.
     if (!reach().length) await this.readMemory(profile);
-    const down = reach();
-    if (!down.length) return;
+    const down = reach(), last = down.at(-1);
+    if (!last) return;
     this.tree(profile, tree => ({ ...tree, open: [...new Set([...tree.open, ...down.map(key)])] }));
     const text = this.state.memory[profile]?.search?.text;
     await Promise.all(down.map(line => this.under(profile, line)));
     // Unless the search was ended or is for other text by now: then the tree is open down to the message, and that is all.
-    this.tree(profile, tree => tree.search?.text === text ? { ...tree, found: id } : tree);
+    this.tree(profile, tree => tree.search?.text === text ? { ...tree, found: key(last) } : tree);
   }
   /** What is typed in a window and not sent yet. It is kept where the open profiles are, so it is there when the page is
    * opened again, and until it is sent or its window is gone. */

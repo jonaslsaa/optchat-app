@@ -4,10 +4,11 @@ import { join } from 'node:path';
 import { after, before, test } from 'node:test';
 import { chromium, type Browser, type Page } from 'playwright-core';
 import { build } from 'vite';
-import { agents, CHANGES, FILES, FORMULAS, NAMED, seed, TEAM } from '../scripts/seed.ts';
+import { agents, CHANGES, FILES, FORMULAS, NAMED, remember, seed, TEAM } from '../scripts/seed.ts';
 import type { Launch } from '../src/server/files.ts';
 import { connect } from '../src/client.ts';
 import { startServer } from '../src/server/server.ts';
+import { cited, named } from '../src/ui/cite.ts';
 import { createProfile, give, png, temporaryHome, writeMemory, writeRun, type Given } from './support.ts';
 
 /** `npm run test:ui`: whose a key is and where the focus goes, which only a browser decides. The page is built and driven in
@@ -28,6 +29,10 @@ for (const name of ['bar', 'cold', 'colder', 'chat', 'beside', 'sheet', 'memory'
   for (let i = 0; i < 6; i++) writeRun(profile, { id: `e000000${i}`, title: `An older agent ${i}`, state: 'completed', started: Date.now() - 9_000_000 - i * 1000, ended: Date.now() - 8_000_000, report: 'Done.' });
 }
 seed(createProfile(home, 'diffs'), CHANGES.length, Date.now(), CHANGES);
+// A chat with its memory as pi-optchat would have left it: the last four messages a line each, and those before them folded.
+const lines = createProfile(home, 'lines');
+seed(lines, TEAM.length, Date.now(), TEAM);
+remember(lines, 4);
 writeMemory(createProfile(home, 'thinks'), 4);
 seed(createProfile(home, 'formulas'), 1, Date.now(), FORMULAS);
 createProfile(home, 'paced');
@@ -702,42 +707,136 @@ test('a long edit opens as its diff, which scrolls in its box and does not make 
   await page.context().close();
 });
 
-test('what is selected in a reply or a report is quoted into the composer, under what is typed, and a report and your own message can be copied', async () => {
-  const page = await open('said'), box = page.getByRole('textbox', { name: 'Message' }), quote = page.getByRole('button', { name: 'Quote' });
+test('what is selected in a reply, a report or a message is cited in the message under it: a chip there, and a card once sent that opens the memory view where it is; a report and your own message can be copied', async () => {
+  const page = await open('said'), box = page.getByRole('textbox', { name: 'Message' }), cite = page.getByRole('button', { name: 'Cite', exact: true });
+  const chips = () => page.getByRole('list', { name: 'Cited in the message' }).getByRole('listitem').allInnerTexts(), draft = () => page.evaluate(() => JSON.parse(localStorage.getItem('optchat-app-drafts') ?? '{}')['said/main']);
+  const report = page.locator('[data-cite] li', { hasText: 'Nothing is replayed twice' }), reply = page.locator('[data-cite] p', { hasText: 'Started two agents.' });
   await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
-  // A line of a report.
-  await page.getByText('Nothing is replayed twice').click({ clickCount: 3 });
-  await quote.click();
-  assert.equal(await box.inputValue(), '> Nothing is replayed twice\n\n');
-  assert.equal(await focused(page), 'Message');
-  assert.equal(await quote.count(), 0, 'the button went with the selection');
-  // A reply, with something typed already: the quote is under it, and what is typed next under the quote.
-  // Three clicks on its last paragraph select on into the row under it: the button is at the paragraph's end all the same.
+  // A line of a report: it is a chip over the box, and nothing is typed for it.
+  await report.click({ clickCount: 3 });
+  await cite.click();
+  assert.deepEqual([await chips(), await box.inputValue(), await focused(page), await cite.count()], [['Nothing is replayed twice'], '', 'Message', 0]);
+  // A reply, with something typed already. Three clicks on its last paragraph select on into the row under it: the button is
+  // at the paragraph's end all the same.
   await box.fill('About the agents:');
-  const reply = page.getByText('Started two agents.');
   await reply.click({ clickCount: 3 });
-  const [line, button] = [await reply.boundingBox(), await quote.boundingBox()];
-  assert.ok(line && button && Math.abs(button.y - line.y - line.height) < 8, 'the Quote button is not under the last line that is selected');
-  await quote.click();
+  const [line, button] = [await reply.boundingBox(), await cite.boundingBox()];
+  assert.ok(line && button && Math.abs(button.y - line.y - line.height) < 8, 'the Cite button is not under the last line that is selected');
+  await cite.click();
+  assert.deepEqual([await chips(), await box.inputValue()], [['Nothing is replayed twice', 'Started two agents. I\'ll tell you when they report.'], 'About the agents:']);
+  // Backspace takes a letter while there is one, and a `/` lists no commands: the message begins with what it cites.
+  await box.press('Backspace');
+  assert.deepEqual([(await chips()).length, await box.inputValue()], [2, 'About the agents']);
+  await box.fill('/');
+  assert.equal(await page.getByRole('listbox', { name: 'Commands' }).count(), 0, 'commands are listed for a message that cites');
+  // Backspace takes the last chip off once the box is empty, and a chip's own button takes that one.
+  await box.fill('');
+  await page.keyboard.press('Backspace');
+  assert.deepEqual(await chips(), ['Nothing is replayed twice']);
+  await reply.click({ clickCount: 3 });
+  await cite.click();
+  await page.getByRole('button', { name: 'Remove the citation' }).first().click();
+  assert.deepEqual([await chips(), await focused(page)], [['Started two agents. I\'ll tell you when they report.'], 'Message']);
+  // A selection that runs on into the report under the reply is cited as far as the reply goes, which is the message it names.
+  const [from, to] = [await reply.boundingBox(), await report.boundingBox()];
+  assert.ok(from && to);
+  await page.mouse.move(from.x + 60, from.y + from.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(to.x + 100, to.y + to.height / 2, { steps: 5 });
+  await page.mouse.up();
+  await cite.click();
+  const [, part = ''] = await chips();
+  assert.ok(part.length > 10 && 'Started two agents. I\'ll tell you when they report.'.endsWith(part), `what is cited of a selection over two messages: ${part}`);
+  await page.getByRole('button', { name: 'Remove the citation' }).last().click();
+  // They are there when the page is opened again, with what is typed.
+  await report.click({ clickCount: 3 });
+  await cite.click();
   await page.keyboard.type('how long?');
-  assert.equal(await box.inputValue(), 'About the agents:\n\n> Started two agents. I\'ll tell you when they report.\n\nhow long?');
-  // What you said yourself is not quoted, and a click takes the selection and the button away.
-  await page.getByText('Good. Get someone to check').click({ clickCount: 3 });
-  assert.equal(await quote.count(), 0);
-  await page.getByText('Nothing is replayed twice').click({ clickCount: 3 });
-  await quote.waitFor();
-  await page.getByText('Nothing is replayed twice').click();
-  await quote.waitFor({ state: 'detached' });
+  await page.reload();
+  await box.waitFor();
+  assert.deepEqual([await chips(), await box.inputValue()], [['Started two agents. I\'ll tell you when they report.', 'Nothing is replayed twice'], 'how long?']);
+  // Sent, the message names the message of the log each is in, for the agent to zoom to, and the chat shows them as cards.
+  const sent = '<cite zoom="11">Started two agents. I\'ll tell you when they report.</cite>\n<cite zoom="12">Nothing is replayed twice</cite>\n\nhow long?';
+  await box.press('Enter');
+  await page.getByText('reply', { exact: true }).waitFor();
+  const { messages } = await (await connect(server.url)).request('history', { profile: 'said' });
+  assert.equal(messages.findLast(message => message.kind === 'user')?.text, sent);
+  assert.deepEqual(await page.locator('[data-cited]').allInnerTexts(), ['Started two agents. I\'ll tell you when they report.\nMemory · 11', 'Nothing is replayed twice\nMemory · 12']);
+  assert.ok(!(await page.locator('main').innerText()).includes('<cite'), 'the chat shows a citation as it is written');
+  // ↑ brings the message back as it was: its chips, and what was typed.
+  await box.press('ArrowUp');
+  assert.deepEqual([await chips(), await box.inputValue(), await draft()], [['Started two agents. I\'ll tell you when they report.', 'Nothing is replayed twice'], 'how long?', sent]);
+  await box.press('ArrowDown');
+  assert.deepEqual([await chips(), await box.inputValue()], [[], '']);
+  // A card opens the memory view at the message it cites, and a click on what is selected takes the button away.
+  await page.locator('[data-cited]').first().click();
+  assert.match(await page.locator('[data-found]').innerText(), /message 11/);
+  await page.keyboard.press('Alt+m');
+  await report.click({ clickCount: 3 });
+  await cite.waitFor();
+  await report.click();
+  await cite.waitFor({ state: 'detached' });
   // A report and a message of yours are copied whole, as a reply is.
-  const copied = async (name: string) => { await page.getByRole('button', { name }).last().click(); return page.evaluate(() => navigator.clipboard.readText()); };
+  const copied = async (name: string) => { await page.getByRole('button', { name }).first().click(); return page.evaluate(() => navigator.clipboard.readText()); };
   assert.match(await copied('Copy report'), /^\*\*T3 Code replays by sequence number\.\*\*[^]*- Nothing is replayed twice$/);
-  assert.equal(await copied('Copy message'), 'Good. Get someone to check how T3 Code handles reconnects, and someone to run that test on Windows.');
+  assert.equal(await copied('Copy message'), 'The shutdown test fails on Windows. Can you fix the timeout and write down why it is different there?');
+  // One that cites is copied as it was sent: pasted into the box, it is its chips and what was typed again.
+  await page.getByRole('button', { name: 'Copy message' }).last().click();
+  assert.equal(await page.evaluate(() => navigator.clipboard.readText()), sent);
   // Esc on the button takes it away, and is not the key that stops the run.
   await run(page);
-  await page.getByText('Nothing is replayed twice').click({ clickCount: 3 });
-  await quote.focus();
-  await goesOn(page, 'on the Quote button');
-  assert.equal(await quote.count(), 0);
+  await report.click({ clickCount: 3 });
+  await cite.focus();
+  await goesOn(page, 'on the Cite button');
+  assert.equal(await cite.count(), 0);
+  // What the log does not have yet is cited without a place: the number it is drawn under is not the log's until the run ends.
+  await page.getByText('wait', { exact: true }).click({ clickCount: 3 });
+  await cite.click();
+  assert.equal(await draft(), '<cite>wait</cite>\n\n');
+});
+
+test('in the memory view a line is cited whole by its button, and the words selected in a line or in an opened message with where they are', async () => {
+  const page = await open('lines'), box = page.getByRole('textbox', { name: 'Message' }), cite = page.getByRole('button', { name: 'Cite', exact: true }), lines = page.locator('[data-line]');
+  // What the message cites, as it is kept: where each is, and how it begins.
+  const draft = async () => cited(await page.evaluate((): string => JSON.parse(localStorage.getItem('optchat-app-drafts') ?? '{}')['lines/main'] ?? '')).cites.map(({ text, at }) => [at && named(at), text.split('\n')[0]]);
+  await page.keyboard.press('Alt+m');
+  // The button on a line cites the line: the eight messages from the first on, by how their summary begins.
+  await lines.first().hover();
+  await page.getByRole('button', { name: 'Cite this line' }).first().click();
+  assert.deepEqual([await page.getByRole('list', { name: 'Cited in the message' }).getByRole('listitem').allInnerTexts(), await focused(page)], [['Memory 0+8'], 'Message']);
+  // Words selected in a line are cited with the line's place, and selecting them does not open it; Enter does, as a click.
+  const said = await lines.nth(3).getByText('Started two agents').boundingBox();
+  assert.ok(said);
+  await page.mouse.move(said.x + 40, said.y + said.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(said.x + 160, said.y + said.height / 2, { steps: 4 });
+  await page.mouse.up();
+  assert.equal(await lines.nth(3).getAttribute('aria-expanded'), 'false');
+  await cite.click();
+  // An opened message is the chat's row, and what is selected in it is cited as that message.
+  await lines.nth(4).focus();
+  await page.keyboard.press('Enter');
+  assert.equal(await lines.nth(4).getAttribute('aria-expanded'), 'true');
+  await page.locator('[data-cite] li', { hasText: 'Nothing is replayed twice' }).click({ clickCount: 3 });
+  await cite.click();
+  // A message a search found is cited by its button too.
+  await page.getByRole('searchbox', { name: 'Search the memory' }).fill('not enough for');
+  const found = page.getByRole('region', { name: 'Messages found' });
+  await found.locator('[data-line]').first().hover();
+  await found.getByRole('button', { name: 'Cite this line' }).first().click();
+  const cites = await draft();
+  assert.deepEqual(cites.slice(0, 1), [['0+8', 'user: The shutdown test fails on Windows.']]);
+  assert.deepEqual([cites[1][0], cites[2], cites[3][0]], ['11', ['12', 'Nothing is replayed twice'], '2']);
+  assert.ok('talk: Started two agents. I\'ll tell you when they report.'.includes(String(cites[1][1])) && String(cites[1][1]).length > 5, `what was selected in the line: ${cites[1][1]}`);
+  assert.match(String(cites[3][1]), /not enough for `taskkill`/);
+  // Sent from here, the message is answered in the chat, where what it cites is cards.
+  await box.press('Enter');
+  await page.locator('[data-cited]').nth(3).waitFor();
+  assert.equal(await page.getByRole('heading', { name: 'Memory view' }).count(), 0);
+  assert.match(await page.locator('[data-cited]').first().innerText(), /^user: The shutdown test fails on Windows\.\n[^]*\nMemory · 0\+8$/);
+  // The card of a line opens the memory view at that line, not at its first message.
+  await page.locator('[data-cited]').first().click();
+  assert.match(await page.locator('[data-found]').innerText(), /8 messages/);
 });
 
 test('the settings are in tabs: the arrows go from one to the next, the page opens again on the last one, and Esc closes it while the run goes on', async () => {
@@ -976,7 +1075,7 @@ test('with motion on, a reply that streamed at a pace is all there once it has e
   await page.getByRole('textbox', { name: 'Message' }).fill('hello');
   await page.keyboard.press('Enter');
   await page.getByRole('button', { name: 'Copy reply' }).waitFor();
-  assert.equal(await page.locator('[data-quote] .chat-markdown').last().innerText(), 'reply');
+  assert.equal(await page.locator('[data-cite] .chat-markdown').last().innerText(), 'reply');
   await page.context().close();
 });
 

@@ -1,6 +1,8 @@
 import { BotIcon, ChevronRightIcon, EyeIcon, GlobeIcon, HistoryIcon, SearchIcon, SquarePenIcon, StickyNoteIcon, TerminalIcon, WrenchIcon, XIcon, type LucideIcon } from 'lucide-react';
 import { memo, useEffect, useState, type ReactNode } from 'react';
 import { flushSync } from 'react-dom';
+import { CiteCard } from './Cite.tsx';
+import { citing, type Place } from './cite.ts';
 import { Markdown } from './Markdown.tsx';
 import { act, took, worked, type Part, type Step, type Thinking, type Tool } from './transcript.ts';
 import { Button, cn, CopyButton, Picture, Spinner } from './ui.tsx';
@@ -36,14 +38,17 @@ function Clamp({ text, lines, children }: { text: string; lines: number; childre
 }
 
 /** Your message: a bubble on the right, with the images you sent. */
-export const UserRow = memo(function UserRow({ part, profile }: { part: Of<'user'>; profile: string }) {
+export const UserRow = memo(function UserRow({ part, profile, onPlace }: { part: Of<'user'>; profile: string; onPlace?: (at: Place) => void }) {
+  // The message as it was sent: copied, it is pasted into the box as it was, with what it cites.
+  const sent = citing(part.cites, part.text);
   return (
     <div className="group flex flex-col items-end gap-1 pt-2 pb-1">
       <div className="relative min-w-0 max-w-[80%] rounded-2xl bg-message p-3 text-message-foreground">
         {part.images.length > 0 && <div className="mb-2 flex flex-wrap gap-2">{part.images.map((image, at) => <Picture key={at} src={image.startsWith('data:') ? image : `/images/${profile}/${image}`} className="max-h-48 rounded-lg" />)}</div>}
-        <Clamp text={part.text} lines={12}><p className="whitespace-pre-wrap text-sm leading-relaxed [overflow-wrap:anywhere]">{part.text}</p></Clamp>
+        {part.cites.length > 0 && <div className={cn('flex flex-col gap-1.5', part.text && 'mb-2')}>{part.cites.map((cite, at) => <CiteCard key={at} cite={cite} onOpen={onPlace} />)}</div>}
+        {part.text && <Clamp text={part.text} lines={12}><p data-cite={part.key} className="whitespace-pre-wrap text-sm leading-relaxed [overflow-wrap:anywhere]">{part.text}</p></Clamp>}
       </div>
-      <div className="flex max-w-[80%] items-center gap-1.5 pe-1 opacity-0 transition-opacity duration-200 focus-within:opacity-100 group-hover:opacity-100">{part.text && <CopyButton text={part.text} label="Copy message" />}<Time date={part.date} /></div>
+      <div className="flex max-w-[80%] items-center gap-1.5 pe-1 opacity-0 transition-opacity duration-200 focus-within:opacity-100 group-hover:opacity-100">{sent && <CopyButton text={sent} label="Copy message" />}<Time date={part.date} /></div>
     </div>
   );
 });
@@ -63,7 +68,7 @@ export const ReportRow = memo(function ReportRow({ part, onAgent }: { part: Of<'
           <span className="-my-1 opacity-0 transition-opacity duration-200 focus-within:opacity-100 group-hover:opacity-100"><CopyButton text={part.body} label="Copy report" /></span>
           <Time date={part.date} />
         </div>
-        <div data-quote><Clamp text={part.body} lines={14}><Markdown text={part.body} /></Clamp></div>
+        <div data-cite={part.key}><Clamp text={part.body} lines={14}><Markdown text={part.body} /></Clamp></div>
       </div>
     </div>
   );
@@ -163,7 +168,8 @@ export const ReplyRow = memo(function ReplyRow({ part, working, latest }: { part
       )}
       {(working || open) && steps.length > 0 && <div className={cn('flex min-w-0 flex-col py-1', !working && 'enter')}>{steps.map(step => <StepRow key={step.key} step={step} tools={working?.tools} />)}</div>}
       {!working && !open && faults.map(step => <StepRow key={step.key} step={step} />)}
-      {answer && <div data-quote className="relative min-w-0 px-1 py-0.5 pt-2"><Markdown text={answer.text} streaming={answer.streaming} /></div>}
+      {/* An answer in several blocks is a message of the log each: what is cited from one is cited as that message. */}
+      {answer && <div className="relative flex min-w-0 flex-col gap-[0.65rem] px-1 py-0.5 pt-2">{answer.said.map((block, at) => <div key={block.key} data-cite={block.key}><Markdown text={block.text} streaming={answer.streaming && at === answer.said.length - 1} /></div>)}</div>}
       {!working && answer && (
         <div className={cn('-ms-0.5 flex items-center gap-1.5 px-1 pt-1 transition-opacity duration-200', !latest && 'opacity-0 focus-within:opacity-100 group-hover/reply:opacity-100')}>
           <CopyButton text={answer.text} label="Copy reply" /><Time date={part.to} />

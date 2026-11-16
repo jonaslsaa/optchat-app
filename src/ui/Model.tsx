@@ -68,7 +68,7 @@ function Picker({ window, models, own, subagent, below }: { window: WindowState;
     else if (event.key === 'ArrowDown' || event.key === 'ArrowUp') { event.preventDefault(); all[(here + (event.key === 'ArrowDown' ? 1 : all.length - 1)) % all.length]?.focus(); }
   };
   return (
-    <div role="dialog" aria-label="Model" className={cn('absolute right-0 z-50 flex w-[min(34.5rem,100%)] flex-col overflow-hidden rounded-lg border bg-popover text-popover-foreground shadow-[0_16px_40px_-18px_rgb(0_0_0/55%)] dark:shadow-[0_18px_44px_-18px_rgb(0_0_0/80%)] transition-[opacity,scale] duration-150 ease-out starting:scale-98 starting:opacity-0 motion-reduce:transition-none', below ? 'top-full mt-2 origin-top-right' : 'bottom-full mb-2 origin-bottom-right')}>
+    <div role="dialog" aria-label="Model" className={cn('absolute right-0 z-50 flex w-[min(34.5rem,100%)] flex-col overflow-hidden rounded-lg border bg-popover text-popover-foreground shadow-[0_16px_40px_-18px_rgb(0_0_0/55%)] dark:shadow-[0_18px_44px_-18px_rgb(0_0_0/80%)] enter enter-grow', below ? 'top-full mt-2 origin-top-right' : 'bottom-full mb-2 origin-bottom-right')}>
       <div className="flex min-h-0 sm:h-86.5 max-sm:flex-col">
         <div className="flex min-h-0 min-w-0 flex-1 flex-col max-sm:h-56 max-sm:flex-none">
           <div className="shrink-0 px-3 pt-2.5">

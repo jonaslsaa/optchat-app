@@ -121,7 +121,7 @@ export function useMedia(query: string) {
 export function CopyButton({ text, label, children }: { text: string; label: string; children?: ReactNode }) {
   const [copied, setCopied] = useState(false);
   const copy = () => void navigator.clipboard.writeText(text).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1200); });
-  return <Button variant="ghost-muted" size={children ? 'xs' : 'icon-xs'} aria-label={label} title={label} onClick={copy}>{copied ? <CheckIcon className="size-3" /> : <CopyIcon className="size-3" />}{children}</Button>;
+  return <Button variant="ghost-muted" size={children ? 'xs' : 'icon-xs'} aria-label={label} title={label} onClick={copy}>{copied ? <CheckIcon className="enter size-3" /> : <CopyIcon className="size-3" />}{children}</Button>;
 }
 /** A picture, and the same one large over the page once it is clicked: Esc puts that away, or a press beside it (`useOverlay`). */
 export function Picture({ src, alt = '', className }: { src: string; alt?: string; className?: string }) {
@@ -133,7 +133,7 @@ export function Picture({ src, alt = '', className }: { src: string; alt?: strin
     <>
       <button ref={opener} type="button" aria-label={['Show the image large', alt].filter(Boolean).join(': ')} onClick={() => setOpen(true)} className="inline-block cursor-zoom-in rounded-lg align-top outline-none focus-visible:ring-2 focus-visible:ring-ring"><img src={src} alt={alt} className={className} /></button>
       {/* A modal dialog, so it lies over everything, a sheet too, and the browser keeps the focus in it. */}
-      {open && createPortal(<dialog ref={box} aria-label="The image, large" onClose={() => setOpen(false)} className="fixed inset-0 m-0 flex size-full max-h-none max-w-none items-center justify-center bg-black/70 p-6 outline-none backdrop:bg-transparent"><img ref={large} src={src} alt={alt} className="max-h-full max-w-full rounded-lg" /></dialog>, document.body)}
+      {open && createPortal(<dialog ref={box} aria-label="The image, large" onClose={() => setOpen(false)} className="enter fixed inset-0 m-0 flex size-full max-h-none max-w-none items-center justify-center bg-black/70 p-6 outline-none backdrop:bg-transparent"><img ref={large} src={src} alt={alt} className="enter enter-grow max-h-full max-w-full rounded-lg" /></dialog>, document.body)}
     </>
   );
 }

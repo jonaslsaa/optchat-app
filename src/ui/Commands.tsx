@@ -35,7 +35,7 @@ export function useCommands(state: State, window: WindowState, text: string, cha
     return true;
   };
   const menu = open && (
-    <div className="absolute inset-x-0 bottom-full z-50 mb-2 flex max-h-72 origin-bottom-left flex-col overflow-hidden rounded-lg border bg-popover text-popover-foreground shadow-[0_16px_40px_-18px_rgb(0_0_0/55%)] transition-[opacity,scale] duration-150 ease-out starting:scale-98 starting:opacity-0 motion-reduce:transition-none dark:shadow-[0_18px_44px_-18px_rgb(0_0_0/80%)]">
+    <div className="absolute inset-x-0 bottom-full z-50 mb-2 flex max-h-72 origin-bottom-left flex-col overflow-hidden rounded-lg border bg-popover text-popover-foreground shadow-[0_16px_40px_-18px_rgb(0_0_0/55%)] enter enter-grow dark:shadow-[0_18px_44px_-18px_rgb(0_0_0/80%)]">
       <Options id={id} label="Commands" rows={rows} at={at} onPick={pick} empty="Asking Pi for its commands…"
         head={(row, k) => !typed && rows[k - 1]?.source !== row.source && <p className="px-2 pt-2 pb-1 font-medium text-2xs text-muted-foreground select-none">{SOURCES[row.source]}</p>}>
         {row => <><span className="shrink-0">/{row.name}</span><span className="min-w-0 truncate text-muted-foreground text-xs">{row.description}</span></>}

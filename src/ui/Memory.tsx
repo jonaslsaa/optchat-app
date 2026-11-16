@@ -57,7 +57,7 @@ function TreeLine({ tree, line, profile, heading }: { tree: Tree; line: Line; pr
         </span>
       </button>
       {open && (
-        <div ref={under} className="ms-3 scroll-mb-3 border-border/70 border-s ps-2">
+        <div ref={under} className="enter ms-3 scroll-mb-3 border-border/70 border-s ps-2">
           {line.n === 1 ? original ? <div className="py-1 ps-1.5"><Original messages={original} profile={profile} /></div> : <Reading />
             : halves ? halves.map(half => <TreeLine key={half.id} tree={tree} line={half} profile={profile} heading={heading} />) : <Reading />}
         </div>
@@ -142,7 +142,7 @@ export const MemoryView = memo(function MemoryView({ tree, profile, window, puls
   // Each line stands under the day its first message was said, which is written once, over the first line of that day.
   const first = view && since(view.lines), days = useMemo(() => view?.lines.map(line => day(new Date(line.from))) ?? [], [view]);
   return (
-    <section aria-label="Memory view" onKeyDown={keyed} className="flex min-h-0 flex-1 flex-col">
+    <section aria-label="Memory view" onKeyDown={keyed} className="enter flex min-h-0 flex-1 flex-col">
       <header className="mx-auto w-full max-w-(--chat-content-max-width) shrink-0 border-border/60 border-b px-4.5 pt-3 pb-3 sm:px-6.5">
         <div className="flex items-center gap-3">
           <h2 className="shrink-0 font-medium text-sm">Memory view</h2>

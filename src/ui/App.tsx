@@ -81,8 +81,8 @@ function Profile({ state, profile, onSettings, onUsage, ref }: { state: State; p
   // A file the chat names is looked for in the folder this window runs in (the panel and the memory view are the main chat's).
   return (
     <InWindow value={window.id}><div className="flex min-h-0 flex-1">
-      {sidebar && <div ref={drawer} className="max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:z-40 max-md:shadow-xl"><Sidebar state={state} profile={profile} selected={window.id} onPick={() => setOver(false)} /></div>}
-      {sidebar && <button type="button" aria-label="Close the sidebar" onClick={() => setOver(false)} className="fixed inset-0 z-30 bg-black/20 md:hidden dark:bg-black/60" />}
+      {sidebar && <div ref={drawer} className="max-md:enter max-md:enter-from-left max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:z-40 max-md:shadow-xl"><Sidebar state={state} profile={profile} selected={window.id} onPick={() => setOver(false)} /></div>}
+      {sidebar && <button type="button" aria-label="Close the sidebar" onClick={() => setOver(false)} className="enter fixed inset-0 z-30 bg-black/20 md:hidden dark:bg-black/60" />}
       {/* The keys in this column are the chat's, or the memory view's while that stands in its place (keys.ts): its top row
           too, where the focus is right after the memory view is chosen. */}
       <main data-keys={memory ? 'memory' : 'chat'} className="flex min-w-0 flex-1 flex-col bg-background">
@@ -146,15 +146,15 @@ export function App() {
     <div className="flex h-dvh flex-col">
       {state.tabs.length > 1 && <Tabs state={state} />}
       {/* What the app has to tell you (`notice`). The desktop app has them at the foot: its window's buttons are in the top row. */}
-      {state.connection === 'lost' && <p role="status" className="notice shrink-0 bg-warning-surface px-4 py-1.5 text-center text-warning-foreground text-xs">The server is not answering. Trying again…</p>}
-      {state.connection === 'refused' && <p role="status" className="notice shrink-0 bg-warning-surface px-4 py-1.5 text-center text-warning-foreground text-xs">This page's address has no token, or one from before the server started again. Open the address the server printed.</p>}
+      {state.connection === 'lost' && <p role="status" className="notice enter shrink-0 bg-warning-surface px-4 py-1.5 text-center text-warning-foreground text-xs">The server is not answering. Trying again…</p>}
+      {state.connection === 'refused' && <p role="status" className="notice enter shrink-0 bg-warning-surface px-4 py-1.5 text-center text-warning-foreground text-xs">This page's address has no token, or one from before the server started again. Open the address the server printed.</p>}
       {state.error && (
-        <p role="alert" className="notice flex shrink-0 items-center justify-center gap-2 bg-error-surface px-4 py-1.5 text-error-foreground text-xs">
+        <p role="alert" className="notice enter flex shrink-0 items-center justify-center gap-2 bg-error-surface px-4 py-1.5 text-error-foreground text-xs">
           <span className="min-w-0 truncate">{state.error}</span><button type="button" aria-label="Dismiss" onClick={() => app.dismiss()} className="rounded-sm p-0.5 hover:bg-foreground/10"><XIcon className="size-3" /></button>
         </p>
       )}
       {needs && !settings && state.profile && (
-        <p role="status" className="notice flex shrink-0 items-center justify-center gap-2 bg-warning-surface px-4 py-1.5 text-warning-foreground text-xs">
+        <p role="status" className="notice enter flex shrink-0 items-center justify-center gap-2 bg-warning-surface px-4 py-1.5 text-warning-foreground text-xs">
           {needs}.<button type="button" onClick={() => setPage('settings')} className="rounded-sm font-medium underline underline-offset-2">Set up</button>
         </p>
       )}

@@ -88,6 +88,20 @@
 @utility window-corner { :root[data-shell='windowed'] & { padding-inline-start: var(--window-buttons); } }
 /* So what the app has to tell you, which a browser has above everything, is at the window's foot. */
 [data-shell] .notice { order: 1; }
+/* What comes onto the page comes in over 150 ms, not at once: `enter` out of nothing, with `enter-grow` from 98% of its size
+ * (a list over the page), and with `enter-from-left`, `-right` or `-below` from a few pixels that way (a sheet, a pill).
+ * `@starting-style` is how a thing looks before it is first drawn, so nothing is timed and nothing is kept, and a thing
+ * leaves at once. Only opacity, scale and translate, which move nothing else on the page; none of it for whoever asked
+ * for less motion. Not for what has a transition of its own (a `Button`): that goes in something that enters. */
+@utility enter {
+  transition: opacity 150ms ease-out, scale 150ms ease-out, translate 150ms ease-out;
+  @starting-style { opacity: 0; }
+  @media (prefers-reduced-motion: reduce) { transition: none; }
+}
+@utility enter-grow { @starting-style { scale: 0.98; } }
+@utility enter-from-left { @starting-style { translate: -0.5rem 0; } }
+@utility enter-from-right { @starting-style { translate: 0.5rem 0; } }
+@utility enter-from-below { @starting-style { translate: 0 0.25rem; } }
 
 :root {
   color-scheme: light;

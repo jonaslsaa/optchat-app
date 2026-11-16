@@ -157,7 +157,7 @@ export const ReplyRow = memo(function ReplyRow({ part, working, latest }: { part
           </Fold>
         </div>
       )}
-      {(working || open) && steps.length > 0 && <div className="flex min-w-0 flex-col py-1">{steps.map(step => <StepRow key={step.key} step={step} tools={working?.tools} />)}</div>}
+      {(working || open) && steps.length > 0 && <div className={cn('flex min-w-0 flex-col py-1', !working && 'enter')}>{steps.map(step => <StepRow key={step.key} step={step} tools={working?.tools} />)}</div>}
       {!working && !open && faults.map(step => <StepRow key={step.key} step={step} />)}
       {answer && <div data-quote className="relative min-w-0 px-1 py-0.5 pt-2"><Markdown text={answer.text} streaming={answer.streaming} /></div>}
       {!working && answer && (
@@ -178,7 +178,7 @@ export const HandoffRow = memo(function HandoffRow({ part, writing }: { part: Of
   return (
     <div className="pb-4">
       <Fold open={open} toggle={() => setOpen(!open)}>Handed to the main chat</Fold>
-      {open && <div className="mt-2 rounded-xl border border-border/70 bg-card px-3.5 py-3 dark:bg-card/60"><Markdown text={part.body} /></div>}
+      {open && <div className="enter mt-2 rounded-xl border border-border/70 bg-card px-3.5 py-3 dark:bg-card/60"><Markdown text={part.body} /></div>}
     </div>
   );
 });

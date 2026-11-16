@@ -881,3 +881,30 @@ test('the desktop app\'s menu bar asks the page for what its keys run: each is d
     assert.equal(await focused(first), 'Profile name');
   } finally { client.close(); }
 });
+
+test('with motion on, what you open comes in, and with less motion it is there at once', async () => {
+  for (const motion of ['no-preference', 'reduce'] as const) {
+    const page = await open('sheet', NARROW, motion), cdp = await page.context().newCDPSession(page);
+    // Fifty times slower, so that what is read is read while the thing comes in.
+    await cdp.send('Animation.enable');
+    await cdp.send('Animation.setPlaybackRate', { playbackRate: 0.02 });
+    const whole = motion === 'reduce', seen = (opacity: string, what: string) => assert.equal(Number(opacity) === 1, whole, `${what} is at ${opacity} of its opacity as it appears, with motion ${whole ? 'reduced' : 'on'}`);
+    await page.getByRole('button', { name: 'Open a profile' }).click();
+    seen(await page.getByRole('listbox', { name: 'Profiles' }).evaluate(list => getComputedStyle(list).opacity), 'the list of profiles');
+    await page.keyboard.press('Escape');
+    // A sheet, and the shade behind it.
+    await page.getByRole('button', { name: 'Agents and GitHub' }).click();
+    const sheet = page.locator('dialog[aria-label="Agents and GitHub"]');
+    seen(await sheet.evaluate(sheet => getComputedStyle(sheet).opacity), 'the sheet');
+    seen(await sheet.evaluate(sheet => getComputedStyle(sheet, '::backdrop').opacity), 'the shade behind the sheet');
+    // What was there does not come in again when the chat does: back from Settings, with a run going.
+    await page.keyboard.press('Escape');
+    await run(page);
+    await page.getByRole('button', { name: 'Settings' }).click();
+    await page.getByRole('heading', { name: 'Settings' }).waitFor();
+    await page.keyboard.press('Escape');
+    await stop(page).waitFor();
+    assert.deepEqual(await page.evaluate(() => [...document.querySelectorAll('[class~="enter"]')].filter(entering => getComputedStyle(entering).opacity !== '1').map(entering => entering.outerHTML.slice(0, 80))), []);
+    await page.context().close();
+  }
+});

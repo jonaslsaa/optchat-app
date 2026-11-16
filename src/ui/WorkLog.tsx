@@ -71,7 +71,7 @@ export function WorkLogDetails({ children, followLive = false }: { children: Rea
         const { scrollHeight, scrollTop, clientHeight } = event.currentTarget;
         atLiveEdgeRef.current = scrollHeight - scrollTop - clientHeight <= LIVE_EDGE_PX;
       }}
-      className="ms-7 flex max-h-96 cursor-auto flex-col gap-3 overflow-auto px-0.5 py-1 select-text"
+      className="enter ms-7 flex max-h-96 cursor-auto flex-col gap-3 overflow-auto px-0.5 py-1 select-text"
       onClick={(event) => event.stopPropagation()}
       onPointerDown={(event) => event.stopPropagation()}
     >

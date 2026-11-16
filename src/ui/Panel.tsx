@@ -28,7 +28,7 @@ export function Panel({ state, profile, shown: { agent }, pulse, turn, outside, 
   const close = () => sheet ? dialog.current?.close() : onClose();
   useShortcuts((): Record<string, () => void> => agent === undefined ? {} : { escape: () => onAgent() }, [agent], 'panel');
   const panel = (
-    <aside aria-label="Agents and GitHub" data-keys="panel" className="relative flex h-full w-(--panel-width) max-w-[calc(100vw-2.5rem)] in-data-[shell=windowed]:max-w-[calc(100vw-var(--window-buttons)-0.5rem)] shrink-0 flex-col border-border border-l bg-background">
+    <aside aria-label="Agents and GitHub" data-keys="panel" className={cn(!sheet && 'enter', 'relative flex h-full w-(--panel-width) max-w-[calc(100vw-2.5rem)] in-data-[shell=windowed]:max-w-[calc(100vw-var(--window-buttons)-0.5rem)] shrink-0 flex-col border-border border-l bg-background')}>
       {/* An agent's chat has a bar over it. The lists have none: the way out stands at the end of their first heading. */}
       <div className={cn('flex h-(--topbar-height) shrink-0 items-center gap-1.5 px-2.5', agent === undefined ? 'absolute top-0 right-0 z-10 rounded-bl-lg bg-background' : 'window-bar')}>
         {agent !== undefined && <AgentHead state={state} profile={profile} id={agent} onAgent={onAgent} />}
@@ -45,7 +45,7 @@ export function Panel({ state, profile, shown: { agent }, pulse, turn, outside, 
   if (!sheet) return panel;
   return (
     <dialog ref={dialog} aria-label="Agents and GitHub" data-keys="panel" onClose={onClose} onClick={event => { if (event.target === event.currentTarget) close(); }}
-      className="fixed inset-y-0 right-0 left-auto m-0 h-dvh max-h-none max-w-none bg-transparent p-0 text-foreground shadow-xl backdrop:bg-black/20">
+      className="enter enter-from-right fixed inset-y-0 right-0 left-auto m-0 h-dvh max-h-none max-w-none bg-transparent p-0 text-foreground shadow-xl backdrop:enter backdrop:bg-black/20">
       {panel}
     </dialog>
   );

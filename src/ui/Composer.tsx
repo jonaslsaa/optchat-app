@@ -17,7 +17,7 @@ function Dialog({ window, dialog }: { window: string; dialog: PiRecord }) {
   const answer = (response: { value?: string; confirmed?: boolean; cancelled?: boolean }) => void app.answer(window, { id, ...response });
   const cancel = () => answer(dialog.method === 'confirm' ? { confirmed: false } : { cancelled: true });
   return (
-    <div role="dialog" aria-label={String(dialog.title ?? 'Question')} onKeyDown={event => escapes(event, cancel)} className="rounded-2xl border border-warning/32 bg-warning-surface px-3.5 py-3 text-sm">
+    <div role="dialog" aria-label={String(dialog.title ?? 'Question')} onKeyDown={event => escapes(event, cancel)} className="enter rounded-2xl border border-warning/32 bg-warning-surface px-3.5 py-3 text-sm">
       <p className="font-medium">{String(dialog.title ?? 'Pi asks')}</p>
       {typeof dialog.message === 'string' && <p className="mt-0.5 text-muted-foreground">{dialog.message}</p>}
       {dialog.method === 'editor' && (
@@ -42,7 +42,7 @@ function Dialog({ window, dialog }: { window: string; dialog: PiRecord }) {
 function Failure({ error }: { error: string }) {
   const { title, detail, next } = failure(error);
   return (
-    <div role="alert" className="flex gap-2.5 rounded-xl border border-error/24 bg-error-surface px-3.5 py-2.5 text-sm [overflow-wrap:anywhere]">
+    <div role="alert" className="enter flex gap-2.5 rounded-xl border border-error/24 bg-error-surface px-3.5 py-2.5 text-sm [overflow-wrap:anywhere]">
       <CircleAlertIcon className="mt-0.5 size-4 shrink-0 text-error-foreground" />
       <div className="min-w-0">
         <p className="font-medium text-error-foreground">{title}</p>
@@ -57,7 +57,7 @@ const TONES = { info: 'border-border', warning: 'border-warning/32 bg-warning-su
 /** What Pi or one of its extensions said in passing: why it did not take your message, a warning, a thing it did. */
 function Said({ notice: { text, kind }, onDismiss }: { notice: Notice; onDismiss: () => void }) {
   return (
-    <div role={kind === 'error' ? 'alert' : 'status'} className={cn('flex shrink-0 items-start gap-2.5 rounded-xl border px-3.5 py-2.5 text-sm [overflow-wrap:anywhere]', TONES[kind])}>
+    <div role={kind === 'error' ? 'alert' : 'status'} className={cn('enter flex shrink-0 items-start gap-2.5 rounded-xl border px-3.5 py-2.5 text-sm [overflow-wrap:anywhere]', TONES[kind])}>
       <p className="min-w-0 flex-1 whitespace-pre-wrap text-foreground/80">{text}</p>
       <button type="button" aria-label="Dismiss" onClick={onDismiss} className="rounded-sm p-0.5 text-muted-foreground hover:bg-foreground/10"><XIcon className="size-3.5" /></button>
     </div>

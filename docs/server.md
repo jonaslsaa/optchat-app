@@ -93,6 +93,7 @@ A run's finished messages are in `history` as soon as pi-optchat has logged them
 - **`role` is the window's place in the app and never changes.** The main window's Pi owns the profile and a connected window's Pi joins it; the server starts them that way, so nothing has to be read back. `completed` is pi-optchat's word (its `optchat.role` status) that a connected window's conversation is handed off.
 - **A Pi that did not open its profile** is stopped, and the prompt fails with the reason (for example pi-optchat's `Profile already running: …`, or that pi-optchat is not installed or older than 0.11.13), instead of a window that looks idle and answers nothing. The server knows the profile is open when pi-optchat's `optchat.role` status names it, which it sends as the session starts; another extension's failure does not count.
 - **Stopping.** The server closes Pi's stdin, which is Pi's request for an orderly shutdown, and kills it only if it has not exited after 15 seconds. A Pi that is still starting is stopped the same way.
+- **Closed before its Pi was spawned**, a window starts none: its message is refused with `… was closed before it started.` That holds for the main window's Pi too, when a connected window asked for it and nobody else waits for it. A Pi that is already spawned stays, as the main window's does when a connected window is closed later.
 
 ### What the app tells an agent
 

@@ -17,7 +17,7 @@ process.env.FAKE_PI_HOME = join(home, 'pi');
 mkdirSync(join(home, 'pi', 'pi-optchat'), { recursive: true });
 writeFileSync(join(home, 'pi', 'pi-optchat', 'package.json'), JSON.stringify({ name: 'pi-optchat', version: '0.11.12' }));
 writeFileSync(join(home, 'pi', 'state.json'), JSON.stringify({ version: '1.5.2', providers: ['anthropic', 'openai'], packages: { 'npm:pi-optchat': join(home, 'pi', 'pi-optchat') } }));
-for (const name of ['chat', 'beside', 'sheet', 'memory', 'rows', 'menus', 'fields']) {
+for (const name of ['chat', 'beside', 'sheet', 'memory', 'rows', 'menus', 'fields', 'asks']) {
   const profile = createProfile(home, name);
   if (name === 'memory') { writeMemory(profile, 16); continue; }
   seed(profile, TEAM.length, Date.now(), TEAM);
@@ -113,6 +113,18 @@ test('Esc stops the run when the keys are in the chat, or outside every part tha
   await stop(page).click();
   await stop(page).waitFor({ state: 'detached' });
   assert.equal(await focused(page), 'Message');
+});
+
+test('Esc in a question Pi asks answers no, and the run goes on with that', async () => {
+  const page = await open('asks'), question = page.getByRole('dialog', { name: 'Go on?' });
+  await page.getByRole('textbox', { name: 'Message' }).fill('ask');
+  await page.keyboard.press('Enter');
+  await question.waitFor();
+  assert.equal(await focused(page), 'Yes');
+  await page.keyboard.press('Escape');
+  // A run that is stopped at its question says nothing more: this one answers with what it was told.
+  await page.getByText('confirmed: false').waitFor({ timeout: 5000 }).catch(() => assert.fail('Esc in a question stopped the run.'));
+  assert.equal(await question.count(), 0, 'the question is gone');
 });
 
 test('Esc in the panel beside the chat is the panel\'s: back from an agent to the list, else nothing, and the run goes on', async () => {

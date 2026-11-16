@@ -343,12 +343,21 @@ test('↑ in an empty composer brings back what you said, and ⌘F in the chat s
   // What you are typing is yours: the keys move in it, as in any box.
   await box.fill('half a thought');
   assert.equal(await press('ArrowUp'), 'half a thought');
-  // A message sent now is the first one back.
-  await box.fill('said just now');
+  // A message sent now is the first one back. It has two lines: ↑ on its second moves to its first, and goes on from there.
+  await box.fill('said just now,\nin two lines');
   await page.keyboard.press('Enter');
   await page.getByRole('main').getByText('said just now').waitFor();
-  assert.deepEqual([await press('ArrowUp'), await press('ArrowUp'), await press('ArrowDown'), await press('ArrowDown')], ['said just now', 'message 14', 'said just now', '']);
-  // ⌘F shows the memory view with the keys in its search box, and they stay there once the view has been read.
+  assert.deepEqual([await press('ArrowUp'), await press('ArrowUp'), await press('ArrowUp'), await press('ArrowDown'), await press('ArrowDown')],
+    ['said just now,\nin two lines', 'said just now,\nin two lines', 'message 14', 'said just now,\nin two lines', '']);
+  // ⌘F is not the panel's key: from there the chat stays as it is.
+  await page.getByRole('button', { name: 'Agents and GitHub' }).click();
+  await page.getByRole('button', { name: 'Close the panel' }).focus();
+  await page.keyboard.press('ControlOrMeta+f');
+  await page.waitForTimeout(300);
+  assert.equal(await page.getByRole('heading', { name: 'Memory view' }).count(), 0);
+  await page.getByRole('button', { name: 'Close the panel' }).click();
+  await box.focus();
+  // From the chat it shows the memory view with the keys in its search box, and they stay there once the view has been read.
   await page.keyboard.press('ControlOrMeta+f');
   await page.getByRole('heading', { name: 'Memory view' }).waitFor();
   await page.locator('[data-line]').first().waitFor();

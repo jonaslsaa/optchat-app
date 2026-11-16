@@ -255,7 +255,8 @@ test('Complete\'s handoff is a part of its own under the conversation, and not t
 
 test('↑ in the composer goes back through what you said and ↓ forward again, and neither takes what you are typing', () => {
   // What was said twice is there once, where it was said last.
-  const said = spoken([user(1, 'deploy it'), reply(2, text('Done.')), user(3, 'and the docs?'), user(4, 'deploy it')]);
+  const picture = { type: 'image', data: 'aGk=', mimeType: 'image/png' };
+  const said = spoken([{ role: 'user', timestamp: T, content: [picture] }, user(1, 'deploy it'), reply(2, text('Done.')), { role: 'user', timestamp: T + 3000, content: [text('and the docs?'), picture] }, user(4, 'deploy it')]);
   assert.deepEqual(['', 'deploy it', 'and the docs?'].map(box => recalled(said, box, true)), ['deploy it', 'and the docs?', undefined]);
   assert.deepEqual(['and the docs?', 'deploy it', ''].map(box => recalled(said, box, false)), ['deploy it', '', undefined]);
   assert.deepEqual([recalled(said, 'deploy it to stage', true), recalled(said, 'deploy it ', false)], [undefined, undefined]);

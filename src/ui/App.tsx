@@ -47,12 +47,14 @@ function Profile({ state, profile, onSettings }: { state: State; profile: string
   const before = useMemo(() => own ? spoken(current({ since }, session ?? [])) : logged(log?.entries ?? []), [own, since, session, log?.entries]);
   const items = useMemo(() => chat(before, { ...live, messages: run }), [before, run, live.streaming]);
   const name = window && title(window, state);
-  // ⌘F searches the memory from the chat too: the view is on the page before the keys go to its search box.
-  const box = useRef<HTMLInputElement>(null), search = () => { flushSync(() => setMemory(true)); box.current?.focus(); box.current?.select(); };
+  // ⌘F searches the memory from the chat too: the view is on the page before the keys go to its search box. Not from the panel,
+  // whose keys are its own: as a sheet it lies over the view, and the box under it cannot take them.
+  const box = useRef<HTMLInputElement>(null), search = () => { setOver(false); flushSync(() => setMemory(true)); box.current?.focus(); box.current?.select(); };
+  useShortcuts((): Record<string, () => void> => own ? {} : { 'mod+f': search }, [own], 'chat', 'memory');
   useShortcuts(() => ({
     'mod+shift+o': () => { setOver(false); void app.newWindow(profile); },
     'mod+b': toggle,
-    ...!own && { 'alt+m': () => setMemory(shown => !shown), 'mod+f': search },
+    ...!own && { 'alt+m': () => setMemory(shown => !shown) },
     ...Object.fromEntries(ids.split(' ').slice(0, 9).map((id, index) => [`alt+${index + 1}`, () => { setOver(false); app.select(id); }])),
   }), [profile, ids, own, wide]);
   // What of the main chat says its agents changed: its Pi started or stopped, an agent was started or ended, a report came.

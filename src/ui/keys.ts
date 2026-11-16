@@ -47,12 +47,13 @@ export function escapes(event: Pick<KeyboardEvent, 'key' | 'defaultPrevented' | 
   close();
 }
 /** Runs the binding whose shortcut is pressed, unless something nearer already took the key: wherever the focus is, or only
- * while the keys are `within` one part of the page. `bindings` is made again when `deps` change, as with `useEffect`. */
-export function useShortcuts(bindings: () => Record<string, () => void>, deps: readonly unknown[], within?: Keys) {
+ * while the keys are `within` one of the parts of the page that are named. `bindings` is made again when `deps` change, as
+ * with `useEffect`. */
+export function useShortcuts(bindings: () => Record<string, () => void>, deps: readonly unknown[], ...within: Keys[]) {
   useEffect(() => {
     const now = bindings();
     const pressed = (event: KeyboardEvent) => {
-      const run = within === undefined || keysOf(event.target) === within ? bound(event, now) : undefined;
+      const run = !within.length || within.some(keys => keys === keysOf(event.target)) ? bound(event, now) : undefined;
       if (run) { event.preventDefault(); run(); }
     };
     addEventListener('keydown', pressed);

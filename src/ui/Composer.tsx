@@ -89,7 +89,8 @@ export function SendButton({ steer, ...props }: { steer: boolean; disabled: bool
 }
 /** Where you type. You can always type: while the agent runs, Enter steers it and ⌘Enter queues your message for when it has
  * stopped, and Esc stops it. The line under it says only what is news: how to steer a run, that Pi is starting, agents at
- * work. ↑ in an empty box brings back what you said last in the `chat`, and ↑ and ↓ go on through it (`recalled`). Beside the button that
+ * work. ↑ in an empty box brings back what you said last in the `chat`, and ↑ and ↓ go on through it (`recalled`), from the
+ * first and the last line of what is in the box. Beside the button that
  * sends is the model the agent runs on, which is picked there. The look is T3 Code's composer
  * (MIT, see THIRD_PARTY_NOTICES.md), over a plain textarea. */
 export function Composer({ state, window, live, chat, onSend }: { state: State; window: WindowState; live: Live; chat: readonly Item[]; onSend?: () => void }) {
@@ -136,7 +137,9 @@ export function Composer({ state, window, live, chat, onSend }: { state: State; 
               onKeyDown={event => {
                 if (event.shiftKey || event.altKey || event.nativeEvent.isComposing) return;
                 if (event.key === 'Enter') { event.preventDefault(); void send(event.metaKey || event.ctrlKey); }
-                const past = (event.key === 'ArrowUp' || event.key === 'ArrowDown') && !event.metaKey && !event.ctrlKey ? recalled(chat, text, event.key === 'ArrowUp') : undefined;
+                // ↑ on the first line and ↓ on the last go through what you said; on a line between, they move in the text.
+                const up = event.key === 'ArrowUp', { selectionStart, selectionEnd } = event.currentTarget, edge = !(up ? text.slice(0, selectionStart) : text.slice(selectionEnd)).includes('\n');
+                const past = (up || event.key === 'ArrowDown') && edge && !event.metaKey && !event.ctrlKey ? recalled(chat, text, up) : undefined;
                 if (past !== undefined) { event.preventDefault(); change(past); }
               }}
               className="field-sizing-content block max-h-52 min-h-[2lh] w-full resize-none overflow-y-auto bg-transparent text-foreground text-sm leading-relaxed placeholder:text-placeholder focus:outline-none"

@@ -296,7 +296,8 @@ export function worked({ from, to, stopped, steps }: Extract<Part, { type: 'repl
  * one after it, and an empty box after the newest. Only while the box is empty or holds one of them as it was sent, so the
  * key never takes what you are typing. A message sent twice is there once, where it was sent last. */
 export function recalled(chat: readonly Item[], text: string, back: boolean) {
-  const said = chat.flatMap(item => item.kind === 'user' ? item.text.replace(IMAGE, '').trim() || [] : []);
+  // A picture you sent is not text to send again: the log names it, and a message as Pi has it says only that there was one.
+  const said = chat.flatMap(item => item.kind === 'user' ? item.text.replace(/\[image(?: [0-9a-f]{16})?\]/g, '').trim() || [] : []);
   const past = [...new Set(said.reverse())], at = past.indexOf(text);
   if (text ? at < 0 : !back) return;
   return past[at + (back ? 1 : -1)] ?? (back ? undefined : '');

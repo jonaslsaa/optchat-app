@@ -21,7 +21,8 @@
     "screenshots": "node scripts/screenshots.ts",
     "build:desktop": "vite build && vite build -c vite.desktop.config.ts",
     "desktop": "npm run build:desktop && electron .",
-    "dist": "npm run build:desktop && electron-builder --mac --publish never"
+    "dist": "npm run build:desktop && electron-builder --mac --publish never",
+    "dmg:art": "sips -s format png -z 432 640 build/background.svg --out build/background.png && sips -s format png -z 864 1280 build/background.svg --out build/background@2x.png"
   },
   "dependencies": {
     "katex": "^0.19.1",

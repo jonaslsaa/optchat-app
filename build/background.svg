@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="864" viewBox="0 0 640 432">
+  <!-- The dmg's window: the picture behind the two icons, the app icon's rings (build/icon.svg) on cream.
+       `npm run dmg:art` cuts background.png and background@2x.png from it with sips, so it holds only what sips draws:
+       no filters, no tspans, Helvetica. The Finder puts the app at (166, 214) and the Applications folder at (474, 214),
+       120 px each (electron-builder.yml), and writes their names under them in black, whatever the picture and whether
+       the system is light or dark: that is why the picture is light. The window is 432 px high with its title bar, so
+       the picture's lowest 36 px or so are never seen, and nothing is drawn there. -->
+  <rect width="640" height="432" fill="#fbf4e6"/>
+  <!-- The icon's rings, going on past it. -->
+  <circle cx="238.5" cy="159" r="690" fill="#faf1e0"/>
+  <circle cx="224.3" cy="169.9" r="575" fill="#f9eeda"/>
+  <circle cx="211.2" cy="179.8" r="470" fill="#f8ead2"/>
+  <circle cx="199.5" cy="188.9" r="375" fill="#f7e6c9"/>
+  <circle cx="188.9" cy="196.9" r="290" fill="#f5e1bf"/>
+  <circle cx="179.6" cy="204.1" r="215" fill="#f4dcb4"/>
+  <circle cx="171.6" cy="210.2" r="150" fill="#f2d6a8"/>
+  <circle cx="164.9" cy="215.4" r="96" fill="#f0d09b"/>
+  <text x="58.5" y="41" fill="#3a1806" font-family="Helvetica" font-size="15" font-weight="700" text-anchor="end">Opt</text>
+  <text x="59" y="41" fill="#3a1806" font-family="Helvetica" font-size="15">Chat</text>
+  <text x="320" y="104" fill="#2a1206" font-family="Helvetica" font-size="23" font-weight="700" text-anchor="middle">Drag OptChat into Applications.</text>
+  <path d="M262 207Q320 181 378 207M365.5 193.5L378 207L359.5 211.5" stroke="#a2470d" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="320" y="352" fill="#8a6b52" font-family="Helvetica" font-size="12" text-anchor="middle">Then open it from Applications.</text>
+</svg>

@@ -9,5 +9,6 @@ test('a profile\'s badge comes from its name alone: two letters, and a colour th
   // The same name has the same colour whatever its case and the space around it, and names are spread over the colours.
   assert.equal(badge('Work').colour, badge(' work').colour);
   const colours = new Set(['personal', 'work', 'kahoot', 'home', 'research', 'side', 'optchat', 'notes', 'ops', 'writing', 'travel', 'money'].map(name => badge(name).colour));
-  assert.ok(colours.size >= 8, `twelve names have ${colours.size} of the eighteen colours between them`);
+  assert.ok(colours.size >= 8, `twelve names have ${colours.size} of the seventeen colours between them`);
+  assert.notEqual(badge('work').colour, badge('notes').colour);
 });

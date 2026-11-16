@@ -1,7 +1,7 @@
 import { CircleAlertIcon, CornerUpRightIcon, ListPlusIcon } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import type { PiRecord, WindowState } from '../protocol.ts';
-import { label, useShortcuts } from './keys.ts';
+import { escapes, label, useShortcuts } from './keys.ts';
 import { Model } from './Model.tsx';
 import { app, type State } from './store.ts';
 import { failure, news, type Live } from './transcript.ts';
@@ -10,13 +10,15 @@ import { Button, cn, Kbd, Spinner } from './ui.tsx';
 /** What you were typing in each window, kept while you look at another. */
 const drafts = new Map<string, string>();
 
-/** A question from Pi or one of its extensions (`extension_ui_request`): a choice, a yes or no, or a line of text. */
+/** A question from Pi or one of its extensions (`extension_ui_request`): a choice, a yes or no, or a line of text. Esc in it
+ * says no, or cancels, as its first button does and as Esc does in Pi's terminal; the run it belongs to goes on. */
 function Dialog({ window, dialog }: { window: string; dialog: PiRecord }) {
   const id = String(dialog.id), options = Array.isArray(dialog.options) ? dialog.options.filter(option => typeof option === 'string') : [];
   const [value, setValue] = useState(typeof dialog.prefill === 'string' ? dialog.prefill : '');
   const answer = (response: { value?: string; confirmed?: boolean; cancelled?: boolean }) => void app.answer(window, { id, ...response });
+  const cancel = () => answer(dialog.method === 'confirm' ? { confirmed: false } : { cancelled: true });
   return (
-    <div role="dialog" aria-label={String(dialog.title ?? 'Question')} className="rounded-2xl border border-warning/32 bg-warning-surface px-3.5 py-3 text-sm">
+    <div role="dialog" aria-label={String(dialog.title ?? 'Question')} onKeyDown={event => escapes(event, cancel)} className="rounded-2xl border border-warning/32 bg-warning-surface px-3.5 py-3 text-sm">
       <p className="font-medium">{String(dialog.title ?? 'Pi asks')}</p>
       {typeof dialog.message === 'string' && <p className="mt-0.5 text-muted-foreground">{dialog.message}</p>}
       {dialog.method === 'editor' && (
@@ -28,7 +30,7 @@ function Dialog({ window, dialog }: { window: string; dialog: PiRecord }) {
           onKeyDown={event => { if (event.key === 'Enter' && !event.nativeEvent.isComposing) answer({ value }); }} className="mt-2 h-8 w-full rounded-md border border-input bg-background px-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring" />
       )}
       <div className="mt-2.5 flex flex-wrap justify-end gap-2">
-        <Button variant="ghost-muted" onClick={() => answer(dialog.method === 'confirm' ? { confirmed: false } : { cancelled: true })}>{dialog.method === 'confirm' ? 'No' : 'Cancel'}</Button>
+        <Button variant="ghost-muted" onClick={cancel}>{dialog.method === 'confirm' ? 'No' : 'Cancel'}</Button>
         {dialog.method === 'confirm' && <Button size="sm" autoFocus onClick={() => answer({ confirmed: true })}>Yes</Button>}
         {dialog.method === 'select' && options.map((option, index) => <Button key={option} variant="outline" size="sm" autoFocus={index === 0} onClick={() => answer({ value: option })}>{option}</Button>)}
         {(dialog.method === 'input' || dialog.method === 'editor') && <Button size="sm" onClick={() => answer({ value })}>Send</Button>}

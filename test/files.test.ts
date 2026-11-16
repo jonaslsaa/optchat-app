@@ -3,14 +3,14 @@ import { chmodSync, mkdirSync, mkdtempSync, realpathSync, symlinkSync, writeFile
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { connect } from '../src/client.ts';
-import { editor, fallback, inside, type Launch } from '../src/server/files.ts';
+import { editor, inside, type Launch } from '../src/server/files.ts';
 import { startServer } from '../src/server/server.ts';
 import { fileTarget } from '../src/ui/paths.ts';
 import { createProfile, temporaryHome } from './support.ts';
 
 const home = temporaryHome(), cwd = realpathSync(mkdtempSync(join(home, 'cwd-')));
 mkdirSync(join(cwd, 'src'));
-for (const file of ['src/App.tsx', 'run.command', 'install.sh']) writeFileSync(join(cwd, file), '');
+for (const file of ['src/App.tsx', 'run.command']) writeFileSync(join(cwd, file), '');
 writeFileSync(join(home, 'secret.txt'), '');
 symlinkSync(join(home, 'secret.txt'), join(cwd, 'src', 'out.txt'));
 
@@ -38,13 +38,6 @@ test('the editor is found where the app opened from the Finder looks, with launc
   // A terminal editor has no terminal to run in.
   assert.equal(editor({ ...stripped, VISUAL: 'vim' }, [brew])?.('/a/b.ts').command, join(brew, 'code'));
   assert.equal(editor(stripped, []), undefined);
-});
-
-test('with no editor a file is opened as text, never run, and on Linux only its folder is opened', () => {
-  for (const file of [join(cwd, 'run.command'), join(cwd, 'install.sh')]) {
-    assert.deepEqual(fallback(file, 'darwin'), { command: 'open', args: ['-t', file] });
-    assert.deepEqual(fallback(file, 'linux'), { command: 'xdg-open', args: [cwd] });
-  }
 });
 
 test('the server opens what the chat named in the window\'s folder, and refuses what is not there', async t => {

@@ -168,8 +168,8 @@ The page is sent with `X-Frame-Options: DENY` and a `Content-Security-Policy` th
 A path in a reply (`src/ui/App.tsx:42`) is a link once the server says it is a file (`isFile`), and a click opens it in your editor (`openFile`). The path is the model's, so the server takes it as a name and nothing more (`src/server/files.ts`):
 
 - **Only a file under the window's folder.** It is resolved against the window's `cwd` with its links followed, and has to stay under that folder (followed too) and be a regular file: no `..`, no absolute path elsewhere, no link out, no folder. `openFile` checks it all again.
-- **Your editor**, the one `$VISUAL` or `$EDITOR` names when it is one that has a window of its own (`code`, `code-insiders`, `cursor`, `codium`, `windsurf` with `-g file:line`, `zed` and `subl` with `file:line`), else VS Code's `code` if it is there; looked for on the PATH and in `/opt/homebrew/bin` and `/usr/local/bin`, where an app opened from the Finder whose shell did not answer still finds it ([desktop.md](desktop.md)). A terminal editor is passed over. No setting.
-- **Never run.** The editor gets the whole path as one argument, with no shell. With no editor, macOS opens the file as text (`open -t`) and Linux opens its folder (`xdg-open`): `open` and `xdg-open` on the file itself would run a `.command`, a script or an app.
+- **Your editor**, the one `$VISUAL` or `$EDITOR` names when it is one that has a window of its own (`code` and `cursor` with `-g file:line`, `zed` with `file:line`), else VS Code's `code` if it is there; looked for on the PATH and in `/opt/homebrew/bin` and `/usr/local/bin`, where an app opened from the Finder whose shell did not answer still finds it ([desktop.md](desktop.md)). A terminal editor is passed over. No setting.
+- **Never run.** The editor gets the whole path as one argument, with no shell. With no editor, the Mac opens the file as text (`open -t`): `open` on the file itself would run a `.command`, a script or an app.
 - **Only where it is told to.** `startServer` opens nothing unless it is given a `launcher`; the app, `npm start` and `npm run dev` give it, no test does.
 
 ## From T3 Code

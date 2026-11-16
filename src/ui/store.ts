@@ -457,7 +457,8 @@ export class App {
   isFile(window: string, path: string) {
     const key = `${window}\n${path}`;
     let file = this.files.get(key);
-    if (!file) this.files.set(key, file = Promise.resolve().then(() => this.request('isFile', { window, path })).then(({ file }) => file, () => false));
+    // A request that failed (the server was away) is asked again the next time, not remembered as no file.
+    if (!file) this.files.set(key, file = Promise.resolve().then(() => this.request('isFile', { window, path })).then(({ file }) => file, () => { this.files.delete(key); return false; }));
     return file;
   }
   async openFile(window: string, path: string, line?: number) { await this.ask('openFile', { window, path, line }); }

@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process';
 import { accessSync, constants, realpathSync, statSync } from 'node:fs';
-import { basename, delimiter, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
+import { basename, delimiter, isAbsolute, join, relative, resolve, sep } from 'node:path';
 
 /** A file the agent named, opened in your editor. The name is the model's, so it is only ever a file that is there, under the
  * folder the window runs in: resolved with its links followed, and not a folder or anything else. Nothing of it is run: the
@@ -13,10 +13,7 @@ export function inside(cwd: string, path: string): string | undefined {
 }
 
 /** How each editor is told the line: `code -g file:42`, or `zed file:42`. */
-const EDITORS: Record<string, (file: string) => string[]> = {
-  code: file => ['-g', file], 'code-insiders': file => ['-g', file], cursor: file => ['-g', file], codium: file => ['-g', file], windsurf: file => ['-g', file],
-  zed: file => [file], subl: file => [file],
-};
+const EDITORS: Record<string, (file: string) => string[]> = { code: file => ['-g', file], cursor: file => ['-g', file], zed: file => [file] };
 // The app opened from the Finder has your shell's PATH (`src/desktop/environment.ts`) unless your shell did not answer; then
 // these are where Homebrew puts an editor's command.
 const BREW = ['/opt/homebrew/bin', '/usr/local/bin'];
@@ -32,9 +29,9 @@ export function editor(env: NodeJS.ProcessEnv = process.env, extra = BREW) {
     if (at) return (file: string, line?: number): Launch => ({ command: at, args: EDITORS[name](line ? `${file}:${line}` : file) });
   }
 }
-/** With no editor, the file opens in what the system has for text (`open -t`), and on Linux its folder does: `open` and
- * `xdg-open` on the file itself would run a script or an app that has a handler for it. */
-export const fallback = (file: string, platform = process.platform): Launch => platform === 'darwin' ? { command: 'open', args: ['-t', file] } : { command: 'xdg-open', args: [dirname(file)] };
+/** With no editor, the file opens in what the Mac has for text (`open -t`): `open` on the file itself would run a script or an
+ * app that has a handler for it. */
+export const fallback = (file: string): Launch => ({ command: 'open', args: ['-t', file] });
 
 /** Starts it on its own: the server neither waits for it nor keeps it. */
 export function launch({ command, args }: Launch) {

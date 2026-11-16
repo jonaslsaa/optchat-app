@@ -57,3 +57,34 @@ export function chart({ bars, step }: Pick<Usage, 'bars' | 'step'>, locale?: str
     })),
   };
 }
+
+const MINUTE = 60_000, HOUR = 60 * MINUTE, DAY = 24 * HOUR;
+/** What a window of a subscription is called. */
+const WINDOWS = { '5h': '5-hour limit', '7d': 'Weekly limit' } as const satisfies Record<NonNullable<Usage['limits']>['limits'][number]['window'], string>;
+/** How long ago: "just now", "3 min ago", "2 h ago", "4 days ago". */
+export function ago(ms: number) {
+  const [count, unit] = ms < MINUTE ? [0, ''] : ms < HOUR ? [ms / MINUTE, 'min'] : ms < DAY ? [ms / HOUR, 'h'] : [ms / DAY, ms < 2 * DAY ? 'day' : 'days'];
+  return unit ? `${Math.floor(count)} ${unit} ago` : 'just now';
+}
+/** A subscription's limits in words, at `now`: a row for each window, how old the count is, and what has to be said plainly.
+ * A window that has reset since it was counted has no figure: its count began again and nothing has said how far it is.
+ * The notes: that requests go through as extra usage, that a limit is reached, and that a request was refused (the windows
+ * are then from before it, so the fullest one is named with what it was at). */
+export function limits({ at: counted, limits, overage, refused }: NonNullable<Usage['limits']>, now: number, locale?: string, timeZone?: string) {
+  const time = (date: string) => new Date(date).toLocaleString(locale, { hour: '2-digit', minute: '2-digit', timeZone });
+  const day = (date: string) => new Date(date).toLocaleDateString(locale, { day: 'numeric', month: 'short', timeZone });
+  // The time alone for today, and the day with it for another day.
+  const at = (date: string) => day(date) === day(new Date(now).toISOString()) ? time(date) : `${day(date)}, ${time(date)}`;
+  const rows = limits.map(limit => {
+    const name = WINDOWS[limit.window], percent = Math.round(100 * limit.used), reset = Date.parse(limit.resets) <= now;
+    return { ...limit, name, reset, percent: reset ? undefined : percent, text: reset ? `Reset ${at(limit.resets)}, not counted since` : `${percent}% used · resets ${at(limit.resets)}` };
+  });
+  // What was said of a window is over once it has begun again, and a refusal is the fullest window's.
+  const reached = rows.filter(row => row.reached && !row.reset), fullest = rows.toSorted((a, b) => b.used - a.used).at(0);
+  const notes = [
+    ...refused && fullest && !fullest.reset ? [`Limit reached: a request was refused at ${at(refused)}. The ${fullest.name} was at ${Math.round(100 * fullest.used)}% and resets ${at(fullest.resets)}.`] : [],
+    ...reached.map(row => overage ? `Past the ${row.name}: running on extra usage until it resets ${at(row.resets)}.` : `The ${row.name} is reached: it resets ${at(row.resets)}.`),
+    ...overage && !reached.length && rows.every(row => !row.reset) ? ['Running on extra usage.'] : [],
+  ];
+  return { rows, notes, age: `As of ${ago(now - Date.parse(counted))}` };
+}

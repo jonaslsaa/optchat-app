@@ -8,7 +8,7 @@ import { connect } from '../src/client.ts';
 import { startServer } from '../src/server/server.ts';
 import { usage } from '../src/server/usage.ts';
 import { App } from '../src/ui/store.ts';
-import { breakdown, chart, headline, short } from '../src/ui/usage.ts';
+import { ago, breakdown, chart, headline, limits, short } from '../src/ui/usage.ts';
 import { createProfile, temporaryHome } from './support.ts';
 
 const home = temporaryHome(), NOW = Date.UTC(2026, 10, 16, 12);
@@ -92,4 +92,38 @@ test('the server reads a profile\'s ledger without writing to it, and the page k
   await app.start(server.url);
   await app.readUsage('work', 'All time');
   assert.equal(headline(app.state.usage.work), terminal['All time'].said);
+});
+
+test('a subscription\'s limits are shown as pi-optchat saved them: how full, when they reset, how old, and what has to be said', async t => {
+  // What pi-optchat saved from a real answer of Anthropic's: past the five hours, and let through as extra usage.
+  const saved = { at: '2026-11-16T13:12:51.000Z', overage: true, limits: [
+    { window: '5h' as const, used: 1.01, resets: '2026-11-16T16:30:00.000Z', reached: true },
+    { window: '7d' as const, used: 0.4, resets: '2026-11-20T04:00:00.000Z', reached: false },
+  ] };
+  const at = (time: string) => Date.parse(`2026-11-${time}:00.000Z`), words = (snapshot: typeof saved & { refused?: string }, now: number) => limits(snapshot, now, 'en-GB', 'UTC');
+  const limited = createProfile(home, 'limited'), server = await startServer({ home, cwd: home, now: () => NOW }), client = await connect(server.url);
+  t.after(async () => { client.close(); await server.close(); });
+  assert.equal((await client.request('usage', { profile: 'limited' })).limits, undefined, 'none saved yet');
+  writeFileSync(join(limited, 'limits.json'), JSON.stringify(saved));
+  assert.deepEqual((await client.request('usage', { profile: 'limited', range: 'All time' })).limits, saved, 'whatever the range');
+  writeFileSync(join(limited, 'limits.json'), '{"at":"2026');
+  assert.equal((await client.request('usage', { profile: 'limited' })).limits, undefined, 'a file that is not one is none, not an error');
+
+  assert.deepEqual(words(saved, at('16T13:16')), { age: 'As of 3 min ago', notes: ['Past the 5-hour limit: running on extra usage until it resets 16:30.'], rows: [
+    { ...saved.limits[0], name: '5-hour limit', reset: false, percent: 101, text: '101% used · resets 16:30' },
+    { ...saved.limits[1], name: 'Weekly limit', reset: false, percent: 40, text: '40% used · resets 20 Nov, 04:00' },
+  ] });
+  // Without extra usage a reached limit refuses requests, and says nothing more with that: the count is from before it.
+  const near = { ...saved, overage: false, limits: [{ ...saved.limits[0], used: 0.98, reached: false }, saved.limits[1]] };
+  assert.deepEqual(words({ ...near, limits: [saved.limits[0], saved.limits[1]] }, at('16T13:16')).notes, ['The 5-hour limit is reached: it resets 16:30.']);
+  assert.deepEqual(words({ ...near, refused: '2026-11-16T13:20:00.000Z' }, at('16T13:21')).notes, ['Limit reached: a request was refused at 13:20. The 5-hour limit was at 98% and resets 16:30.']);
+  assert.deepEqual(words(near, at('16T13:21')).notes, []);
+  // Once a window has begun again its count is gone, and so is what was said of it.
+  const later = words({ ...saved, refused: '2026-11-16T13:20:00.000Z' }, at('16T17:00'));
+  assert.deepEqual([later.age, later.notes, later.rows.map(row => [row.percent, row.text])],
+    ['As of 3 h ago', [], [[undefined, 'Reset 16:30, not counted since'], [40, '40% used · resets 20 Nov, 04:00']]]);
+  assert.deepEqual(words({ ...saved, limits: [{ ...saved.limits[0], reached: false }, saved.limits[1]] }, at('16T13:16')).notes, ['Running on extra usage.']);
+  const gone = words({ ...saved, refused: '2026-11-16T13:20:00.000Z' }, at('21T09:00'));
+  assert.deepEqual([gone.age, gone.notes, gone.rows.map(row => row.text)], ['As of 4 days ago', [], ['Reset 16 Nov, 16:30, not counted since', 'Reset 20 Nov, 04:00, not counted since']]);
+  assert.deepEqual([0, 59_000, 60_000, 3_599_000, 3_600_000, 86_400_000, 172_800_000].map(ago), ['just now', 'just now', '1 min ago', '59 min ago', '1 h ago', '1 day ago', '2 days ago']);
 });

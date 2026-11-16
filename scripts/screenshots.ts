@@ -7,7 +7,7 @@ import { startServer } from '../src/server/server.ts';
 // pi-optchat's own lock, which only Pi takes: here it stands for a Pi in a terminal.
 import { describeOwner, lockProfile } from 'pi-optchat/files';
 import { createProfile } from '../test/support.ts';
-import { agents, CHANGES, demo, FORMULAS, remember, seed, SHIPPED, SHIPPING, spend, TEAM } from './seed.ts';
+import { agents, CHANGES, demo, FORMULAS, limited, remember, seed, SHIPPED, SHIPPING, spend, TEAM } from './seed.ts';
 
 /** `npm run screenshots [directory] [--dark]`: a PNG of every main state of the UI, in /tmp/optchat-app-shots unless a directory
  * is named, and all of them in dark mode with `--dark`. It builds the UI, serves it against throwaway profiles under /tmp with
@@ -55,6 +55,12 @@ seed(ship, SHIPPING.length, NOW, SHIPPING);
 agents(ship, NOW + 42_000);
 seed(createProfile(home, 'links'), SHIPPING.length, NOW, SHIPPING);
 seed(createProfile(home, 'formulas'), 1, NOW, FORMULAS);
+// The subscription's limits as they were with the latest answer: well within them, past the five hours and on extra usage,
+// a request refused a moment ago, and a count from before the five hours began again. `empty` has none.
+limited(long, NOW, { five: 0.62, week: 0.18 });
+limited(join(home, 'profiles', 'notes'), NOW, { five: 1.01, week: 0.4, overage: true });
+limited(join(home, 'profiles', 'work'), NOW, { five: 0.98, week: 0.71, ago: 4 * 60_000, refused: 60_000 });
+limited(join(home, 'profiles', 'links'), NOW, { five: 0.35, week: 0.52, ago: 6 * 3600_000 });
 const gh = { command: process.execPath, args: [join(import.meta.dirname, '../test/fake-gh.ts')] }, github = (state: object) => writeFileSync(join(home, 'gh', 'gh.json'), JSON.stringify(state));
 process.env.FAKE_GH_HOME = join(home, 'gh');
 mkdirSync(join(home, 'gh'));
@@ -352,8 +358,8 @@ async function pictures(browser: Browser, control: Client) {
   await slender.getByRole('heading', { name: 'Profile: notes' }).scrollIntoViewIfNeeded();
   await shot(slender, '43-settings-profile-narrow');
 
-  // What a profile used: today's, the week's (light, dark, narrow), a profile that has used nothing, and a ledger with a
-  // line that cannot be read.
+  // What a profile used, under its subscription's limits: today's, the week's (light, dark, narrow), a profile that has used
+  // nothing and has no limits saved, and a ledger with a line that cannot be read.
   const usage = async (profile: string, options?: Parameters<typeof open>[1], range?: string) => {
     const page = await open([profile], options);
     await page.getByRole('button', { name: 'Usage' }).click();
@@ -361,12 +367,16 @@ async function pictures(browser: Browser, control: Client) {
     await page.getByText(range ? 'Cost over time' : 'Estimated at API prices').waitFor();
     return page;
   };
-  await shot(await usage('long', { height: 1000 }), '73-usage-today');
-  await shot(await usage('long', { height: 1000 }, 'Last 7 days'), '74-usage-week');
-  await shot(await usage('long', { dark: true, height: 1000 }, 'Last 7 days'), '75-usage-week-dark');
-  await shot(await usage('long', { width: 420, height: 1100 }, 'Last 7 days'), '76-usage-week-narrow');
+  await shot(await usage('long', { height: 1200 }), '73-usage-today');
+  await shot(await usage('long', { height: 1200 }, 'Last 7 days'), '74-usage-week');
+  await shot(await usage('long', { dark: true, height: 1200 }, 'Last 7 days'), '75-usage-week-dark');
+  await shot(await usage('long', { width: 420, height: 1300 }, 'Last 7 days'), '76-usage-week-narrow');
   await shot(await usage('empty'), '77-usage-none');
-  await shot(await usage('notes', { height: 1150 }, 'All time'), '78-usage-unreadable-line');
+  // Past a limit and on extra usage, which has to be said plainly (and with a ledger line that cannot be read).
+  await shot(await usage('notes', { height: 1400 }, 'All time'), '78-usage-unreadable-line');
+  await shot(await usage('notes', { dark: true, width: 420, height: 700 }), '79-usage-extra-dark-narrow');
+  await shot(await usage('work', { height: 700 }), '80-usage-refused');
+  await shot(await usage('links', { height: 700 }), '81-usage-limits-old');
 
   // Talking to an agent, under its chat. A message is worth a Pi: the app's own is started on the chat for the first one, and
   // its agents are at work with it. One at work keeps the message until it reads it.

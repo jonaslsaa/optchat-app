@@ -1,4 +1,4 @@
-import { cacheShare, readUsage, selectUsage, summarizeUsage, USAGE_RANGES, type UsageEntry, type UsageTotals } from 'pi-optchat/files';
+import { cacheShare, readLimits, readUsage, selectUsage, summarizeUsage, USAGE_RANGES, type UsageEntry, type UsageTotals } from 'pi-optchat/files';
 import type { Result, Usage } from '../protocol.ts';
 
 /** What a profile used, from pi-optchat's usage ledger (`usage.jsonl` in the profile's folder, which the Pi that has the profile
@@ -47,5 +47,7 @@ export function usage(directory: string, name = 'Today', now = Date.now()): Resu
   const roles = [...new Set(groups.map(group => group.role))].map(role => ({
     role, ...used(summarizeUsage(chosen.filter(entry => entry.role === role)).total), models: groups.filter(group => group.role === role).map(({ model, usage }) => ({ model, ...used(usage) })),
   }));
-  return { ranges: RANGES, range, ...used(total), roles, ...bars(chosen, now), warnings };
+  // The subscription's limits as pi-optchat last saved them, if it has: how old they are is the page's to say.
+  const limits = readLimits(directory);
+  return { ranges: RANGES, range, ...used(total), roles, ...bars(chosen, now), warnings, ...limits && { limits } };
 }

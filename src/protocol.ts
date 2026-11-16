@@ -150,13 +150,24 @@ const used = {
  * `/optchat usage` shows in a terminal): all of it (`usage`, `cached`), and the same for each role that used something
  * and for each of a role's models. `ranges` are those there are to ask for. `bars` are the spending over time, oldest first,
  * from the first of it to now: each begins at `start` and lasts a `step` (five `minutes`, an `hour`, a `day` or a `month`,
- * by how long ago the first was), with its cost by role. `warnings` are pi-optchat's, about lines of the ledger it could not read. */
+ * by how long ago the first was), with its cost by role. `warnings` are pi-optchat's, about lines of the ledger it could not read.
+ * `limits` are the subscription's, whatever the range, where pi-optchat has saved them. */
+/** How much of a subscription's limits is used, as its provider said with its latest answer to the profile (pi-optchat's
+ * `Limits`, which only Anthropic gives): when that was (`at`), each window it counts in (five hours, seven days) with the
+ * share `used` (1 is all of it), when it `resets` and whether it is `reached`; whether requests past a reached limit go
+ * through as extra usage (`overage`); and when a request was last `refused` for a rate limit since. Dates are ISO. */
+export const Limits = Type.Object({
+  at: Type.String(), overage: Type.Boolean(), refused: Type.Optional(Type.String()),
+  limits: Type.Array(Type.Object({ window: Type.Enum(['5h', '7d']), used: amount, resets: Type.String(), reached: Type.Boolean() })),
+});
+export type Limits = Static<typeof Limits>;
 export const Usage = Type.Object({
   ranges: Type.Array(Type.String()), range: Type.String(), ...used,
   roles: Type.Array(Type.Object({ role: Type.Enum(['main', 'subagent', 'compactor', 'import']), ...used, models: Type.Array(Type.Object({ model: Type.String(), ...used })) })),
   step: Type.Enum(['minutes', 'hour', 'day', 'month']),
   bars: Type.Array(Type.Object({ start: Type.String(), tokens: amount, cost: Type.Object({ main: amount, subagent: amount, compactor: amount, import: amount }) })),
   warnings: Type.Array(Type.String()),
+  limits: Type.Optional(Limits),
 });
 export type Usage = Static<typeof Usage>;
 

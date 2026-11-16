@@ -26,9 +26,14 @@ if (!app.requestSingleInstanceLock()) app.quit();
 else {
   // Opened from the Finder, the app has launchd's environment. Run from a terminal it has yours already, and what you typed stays.
   if (app.isPackaged) Object.assign(process.env, await loginEnvironment());
-  const options = { ui: join(import.meta.dirname, '../ui'), cwd: homedir(), opener: terminal(), launcher: launch };
-  const server = await startServer({ ...options, port: PORT }).catch(() => startServer(options));
   let updates: ReturnType<typeof updater> | undefined;
+  /** Looks for an update because you asked, and answers whatever it finds: an update is said as at any other look. */
+  let check: (() => void) | undefined;
+  // A click on the page's update button: the page of an update this copy cannot install, and else what the menu's Check for
+  // Updates… does, which for an update that is ready is the question whether to restart.
+  const update = () => { const now = updates?.state(); if (now?.state === 'manual') browse(now.page); else check?.(); };
+  const options = { ui: join(import.meta.dirname, '../ui'), cwd: homedir(), opener: terminal(), launcher: launch, update };
+  const server = await startServer({ ...options, port: PORT }).catch(() => startServer(options));
   // The Mac does not fall asleep under agents at work (awake.ts): looked at every ten seconds, which is soon enough for a
   // Mac that takes minutes to sleep. The screen may still go dark.
   const look = awake({
@@ -110,15 +115,16 @@ else {
     // The window closed, the app is still in the Dock, and a click on it there opens the window again.
     app.on('activate', () => { if (!current() && !leaving) open(); });
     app.on('second-instance', front);
-    /** Looks for an update because you asked, and answers whatever it finds: an update is said as at any other look. */
-    let check: (() => void) | undefined;
     // The packaged app updates itself (update.ts): it looks soon after it opens and every four hours, downloads a newer
-    // release without a word, and asks once. It never restarts on its own: a restart stops every Pi, as quitting does.
-    if (app.isPackaged) {
+    // release, and asks once. It never restarts on its own: a restart stops every Pi, as quitting does. What it is doing
+    // is said to the server, whose pages show it in their update button. The app is three folders above what runs:
+    // OptChat.app/Contents/MacOS/OptChat. Run from the checkout there is no app to replace and no updater, unless a test
+    // names an app of its own to stand for it (`OPTCHAT_APP_BUNDLE`, with the feed in `OPTCHAT_APP_UPDATES`).
+    const bundle = app.isPackaged ? resolve(process.execPath, '../../..') : process.env.OPTCHAT_APP_BUNDLE;
+    if (bundle) {
       const offer = (message: string, detail: string, yes: string) => ask({ type: 'info', message, detail, buttons: [yes, 'Later'], defaultId: 0, cancelId: 1 });
       updates = updater({
-        // The app is three folders above what runs: OptChat.app/Contents/MacOS/OptChat.
-        bundle: resolve(process.execPath, '../../..'), version: app.getVersion(), feed: process.env.OPTCHAT_APP_UPDATES, failed: join(app.getPath('userData'), 'update-failed'),
+        bundle, version: app.getVersion(), feed: process.env.OPTCHAT_APP_UPDATES, failed: join(app.getPath('userData'), 'update-failed'), changed: state => server.updating(state),
         async ready({ version }) {
           const working = await server.working().catch(() => 0), now = working ? `${count(working)} working now. ` : '';
           // Electron starts the app again once this one is gone, by its path: by then the new app is there. The quit is not
@@ -129,7 +135,8 @@ else {
           if (await offer(`OptChat ${version} is out`, 'This copy of OptChat cannot replace itself where it is. Download the new one and put it in its place.', 'Download')) browse(page);
         },
       });
-      // A look that fails (no network, a download cut off) says nothing, and the next one tries again.
+      server.updating(updates.state());
+      // A look that fails (no network, a download cut off) asks nothing: the update button says why, and the next one tries again.
       const look = () => void updates?.look().catch(() => {});
       setTimeout(look, 10_000);
       setInterval(look, 4 * 3_600_000);
@@ -138,7 +145,7 @@ else {
         // Not "the newest": a newer release whose app is not there for this Mac yet is no update either.
         if (found === 'none') say(`There is no update for OptChat ${app.getVersion()}`);
         if (found === 'busy') say('OptChat is looking for an update already', 'If there is one it is downloaded now, and you are asked when it is ready.');
-      }, (error: unknown) => say('OptChat could not look for an update', error instanceof Error ? error.message : String(error)));
+      }, () => { const now = updates?.state(); say('OptChat could not look for an update', now?.state === 'failed' ? now.error : undefined); });
     }
     // The menu bar, in place of Electron's own, which names the app by its package (menu.ts).
     Menu.setApplicationMenu(Menu.buildFromTemplate(appMenu({ page: tell, keys: () => current()?.webContents.isFocused() ?? false, update: check, browse })));

@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from 'react';
 import { connect, type Client } from '../client.ts';
-import type { Command, Config, Line, Message, Method, ModelChoice, Params, Push, Result, Settings, Setup, Usage, WindowState } from '../protocol.ts';
+import type { Command, Config, Line, Message, Method, ModelChoice, Params, Push, Result, Settings, Setup, Updating, Usage, WindowState } from '../protocol.ts';
 import { current } from '../window.ts';
 import type { Image } from './images.ts';
 import { calling, key, NO_TREE, path, read, toggled, type Tree } from './memory.ts';
@@ -47,6 +47,8 @@ export interface State {
   /** The app's settings, and what a chat needs with whether it is there, once the server has said. */
   settings?: Settings;
   setup?: Setup;
+  /** What the desktop app's updater is doing, where the app updates itself: the update button shows it. */
+  update?: Updating;
   /** The provider you are signing in to in a terminal, while the page waits for Pi to say it is done. */
   signingIn?: Provider;
 }
@@ -144,6 +146,7 @@ export class App {
     this.set({ connection: 'open', profiles: names, tabs, profile, selected, windows: ordered(windows.windows), live: kept(this.state.live), sessions: kept(this.state.sessions), attached: typed(this.state.attached), error: undefined });
     // Neither is waited for: looking for Pi takes a moment, and the chat does not need it to show.
     void this.ask('settings', {}).then(settings => settings && this.set({ settings }));
+    void this.ask('update', {}).then(said => said && this.set({ update: said.update }));
     void this.checkSetup();
     await Promise.all([...tabs.map(tab => this.opened(tab)), ...windows.windows.map(async window => { await this.replayed(window.id); await this.session(window.id); })]);
   }
@@ -168,6 +171,8 @@ export class App {
     const page = await this.ask('history', { profile, limit: PAGE, ...before !== undefined && { before } });
     if (page) this.set({ logs: { ...this.state.logs, [profile]: { ...this.state.logs[profile], total: page.total, entries: merged(this.state.logs[profile]?.entries ?? [], page.messages) } } });
   }
+  /** A click on the update button: the app looks for an update, or offers the one it has, and says so itself. */
+  update() { return this.ask('updateNow', {}); }
   /** Changes the settings it names; every page gets them all as the server kept them. */
   saveSettings(change: Params<'setSettings'>) { return this.ask('setSettings', change); }
   /** A profile's settings and instructions as its files have them now. */
@@ -277,6 +282,7 @@ export class App {
   receive(push: Push) {
     if (push.push === 'settings') { this.set({ settings: push.settings }); return; }
     if (push.push === 'setup') { this.set({ setup: push.setup }); return; }
+    if (push.push === 'update') { this.set({ update: push.update }); return; }
     if (push.push === 'window') {
       const { window } = push, was = this.window(window.id), outside = was?.outside, live = this.state.live[window.id];
       this.put(window);

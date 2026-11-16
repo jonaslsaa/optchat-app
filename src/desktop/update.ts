@@ -6,6 +6,7 @@ import { pipeline } from 'node:stream/promises';
 import { promisify } from 'node:util';
 import { Type, type Static } from 'typebox';
 import { Value } from 'typebox/value';
+import type { Updating } from '../protocol.ts';
 
 /** How the app updates itself (docs/desktop.md). Electron's own updater and electron-updater both hand the new app to
  * Squirrel.Mac, which takes it only if it meets the running app's designated requirement. Signed ad hoc, that requirement is
@@ -72,8 +73,8 @@ export class Unusable extends Error {}
  * says the file is the one the release names, and an ad hoc signature (`codesign --verify`) that the app is as it was signed.
  * What is trusted is GitHub and the release (docs/desktop.md). Node downloads it, so macOS does not mark it as downloaded, and
  * it opens without "Open Anyway". Gives the app's path; a failure leaves nothing behind, and is `Unusable` when the file was
- * the release's. */
-export async function stage(update: Update, bundle: string): Promise<string> {
+ * the release's. `downloaded` is told how many bytes it has, as they come. */
+export async function stage(update: Update, bundle: string, downloaded: (bytes: number) => void = () => {}): Promise<string> {
   const folder = beside(bundle), zip = join(folder, 'update.zip');
   await tidy(bundle);
   mkdirSync(folder);
@@ -83,7 +84,7 @@ export async function stage(update: Update, bundle: string): Promise<string> {
     if (!response.ok || !response.body) throw new Error(`The download answered ${response.status}.`);
     const hash = createHash('sha256'), { body } = response;
     let size = 0;
-    await pipeline(async function* () { for await (const chunk of body) { hash.update(chunk); size += chunk.byteLength; yield chunk; } }, createWriteStream(zip));
+    await pipeline(async function* () { for await (const chunk of body) { hash.update(chunk); downloaded(size += chunk.byteLength); yield chunk; } }, createWriteStream(zip));
     if (size !== update.size || hash.digest('hex') !== update.sha256) throw new Error(`The download is not the release's file (${size} of ${update.size} bytes).`);
     try {
       await run('/usr/bin/ditto', ['-x', '-k', zip, folder]);
@@ -115,38 +116,54 @@ export interface UpdaterOptions {
   ready(update: Update): void;
   /** There is an update this copy of the app cannot install itself: all there is to offer is its page. */
   manual(update: Update): void;
+  /** What it is doing changed (`state`): for whatever shows it. */
+  changed?: (state: Updating) => void;
 }
+/** Why something failed, in its own words: what `fetch` says of no network is in the error's cause. */
+const words = (error: unknown) => error instanceof Error ? error.cause instanceof Error && error.message === 'fetch failed' ? error.cause.message : error.message : String(error);
 /** Looks for updates and installs them. `look` asks for the latest release and, if it is newer, makes it ready and says so
  * once (`ready`), or says that you have to get it yourself (`manual`): where the app cannot be replaced, or the same version
  * could not be installed before. A look you `asked` for says again what was said before, and every look answers what it
  * found: an update (`found`), nothing newer (`none`), or that it is looking already, which may be a download (`busy`).
+ * `state` is what it is doing now, the one account of it for whatever shows it, and `changed` is told each time it changes:
+ * a download says so at every percent, and a look that fails leaves its reason there until the next one.
  * `install` is for the app's end, once everything it runs has stopped: it puts the ready
  * update in place, and says whether it did. Neither restarts anything. */
-export function updater({ bundle, version, feed = LATEST, failed, ready, manual }: UpdaterOptions) {
-  let looking = false, told: string | undefined, staged: { app: string; update: Update } | undefined;
+export function updater({ bundle, version, feed = LATEST, failed, ready, manual, changed }: UpdaterOptions) {
+  let looking = false, told: string | undefined, staged: { app: string; update: Update } | undefined, state: Updating = { state: 'idle', looked: false };
+  const now = (next: Updating) => { state = next; changed?.(next); };
   const gaveUp = () => { try { return readFileSync(failed, 'utf8'); } catch { return undefined; } };
   const giveUp = (version: string) => { try { writeFileSync(failed, version); } catch { /* Then it is tried again. */ } };
   return {
+    state: () => state,
     async look(asked = false): Promise<'found' | 'none' | 'busy'> {
       // One at a time, and none while an update waits for the app to quit: the next one is found by the app it becomes.
       if (looking) return 'busy';
       if (staged) { if (asked) ready(staged.update); return 'found'; }
       looking = true;
+      now({ state: 'looking' });
       try {
         // The app this one replaced, when it is the first look after an update. Where nothing can be removed, nothing is.
         const can = replaceable(bundle);
         if (can) await tidy(bundle);
         const update = await latest(feed, version);
-        if (!update) return 'none';
-        if (update.version === told && !asked) return 'found';
-        if (!can || gaveUp() === update.version) { told = update.version; manual(update); return 'found'; }
+        if (!update) { now({ state: 'idle', looked: true }); return 'none'; }
+        if (!can || gaveUp() === update.version) {
+          now({ state: 'manual', version: update.version, page: update.page });
+          if (update.version !== told || asked) { told = update.version; manual(update); }
+          return 'found';
+        }
+        const downloading = (percent: number) => { if (state.state !== 'downloading' || state.percent !== percent) now({ state: 'downloading', version: update.version, percent }); };
+        downloading(0);
         // A release that cannot be installed is not downloaded again at every look: its page is offered from the next one on.
-        const app = await stage(update, bundle).catch((error: unknown) => { if (error instanceof Unusable) giveUp(update.version); throw error; });
+        const app = await stage(update, bundle, bytes => downloading(Math.min(100, Math.floor(100 * bytes / update.size))))
+          .catch((error: unknown) => { if (error instanceof Unusable) giveUp(update.version); throw error; });
         staged = { app, update };
         told = update.version;
+        now({ state: 'ready', version: update.version });
         ready(update);
         return 'found';
-      } finally { looking = false; }
+      } catch (error) { now({ state: 'failed', error: words(error) }); throw error; } finally { looking = false; }
     },
     install() {
       if (!staged) return false;

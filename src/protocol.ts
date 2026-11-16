@@ -177,6 +177,21 @@ const none = Type.Object({});
 const method = <P extends TSchema, R extends TSchema>(params: P, result: R) => ({ params, result });
 
 /** Every request: what it takes and what it answers. */
+/** What the desktop app's updater is doing (docs/desktop.md): nothing (and whether it has `looked` since the app opened, and
+ * found nothing newer), looking, downloading a version (`percent` of its file), waiting with it `ready` to take the app's
+ * place at the next quit, knowing of one this copy cannot install itself (`manual`, with the release's `page`), or `failed`,
+ * with why in the error's own words. */
+const version = Type.String();
+export const Updating = Type.Union([
+  Type.Object({ state: Type.Literal('idle'), looked: Type.Boolean() }),
+  Type.Object({ state: Type.Literal('looking') }),
+  Type.Object({ state: Type.Literal('downloading'), version, percent: Type.Integer({ minimum: 0, maximum: 100 }) }),
+  Type.Object({ state: Type.Literal('ready'), version }),
+  Type.Object({ state: Type.Literal('manual'), version, page: Type.String() }),
+  Type.Object({ state: Type.Literal('failed'), error: Type.String() }),
+]);
+export type Updating = Static<typeof Updating>;
+
 export const methods = {
   /** The profiles on disk. */
   profiles: method(none, Type.Object({ profiles: Type.Array(Type.Object({ name: Type.String() })) })),
@@ -302,6 +317,12 @@ export const methods = {
   /** Changes the settings it names and leaves the others, and answers them all as they are kept. A `cwd` has to be a directory
    * that exists (`~` is your home folder); `null` puts back the default. */
   setSettings: method(Type.Object({ theme: Type.Optional(Theme), cwd: Type.Optional(Type.Union([Type.String(), Type.Null()])), awake: Type.Optional(Type.Boolean()) }), Settings),
+  /** What the desktop app's updater is doing now. None where the app does not update itself: a server a browser is opened
+   * on, or the app run from the checkout. */
+  update: method(none, Type.Object({ update: Type.Optional(Updating) })),
+  /** What a click on the update button does, which depends on what the updater is doing: it looks now, asks whether to restart
+   * into an update that is ready, or opens the page of one you have to get yourself. Refused where there is no updater. */
+  updateNow: method(none, none),
   /** What the app needs and whether it is there, as last checked; `fresh` checks again now. */
   setup: method(Type.Object({ fresh: Type.Optional(Type.Boolean()) }), Setup),
   /** Installs what is missing, or updates what is too old, where the setup says `installable`: Pi into the app's own folder,
@@ -325,13 +346,14 @@ export const Envelope = Type.Object({ id, method: Type.String(), params: Type.Un
 export const REFUSED = 4001;
 export type Response<M extends Method = Method> = { id: number; result: Result<M> } | { id: number; error: string };
 
-/** What the server sends unasked, to every client: a window that changed, each record a window's Pi writes, and the settings
- * and the setup when they change. */
+/** What the server sends unasked, to every client: a window that changed, each record a window's Pi writes, and the settings,
+ * the setup and what the updater is doing when they change. */
 export const Push = Type.Union([
   Type.Object({ push: Type.Literal('window'), window: WindowState }),
   Type.Object({ push: Type.Literal('record'), window: Type.String(), seq: id, record: PiRecord }),
   Type.Object({ push: Type.Literal('settings'), settings: Settings }),
   Type.Object({ push: Type.Literal('setup'), setup: Setup }),
+  Type.Object({ push: Type.Literal('update'), update: Updating }),
 ]);
 export type Push = Static<typeof Push>;
 export type ServerMessage = Response | Push;

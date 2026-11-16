@@ -61,6 +61,7 @@ The client sends `{ id, method, params }` and gets `{ id, result }` or `{ id, er
 | `instruct { profile, text }` | Keeps the profile's instructions. |
 | `usage { profile, range? }` | What the profile used in a range (`Last hour`, `Today` unless said, `Last 7 days`, `All time`), in tokens and dollars: all of it, each role's and each of a role's models', and its cost over time. With it, the subscription's limits as pi-optchat last saved them. Read from pi-optchat's usage ledger each time; nothing is written. See [Usage](#usage). |
 | `settings`, `setSettings { theme?, cwd?, awake? }` | The app's own settings, and a change to the ones it names ([setup.md](setup.md)). |
+| `update`, `updateNow` | What the desktop app's updater is doing (`update`, absent where there is none), and a click on the update button, which takes nothing: the shell looks, asks or opens the release's page ([desktop.md](desktop.md#updates)). Refused where there is no updater. |
 | `setup { fresh? }` | What a chat needs and whether it is there: Pi, pi-optchat in it, a model that is logged in. `fresh` looks again. |
 | `install { what }` | Installs or updates `pi` or `optchat` where the setup says `installable`: only the app's own Pi, and a pi-optchat from npm. Answers once it has started; the rest is pushed. |
 | `signIn { provider }`, `signedIn { provider }` | Opens a terminal where Pi signs you in to `anthropic`, `openai-codex` or `github-copilot`; and whether Pi can use that provider now (`ready` or `not_ready`; refused when Pi cannot tell). The app sees nothing of the sign-in ([setup.md](setup.md)). |
@@ -70,6 +71,7 @@ The server pushes four things to every client:
 - `{ push: 'window', window }` when a window changes: its `status` (`stopped`, `starting`, `idle`, `running`, or `closed`), `error` if its Pi failed, `completed` once a connected window's conversation is handed off, and the `model` it runs on.
 - `{ push: 'record', window, seq, record }` for every record Pi writes: its session events and extension UI requests, passed through as they are (Pi's `docs/json.md` and `docs/rpc-extension-ui.md`).
 - `{ push: 'settings', settings }` when the settings are changed, and `{ push: 'setup', setup }` as an install runs and when it ends.
+- `{ push: 'update', update }` each time the desktop app's updater does something else ([desktop.md](desktop.md#updates)): only from a server whose shell has one.
 
 A profile's images are plain HTTP: `GET /images/<profile>/<name>` for a message's `[image <name>]`. Every other path is a file of the built UI (`dist/ui`, [ui.md](ui.md)), with the page at `/`.
 

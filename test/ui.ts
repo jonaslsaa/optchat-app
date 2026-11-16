@@ -908,3 +908,89 @@ test('with motion on, what you open comes in, and with less motion it is there a
     await page.context().close();
   }
 });
+
+test('the update button says what the updater is doing in each of its states, a click does the next thing, and it is there only where the app updates itself', async () => {
+  // A server no updater spoke to, as one a browser is opened on: no button, and nothing to click.
+  const without = await open('chat'), plain = await connect(server.url);
+  assert.equal(await without.locator('[data-update]').count(), 0);
+  await assert.rejects(plain.request('updateNow', {}), /does not update itself/);
+  plain.close();
+  await without.context().close();
+  // The desktop app's: a server with an updater, which says what it is doing.
+  let clicks = 0;
+  const at = join(home, 'updates');
+  createProfile(at, 'updated');
+  const own = await startServer({ home: at, app: join(at, 'app'), cwd: home, pi, update: () => { clicks++; } });
+  const visit = async (viewport = WIDE, reducedMotion: 'reduce' | 'no-preference' = 'reduce') => {
+    const context = await browser.newContext({ viewport, reducedMotion });
+    await context.addInitScript(saved => localStorage.setItem('optchat-app', saved), JSON.stringify({ tabs: ['updated'], profile: 'updated', selected: {} }));
+    const page = await context.newPage();
+    await page.goto(own.page);
+    await page.getByRole('textbox', { name: 'Message' }).waitFor();
+    return page;
+  };
+  try {
+    own.updating({ state: 'idle', looked: false });
+    const page = await visit(), sidebar = page.getByRole('navigation', { name: 'Windows' }), button = sidebar.locator('[data-update]'), top = page.locator('header [data-update]');
+    /** The button says `name`, and a click on it reaches the app or, while it is busy, does nothing. */
+    const shows = async (name: string, clicked: boolean, where = button) => {
+      await where.and(page.getByRole('button', { name, exact: true })).waitFor({ timeout: 3000 }).catch(() => assert.fail(`No update button that says "${name}".`));
+      assert.equal(await where.getAttribute('title'), name);
+      const before = clicks;
+      // While it is busy the button says it is not one (aria-disabled), and a click that lands on it all the same does nothing.
+      assert.equal(await where.getAttribute('aria-disabled'), clicked ? null : 'true', name);
+      await where.click({ force: true });
+      await page.waitForTimeout(200);
+      assert.equal(clicks - before, clicked ? 1 : 0, name);
+    };
+    await shows('Look for an update', true);
+    // At the sidebar's foot, on the left.
+    const [foot, bar] = [await button.boundingBox(), await sidebar.boundingBox()];
+    assert.ok(foot && bar && foot.y + foot.height > bar.y + bar.height - 16 && foot.x < bar.x + 16, JSON.stringify({ foot, bar }));
+    own.updating({ state: 'looking' });
+    await shows('Looking for an update…', false);
+    own.updating({ state: 'downloading', version: '1.1.0', percent: 40 });
+    await shows('Downloading OptChat 1.1.0: 40%', false);
+    // The ring is as full as the download: 40% of the way round.
+    const [whole, left] = await button.locator('circle').last().evaluate(ring => [Number(ring.getAttribute('stroke-dasharray')), Number(ring.getAttribute('stroke-dashoffset'))]);
+    assert.ok(Math.abs(left / whole - 0.6) < 0.001, `${left} of ${whole}`);
+    own.updating({ state: 'ready', version: '1.1.0' });
+    await shows('OptChat 1.1.0 is ready. Restart to install it', true);
+    own.updating({ state: 'manual', version: '1.1.0', page: 'https://example.com/release' });
+    await shows('OptChat 1.1.0 is out. Open its page to download it', true);
+    own.updating({ state: 'failed', error: 'GitHub answered 403.' });
+    await shows('Could not look for an update: GitHub answered 403. Try again', true);
+    own.updating({ state: 'idle', looked: true });
+    await shows('No update found. Look again', true);
+
+    // With the sidebar closed, the button is in the top row while there is something to say, and not while there is nothing.
+    await page.getByRole('button', { name: 'Toggle the sidebar' }).click();
+    await sidebar.waitFor({ state: 'detached' });
+    assert.equal(await page.locator('[data-update]').count(), 0);
+    own.updating({ state: 'ready', version: '1.1.0' });
+    await shows('OptChat 1.1.0 is ready. Restart to install it', true, top);
+    await page.context().close();
+    // A page opened later is told what a page that was there heard, and where the sidebar lies over the chat the button is in it.
+    const narrow = await visit(NARROW);
+    await narrow.locator('header').getByRole('button', { name: 'OptChat 1.1.0 is ready. Restart to install it' }).waitFor();
+    await narrow.getByRole('button', { name: 'Toggle the sidebar' }).click();
+    await narrow.getByRole('navigation', { name: 'Windows' }).getByRole('button', { name: 'OptChat 1.1.0 is ready. Restart to install it' }).waitFor();
+    assert.equal(await narrow.locator('[data-update]').count(), 1);
+    await narrow.context().close();
+
+    // The icon turns while the app looks, finishes its turn once the look is over, and stands still for whoever asked for less motion.
+    for (const motion of ['no-preference', 'reduce'] as const) {
+      own.updating({ state: 'looking' });
+      const moving = await visit(WIDE, motion), icon = moving.locator('[data-update="looking"] svg'), turns = () => moving.locator('[data-update] svg').evaluate(icon => getComputedStyle(icon).animationName);
+      await icon.waitFor();
+      assert.equal(await turns() !== 'none', motion === 'no-preference', motion);
+      own.updating({ state: 'idle', looked: true });
+      await moving.locator('[data-update="idle"]').waitFor();
+      if (motion === 'no-preference') {
+        assert.notEqual(await turns(), 'none', 'the turn it began is finished, not cut off');
+        await moving.waitForFunction(() => getComputedStyle(document.querySelector('[data-update] svg')!).animationName === 'none', undefined, { timeout: 3000 });
+      }
+      await moving.context().close();
+    }
+  } finally { await own.close(); }
+});

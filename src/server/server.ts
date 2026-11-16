@@ -7,7 +7,7 @@ import type { AddressInfo } from 'node:net';
 import { dataHome } from 'pi-optchat/files';
 import { Value } from 'typebox/value';
 import { WebSocket, WebSocketServer } from 'ws';
-import { Envelope, methods, REFUSED, type Method, type Params, type Push, type Result, type ServerMessage } from '../protocol.ts';
+import { Envelope, methods, REFUSED, type Method, type Params, type Push, type Result, type ServerMessage, type Updating } from '../protocol.ts';
 import { Agents } from './agents.ts';
 import { editor, fallback, inside, type Launch as Opened } from './files.ts';
 import { GitHub } from './github.ts';
@@ -46,6 +46,9 @@ export interface ServerOptions extends Partial<Pick<WindowsOptions, 'home' | 'gr
   /** Origins that may connect besides the server's own page: the scheme a desktop shell loads the UI from, as T3 Code's
    * `t3code://app`, or Vite's address in development. */
   origins?: readonly string[];
+  /** What a click on a page's update button does, in an app that updates itself: the desktop app's, which also says what its
+   * updater is doing (`updating`). A server without it has no updater, and its pages show nothing of updates. */
+  update?: () => void;
   /** The secret a client connects with (`url`, and `page` after its #): a new one each start unless said, so a page or a
    * program from before it started again is refused. A test that starts a server again on the same address names it. */
   token?: string;
@@ -56,7 +59,7 @@ const loopback = (url: string) => { try { return LOOPBACK.includes(new URL(url).
 
 /** Starts the app's server on this machine only: the protocol of `protocol.ts` on a WebSocket at `/ws`, a profile's images at
  * `/images/<profile>/<name>`, and the UI's page everywhere else. `close` stops every Pi it started and waits for them. */
-export async function startServer({ port = 0, origins = [], ui = join(import.meta.dirname, '../../dist/ui'), home = dataHome(), app = appHome(), cwd, pi, flags = [], npm, gh, opener, launcher, grace = 15_000, now = Date.now, token = randomBytes(32).toString('base64url') }: ServerOptions) {
+export async function startServer({ port = 0, origins = [], ui = join(import.meta.dirname, '../../dist/ui'), home = dataHome(), app = appHome(), cwd, pi, flags = [], npm, gh, opener, launcher, update, grace = 15_000, now = Date.now, token = randomBytes(32).toString('base64url') }: ServerOptions) {
   ui = resolve(ui);
   home = resolve(home); // Pi runs in each window's directory, and has to find the same profiles from there.
   app = resolve(app); // And npm runs in the app's folder, where a path that is not whole would be another folder.
@@ -64,7 +67,7 @@ export async function startServer({ port = 0, origins = [], ui = join(import.met
   let closing = false;
   const send = (socket: WebSocket, message: ServerMessage) => { if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify(message)); };
   const push = (push: Push) => { for (const socket of sockets.clients) send(socket, push); };
-  let settings = readSettings(app);
+  let settings = readSettings(app), updating: Updating | undefined;
   const setup = new Setup({ app, cwd, pi, npm, opener, push: setup => push({ push: 'setup', setup }) });
   // A window runs in the folder the settings name, unless that folder is gone since it was kept.
   const windows = new Windows({ home, grace, push, cwd: () => settings.cwd && isDirectory(settings.cwd) ? settings.cwd : cwd, pi: async () => { const { command, args } = await setup.launch(); return { command, args: [...args, ...flags] }; }, catalog: () => setup.catalog() });
@@ -95,6 +98,8 @@ export async function startServer({ port = 0, origins = [], ui = join(import.met
     complete: params => windows.complete(params), close: params => windows.close(params), records: params => windows.records(params),
     command: params => windows.command(params), answer: params => windows.answer(params), commands: params => windows.commands(params), models: params => windows.models(params), setModel: params => windows.setModel(params),
     usage: ({ profile, range }) => usage(profileDirectory(home, profile), range, now()),
+    update: () => ({ ...updating && { update: updating } }),
+    updateNow: () => { if (!update || !updating) throw new Error('This app does not update itself.'); update(); return {}; },
     settings: () => settings,
     setSettings: params => { settings = writeSettings(app, settings, params); push({ push: 'settings', settings }); return settings; },
     setup: params => setup.state(params), install: async params => { await setup.install(params); return {}; },
@@ -167,6 +172,8 @@ export async function startServer({ port = 0, origins = [], ui = join(import.met
   const address = server.address() as AddressInfo;
   return {
     port: address.port, url: `ws://127.0.0.1:${address.port}/ws?token=${token}`, page: `http://127.0.0.1:${address.port}/#${token}`,
+    /** Says what the app's updater is doing, to every page now and to each that asks later. */
+    updating(state: Updating) { updating = state; push({ push: 'update', update: state }); },
     /** The app's settings as they are now. */
     settings: () => settings,
     /** How many agents stopping the server would cut short: every chat of its own that is in a run, and every agent that

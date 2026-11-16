@@ -17,7 +17,8 @@ const DEFAULTS: Settings = { theme: 'system', awake: true };
 export function readSettings(directory: string): Settings {
   try {
     // A setting the file does not have yet, as one from before the setting was there, is as it is before it is changed.
-    const kept: unknown = { ...DEFAULTS, ...JSON.parse(readFileSync(join(directory, 'settings.json'), 'utf8')) };
+    const read: unknown = JSON.parse(readFileSync(join(directory, 'settings.json'), 'utf8'));
+    const kept = typeof read === 'object' && read !== null && !Array.isArray(read) ? { ...DEFAULTS, ...read } : undefined;
     return Value.Check(Settings, kept) ? kept : DEFAULTS;
   } catch { return DEFAULTS; }
 }

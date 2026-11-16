@@ -57,15 +57,15 @@ function Choices({ settings }: { settings: Kept }) {
           ))}
         </div>
       </Section>
-      <Section title="New windows" hint="The folder a window's agent works in when the window is opened.">
-        <Folder kept={settings.cwd} />
-      </Section>
       {/* Only the desktop app can keep the Mac awake: in a browser there is nothing to turn on. */}
       <Section title="While agents work" className="hidden in-data-shell:block">
         <div className="flex items-center justify-between gap-4 text-sm">
-          <span>Keep the Mac awake<span className="block text-muted-foreground">It does not fall asleep under a long job. The screen may still turn off.</span></span>
+          <span>Keep the Mac awake<span className="block text-muted-foreground">It does not fall asleep by itself under a long job. The screen may still turn off, and closing the lid still puts it to sleep.</span></span>
           <Switch label="Keep the Mac awake while agents work" checked={settings.awake} onChange={awake => void app.saveSettings({ awake })} />
         </div>
+      </Section>
+      <Section title="New windows" hint="The folder a window's agent works in when the window is opened.">
+        <Folder kept={settings.cwd} />
       </Section>
     </>
   );

@@ -68,8 +68,6 @@ export function Options<T>({ id, label, rows, at, selected, head, empty, onPick,
 }
 /** The row an arrow moves to from `at`, round the ends of the list. */
 export const stepped = (key: 'ArrowDown' | 'ArrowUp', at: number, rows: number) => (at + (key === 'ArrowDown' ? 1 : rows - 1)) % Math.max(1, rows);
-/** "Show 8 more", under a list (the `ul` before it) that shows `step` at a time and has `more` left. It keeps the focus while
- * there are more to show. Once there are none it is gone, and the focus it had goes to the list's last row and not to the page. */
 /** An on/off switch: the browser's own checkbox under a drawn one, so the keys and a screen reader have it as it is. */
 export function Switch({ label, checked, onChange }: { label: string; checked: boolean; onChange: (checked: boolean) => void }) {
   return (
@@ -79,6 +77,8 @@ export function Switch({ label, checked, onChange }: { label: string; checked: b
     </label>
   );
 }
+/** "Show 8 more", under a list (the `ul` before it) that shows `step` at a time and has `more` left. It keeps the focus while
+ * there are more to show. Once there are none it is gone, and the focus it had goes to the list's last row and not to the page. */
 export function More({ more, step, onMore }: { more: number; step: number; onMore: () => void }) {
   const button = useRef<HTMLButtonElement>(null);
   useLayoutEffect(() => {

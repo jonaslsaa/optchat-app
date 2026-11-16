@@ -165,17 +165,17 @@ test('a quit waits until everything is stopped, and asks first only while agents
   assert.deepEqual(unknown.did, ['close']);
 });
 
-test('the Mac is kept awake while agents work, let go a little after the last one, and not taken hold of again as the app quits', async () => {
+test('the Mac is kept awake while agents work, and let go a little after the last one', async () => {
   /** A Mac as far as its sleep goes: what was done to it, and what the app sees of its agents and its setting. */
   const mac = () => {
-    const did: string[] = [], state = { working: 0 as number | Error | Promise<number>, wanted: true };
+    const did: string[] = [], state = { working: 0 as number | Error, wanted: true };
     let ids = 0;
-    const keeps = awake({
+    const look = awake({
       wanted: () => state.wanted, working: async () => { if (state.working instanceof Error) throw state.working; return state.working; },
       blocker: { start: () => { did.push(`start ${++ids}`); return ids; }, stop: id => { did.push(`stop ${id}`); } },
     });
-    const looks = async (times: number) => { for (let i = 0; i < times; i++) await keeps.look(); };
-    return { did, state, keeps, looks };
+    const looks = async (times: number) => { for (let i = 0; i < times; i++) await look(); };
+    return { did, state, looks };
   };
   // Nothing works: nothing is held. An agent works: held once, however often it is looked (a look every few seconds for hours).
   const one = mac();
@@ -212,24 +212,4 @@ test('the Mac is kept awake while agents work, let go a little after the last on
   one.state.working = new Error('No answer.');
   await one.looks(3);
   assert.deepEqual(one.did.at(-1), 'stop 3');
-
-  // The app quits while two agents work, and lets go once they have stopped. A look that began while they were being
-  // stopped, and counted one that was not yet, does not take hold again, and neither does any look after.
-  const quits = mac();
-  quits.state.working = 2;
-  await quits.looks(1);
-  let counted = (_count: number) => {};
-  quits.state.working = new Promise<number>(resolve => { counted = resolve; });
-  const late = quits.keeps.look();
-  quits.keeps.release();
-  assert.deepEqual(quits.did, ['start 1', 'stop 1']);
-  counted(1);
-  await late;
-  quits.state.working = 1;
-  await quits.looks(3);
-  assert.deepEqual(quits.did, ['start 1', 'stop 1']);
-  // Nothing was held: the quit has nothing to let go.
-  const idle = mac();
-  idle.keeps.release();
-  assert.deepEqual(idle.did, []);
 });

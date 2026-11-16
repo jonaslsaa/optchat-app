@@ -28,11 +28,11 @@ else {
   let updates: ReturnType<typeof updater> | undefined;
   // The Mac does not fall asleep under agents at work (awake.ts): looked at every ten seconds, which is soon enough for a
   // Mac that takes minutes to sleep. The screen may still go dark.
-  const waking = awake({
+  const look = awake({
     wanted: () => server.settings().awake, working: () => server.working(),
     blocker: { start: () => powerSaveBlocker.start('prevent-app-suspension'), stop: id => powerSaveBlocker.stop(id) },
   });
-  setInterval(() => void waking.look(), 10_000);
+  setInterval(() => void look(), 10_000);
   /** A quit that is not asked about: a restart into an update, which its own question was about, or a signal, which nobody
    * may be there to answer. */
   let sure = false, leaving = false;
@@ -121,7 +121,7 @@ else {
   const quitting = quitter({
     working: () => server.working(),
     ask: working => ask({ type: 'question', message: `${count(working)} working. Quit and stop ${working === 1 ? 'it' : 'them'}?`, buttons: ['Quit', 'Cancel'], defaultId: 0, cancelId: 1 }),
-    close: () => { leaving = true; for (const window of BrowserWindow.getAllWindows()) window.hide(); return server.close().finally(() => waking.release()); },
+    close: () => { leaving = true; for (const window of BrowserWindow.getAllWindows()) window.hide(); return server.close(); },
     quit: () => app.quit(),
   });
   app.on('before-quit', event => { if (!quitting.request(sure)) event.preventDefault(); });

@@ -138,7 +138,7 @@ export async function startServer({ port = 0, origins = [], ui = join(import.met
      * server's runs, such as one a terminal has, is stopped here, and its agents are not the server's to stop. */
     async working() {
       const own = windows.list().windows.filter(window => window.status !== 'stopped' && window.status !== 'closed');
-      const under = await Promise.all(own.filter(window => window.role === 'main').map(({ profile }) => agents.list({ profile }).then(list => list.agents.filter(agent => agent.state === 'running').length, () => 0)));
+      const under = await Promise.all(own.filter(window => window.role === 'main').map(({ profile }) => agents.running(profile).catch(() => 0)));
       return own.filter(window => window.status === 'running').length + under.reduce((sum, count) => sum + count, 0);
     },
     /** No request is taken from here on; one already under way ends with its Pi. */

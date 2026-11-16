@@ -11,24 +11,16 @@ export interface Awake {
  * agent's end and the turn its report starts, nothing works for a moment (about 10 ms with a real Pi). A Mac let go by a look
  * in that moment may fall asleep before the next one, when you have not touched it for long, and the turn dies with it. */
 const IDLE = 2;
-/** Keeps the Mac awake while agents work. `look` is for a timer: it holds the Mac awake from the first look that finds an
- * agent at work until `IDLE` looks in a row found none, or the setting is turned off, which lets go at once. It is held
- * once however often it is looked. `release` is for the app's end, once everything has stopped: it lets go, and no look
- * takes hold again, also not one that began while agents were still being stopped and counted one of them. */
+/** Keeps the Mac awake while agents work. What it gives is for a timer: a look, which holds the Mac awake from the first one
+ * that finds an agent at work until `IDLE` in a row found none, or the setting is turned off, which lets go at that look. It
+ * is held once however often it is looked. Nothing lets go as the app quits: macOS does, when the process is gone. */
 export function awake({ wanted, working, blocker }: Awake) {
-  let held: number | undefined, idle = 0, over = false;
-  const hold = (on: boolean) => {
-    if (on && held === undefined) held = blocker.start();
-    else if (!on && held !== undefined) { blocker.stop(held); held = undefined; }
-  };
-  return {
-    async look() {
-      // A count that fails is nothing at work: the Mac is not kept awake for what cannot be seen.
-      const on = wanted(), busy = on && await working().catch(() => 0) > 0;
-      if (over) return;
-      idle = busy ? 0 : idle + 1;
-      if (busy || !on || idle >= IDLE) hold(busy);
-    },
-    release() { over = true; hold(false); },
+  let held: number | undefined, idle = 0;
+  return async () => {
+    // A count that fails is nothing at work: the Mac is not kept awake for what cannot be seen.
+    const on = wanted(), busy = on && await working().catch(() => 0) > 0;
+    idle = busy ? 0 : idle + 1;
+    if (busy && held === undefined) held = blocker.start();
+    else if (held !== undefined && (!on || idle >= IDLE)) { blocker.stop(held); held = undefined; }
   };
 }

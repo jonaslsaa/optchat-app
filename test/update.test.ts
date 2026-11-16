@@ -6,7 +6,8 @@ import { appendFileSync, chmodSync, copyFileSync, existsSync, lstatSync, mkdirSy
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { join } from 'node:path';
-import { newer, offered, replaceable, updater, type Update } from '../src/desktop/update.ts';
+import { clicked, newer, offered, RELEASES, replaceable, updater, type Update } from '../src/desktop/update.ts';
+import type { Updating } from '../src/protocol.ts';
 import { temporaryHome } from './support.ts';
 
 const home = temporaryHome(), mac = { skip: process.platform !== 'darwin' && 'The app is for macOS: its zip and its signature are macOS\'s.' };
@@ -18,10 +19,13 @@ test('a version is newer by its numbers, and one that is not three numbers is ne
 
 test('a release is an update when it is newer and has a zip for this machine that GitHub has a sha256 of', () => {
   const sha256 = 'ab'.repeat(32), asset = (name: string, digest: string | null = `sha256:${sha256}`) => ({ name, size: 7, digest, browser_download_url: `https://example.com/${name}`, state: 'uploaded' });
-  const release = (...assets: object[]) => ({ tag_name: 'v0.2.0', html_url: 'https://example.com/v0.2.0', draft: false, assets });
+  const page = 'https://github.com/jonaslsaa/optchat-app/releases/tag/v0.2.0', release = (...assets: object[]) => ({ tag_name: 'v0.2.0', html_url: page, draft: false, assets });
   const both = release(asset('OptChat-0.2.0-arm64.dmg'), asset('OptChat-0.2.0-x64.zip'), asset('OptChat-0.1.0-arm64.zip'), asset('OptChat-0.2.0-arm64.zip'));
   // The zip of this version and this machine's kind: not the dmg a person downloads, another machine's, or an older one's.
-  assert.deepEqual(offered(both, '0.1.9', 'arm64'), { version: '0.2.0', page: 'https://example.com/v0.2.0', url: 'https://example.com/OptChat-0.2.0-arm64.zip', size: 7, sha256 } satisfies Update);
+  assert.deepEqual(offered(both, '0.1.9', 'arm64'), { version: '0.2.0', page, url: 'https://example.com/OptChat-0.2.0-arm64.zip', size: 7, sha256 } satisfies Update);
+  // The page is opened in your browser: one that is not this repository's on GitHub is not taken from the answer.
+  for (const html_url of ['https://example.com/v0.2.0', 'https://github.com/jonaslsaa/optchat-app.evil.example/', 'file:///Applications', 'http://github.com/jonaslsaa/optchat-app/releases/tag/v0.2.0'])
+    assert.equal(offered({ ...both, html_url }, '0.1.9', 'arm64')?.page, RELEASES, html_url);
   assert.equal(offered(both, '0.2.0', 'arm64'), undefined, 'the same version is not an update');
   assert.equal(offered(both, '0.3.0', 'arm64'), undefined, 'an older release is not an update');
   assert.equal(offered(release(asset('OptChat-0.2.0-arm64.dmg')), '0.1.0', 'arm64'), undefined, 'a release with only a dmg cannot be installed');
@@ -53,11 +57,18 @@ async function feed(version: string, zip: Buffer, served: (zip: Buffer) => Buffe
   let downloads = 0;
   const server = createServer((request, response) => {
     const at = `http://127.0.0.1:${(server.address() as AddressInfo).port}`, name = `OptChat-${version}-${process.arch}.zip`;
-    if (request.url === '/latest') response.end(JSON.stringify({ tag_name: `v${version}`, html_url: `${at}/release`, assets: [
+    if (request.url === '/latest') response.end(JSON.stringify({ tag_name: `v${version}`, html_url: `${RELEASES}/tag/v${version}`, assets: [
       { name: `OptChat-${version}-${process.arch}.dmg`, size: 1, digest: `sha256:${'0'.repeat(64)}`, browser_download_url: `${at}/dmg` },
       { name, size: zip.length, digest: `sha256:${createHash('sha256').update(zip).digest('hex')}`, browser_download_url: `${at}/${name}` },
     ] }));
-    else if (request.url === `/${name}`) { downloads++; response.end(served(zip)); }
+    // In parts, as a long file comes: a first byte, which is not one percent of it yet, then half, then the rest.
+    else if (request.url === `/${name}`) {
+      downloads++;
+      const file = served(zip), half = file.length >> 1;
+      response.write(file.subarray(0, 1));
+      setTimeout(() => response.write(file.subarray(1, half)), 30);
+      setTimeout(() => response.end(file.subarray(half)), 60);
+    }
     else if (request.url === '/limited') response.writeHead(403).end('{"message":"API rate limit exceeded"}');
     else response.writeHead(404).end('{"message":"Not Found"}');
   });
@@ -69,9 +80,9 @@ async function feed(version: string, zip: Buffer, served: (zip: Buffer) => Buffe
 function installed(name: string, version: string, feed: string) {
   const folder = join(home, name);
   mkdirSync(folder);
-  const app = bundle(folder, version), said: string[] = [], failed = join(folder, 'update-failed');
-  const start = () => updater({ bundle: app, version, feed, failed, ready: update => said.push(`ready ${update.version}`), manual: update => said.push(`manual ${update.version} ${update.page}`) });
-  return { folder, app, said, start, beside: join(folder, '.OptChat-update') };
+  const app = bundle(folder, version), said: string[] = [], states: Updating[] = [], failed = join(folder, 'update-failed');
+  const start = () => updater({ bundle: app, version, feed, failed, ready: update => said.push(`ready ${update.version}`), manual: update => said.push(`manual ${update.version} ${update.page}`), changed: state => states.push(state) });
+  return { folder, app, said, states, start, beside: join(folder, '.OptChat-update') };
 }
 const release = (name: string, version: string) => { const folder = join(home, name); mkdirSync(folder); return zipped(bundle(folder, version), join(folder, 'app.zip')); };
 
@@ -125,12 +136,13 @@ test('a download that is not the release\'s file, or an app that is not whole, i
     const github = await feed('0.2.0', zip, served), { app, said, start, beside, folder } = installed(`refused ${what}`, '0.1.0', github.latest), updates = start();
     try {
       await assert.rejects(updates.look(), Error, what);
+      assert.equal(updates.state().state, 'failed', what);
       assert.deepEqual([said, existsSync(beside), updates.install(), versionOf(app)], [[], false, false, '0.1.0'], what);
       if (stays) {
         // The same hundred megabytes are not downloaded again at every look to fail again: the release's page is offered.
         await updates.look();
         await start().look();
-        assert.deepEqual([said, github.downloads()], [Array(2).fill(`manual 0.2.0 ${github.latest.replace('/latest', '/release')}`), 1], what);
+        assert.deepEqual([said, github.downloads()], [Array(2).fill(`manual 0.2.0 ${RELEASES}/tag/v0.2.0`), 1], what);
       } else {
         assert.deepEqual(readdirSync(folder), ['OptChat.app'], `${what}: nothing is left behind, and nothing is kept against the version`);
         // The next look tries again, as after a network that came back.
@@ -166,7 +178,9 @@ test('an app that cannot be replaced where it is downloads nothing and offers th
   try {
     await updates.look();
     await updates.look();
-    assert.deepEqual(said, [`manual 0.2.0 ${github.latest.replace('/latest', '/release')}`]);
+    assert.deepEqual(said, [`manual 0.2.0 ${RELEASES}/tag/v0.2.0`]);
+    // It is asked once, and shown for as long as it is so: the page's update button opens the release's page.
+    assert.deepEqual(updates.state(), { state: 'manual', version: '0.2.0', page: `${RELEASES}/tag/v0.2.0` });
     // Asked for, the page is offered again.
     assert.equal(await updates.look(true), 'found');
     assert.equal(said.splice(1).length, 1);
@@ -191,6 +205,46 @@ test('an update that could not be put in place leaves the app as it was, and its
     execFileSync('/usr/bin/codesign', ['--verify', '--deep', '--strict', app]);
     // The app as it opens next: the same version is not downloaded again to fail again.
     await start().look();
-    assert.deepEqual([said, github.downloads()], [['ready 0.2.0', `manual 0.2.0 ${github.latest.replace('/latest', '/release')}`], 1]);
+    assert.deepEqual([said, github.downloads()], [['ready 0.2.0', `manual 0.2.0 ${RELEASES}/tag/v0.2.0`], 1]);
+  } finally { await github.close(); }
+});
+
+test('what the updater is doing is said as it changes: looking, each part of the download, ready, and why a look failed', mac, async () => {
+  const github = await feed('0.2.0', release('shown', '0.2.0')), { app, states, start } = installed('watched', '0.1.0', github.latest), updates = start();
+  try {
+    assert.deepEqual(updates.state(), { state: 'idle', looked: false }, 'before the first look');
+    await updates.look();
+    // The download counts up from nothing to all of it, each percent said once, and is some way through before it is whole.
+    const percents = states.flatMap(state => state.state === 'downloading' ? [state.percent] : []);
+    assert.deepEqual([percents[0], percents.at(-1), percents.length > 2, percents.every((percent, index) => index === 0 || percent > percents[index - 1])], [0, 100, true, true], `${percents}`);
+    assert.deepEqual(states.filter(state => state.state !== 'downloading'), [{ state: 'looking' }, { state: 'ready', version: '0.2.0' }]);
+    assert.ok(states.slice(1, -1).every(state => state.state === 'downloading' && state.version === '0.2.0'));
+    assert.deepEqual(updates.state(), states.at(-1));
+    // A later look leaves what is ready as it is.
+    await updates.look(true);
+    assert.equal(states.at(-1)?.state, 'ready');
+
+    // Nothing newer: it has looked, and found none.
+    const same = updater({ bundle: app, version: '0.2.0', feed: github.latest, failed: join(home, 'none'), ready: () => {}, manual: () => {} });
+    await same.look();
+    assert.deepEqual(same.state(), { state: 'idle', looked: true });
+    // GitHub refuses: the look failed, in GitHub's words, until the next one finds its answer.
+    const refused = updater({ bundle: app, version: '0.2.0', feed: github.limited, failed: join(home, 'none'), ready: () => {}, manual: () => {} });
+    await assert.rejects(refused.look());
+    assert.deepEqual(refused.state(), { state: 'failed', error: 'GitHub answered 403.' });
+    await github.close();
+    // Nobody is there: why is what the network said, not that "fetch failed".
+    await assert.rejects(same.look());
+    const failed = same.state();
+    assert.ok(failed.state === 'failed' && /ECONNREFUSED/.test(failed.error), JSON.stringify(failed));
+    // A click on the button looks, whatever the updater is doing, but for an update it cannot install: then it opens its page.
+    const did: string[] = [], does = { open: (page: string) => did.push(`open ${page}`), look: () => did.push('look') };
+    for (const state of [undefined, same.state(), updates.state(), failed, { state: 'manual', version: '0.3.0', page: `${RELEASES}/tag/v0.3.0` }] as const) clicked(state, does);
+    assert.deepEqual(did, ['look', 'look', 'look', 'look', `open ${RELEASES}/tag/v0.3.0`]);
+    // A name with two addresses, and nobody at either: the reason is the first one's, and is never empty.
+    const twice = updater({ bundle: app, version: '0.2.0', feed: github.latest.replace('127.0.0.1', 'localhost'), failed: join(home, 'none'), ready: () => {}, manual: () => {} });
+    await assert.rejects(twice.look());
+    const both = twice.state();
+    assert.ok(both.state === 'failed' && /ECONNREFUSED/.test(both.error), JSON.stringify(both));
   } finally { await github.close(); }
 });

@@ -15,6 +15,7 @@ import { ProfileName, Tabs } from './Profiles.tsx';
 import { Settings, Welcome } from './Settings.tsx';
 import { missing } from './Setup.tsx';
 import { Sidebar } from './Sidebar.tsx';
+import { UpdateButton } from './Update.tsx';
 import { app, mainOf, title, UNTITLED, useApp, type State } from './store.ts';
 import { Timeline } from './Timeline.tsx';
 import { chat, idle, logged, spoken } from './transcript.ts';
@@ -88,6 +89,9 @@ function Profile({ state, profile, onSettings, onUsage, ref }: { state: State; p
       <main data-keys={memory ? 'memory' : 'chat'} className="flex min-w-0 flex-1 flex-col bg-background">
         <header className={cn('flex h-(--topbar-height) shrink-0 items-center gap-2 px-3 sm:px-5', !covered && 'window-bar', sidebar ? 'max-md:window-start' : 'window-start')}>
           <Button ref={opener} variant="ghost-muted" size="icon-sm" aria-label="Toggle the sidebar" aria-pressed={sidebar} onClick={toggle}><PanelLeftIcon /></Button>
+          {/* The update button is at the sidebar's foot. With the sidebar closed it is here, while it has something to say; on a
+              narrow page, where the row is full, only while that is for you to act on, and not while the app looks or downloads. */}
+          {!sidebar && state.update && state.update.state !== 'idle' && <UpdateButton update={state.update} className={cn('-ms-1', (state.update.state === 'looking' || state.update.state === 'downloading') && 'max-md:hidden')} />}
           {state.tabs.length === 1 && <><ProfileName state={state} profile={profile} /><span aria-hidden="true" className="-ms-1.5 text-muted-foreground/50 text-sm">/</span></>}
           <h1 className={cn('min-w-0 truncate font-medium text-sm', name === UNTITLED && 'text-muted-foreground')}>{name}</h1>
           {own && <span className="shrink-0 rounded-full border px-2 py-0.5 text-2xs text-muted-foreground">{window.completed ? 'Completed' : 'Connected window'}</span>}

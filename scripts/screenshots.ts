@@ -548,4 +548,22 @@ async function pictures(browser: Browser, control: Client) {
   await typed.reload();
   await box.waitFor();
   if (await box.inputValue() !== '') throw new Error('A message that was sent is in the box again after a reload.');
+
+  // The desktop app's update button, at the sidebar's foot, in each thing its updater does. Last: from here on the server has
+  // an updater, so every page has the button.
+  const updates = await open(['work'], { width: 900, height: 420 });
+  for (const [name, state] of [
+    ['131-update-idle', { state: 'idle', looked: false }], ['132-update-looking', { state: 'looking' }], ['133-update-downloading', { state: 'downloading', version: '1.1.0', percent: 40 }],
+    ['134-update-ready', { state: 'ready', version: '1.1.0' }], ['135-update-manual', { state: 'manual', version: '1.1.0', page: 'https://github.com/jonaslsaa/optchat-app/releases' }],
+    ['136-update-failed', { state: 'failed', error: 'GitHub answered 403.' }],
+  ] as const) {
+    server.updating(state);
+    await updates.locator(`[data-update="${state.state}"]`).waitFor();
+    await shot(updates, name);
+  }
+  // With the sidebar closed it is in the top row, while there is something to say: wide, then narrow and dark.
+  server.updating({ state: 'ready', version: '1.1.0' });
+  await updates.getByRole('button', { name: 'Toggle the sidebar' }).click();
+  await shot(updates, '137-update-sidebar-closed');
+  await shot(await open(['work'], { width: 420, dark: true }), '138-update-narrow-dark');
 }

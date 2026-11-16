@@ -3,11 +3,12 @@ import { canComplete } from '../window.ts';
 import { label, useAltHeld } from './keys.ts';
 import { app, title, UNTITLED, type State } from './store.ts';
 import { Button, cn, Kbd, WindowDot } from './ui.tsx';
+import { UpdateButton } from './Update.tsx';
 
 /** The profile's windows: its main chat on top, connected windows below, each with Complete and close, under a top row as high
- * as the chat's, where a new window is opened. A row shows its ⌥ digit while ⌥ is held. `onPick`: a window was picked or a
- * new one asked for, which is what the sidebar was opened for where it lies over the chat. The row and its states are T3 Code's
- * sidebar thread row (MIT, see THIRD_PARTY_NOTICES.md). */
+ * as the chat's, where a new window is opened, and over the desktop app's update button. A row shows its ⌥ digit while ⌥ is
+ * held. `onPick`: a window was picked or a new one asked for, which is what the sidebar was opened for where it lies over the
+ * chat. The row and its states are T3 Code's sidebar thread row (MIT, see THIRD_PARTY_NOTICES.md). */
 export function Sidebar({ state, profile, selected, onPick }: { state: State; profile: string; selected: string; onPick: () => void }) {
   const windows = state.windows.filter(window => window.profile === profile), hints = useAltHeld();
   return (
@@ -45,6 +46,8 @@ export function Sidebar({ state, profile, selected, onPick }: { state: State; pr
           );
         })}
       </ul>
+      {/* Where the app updates itself, its update button is at the sidebar's foot. */}
+      {state.update && <div className="flex shrink-0 px-2.5 pb-2.5"><UpdateButton update={state.update} /></div>}
     </nav>
   );
 }

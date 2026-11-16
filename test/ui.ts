@@ -17,9 +17,9 @@ const home = temporaryHome(), pi = { command: process.execPath, args: [join(impo
 // A machine that is set up: Pi with pi-optchat in it and two providers logged in, so there are models to pick.
 process.env.FAKE_PI_HOME = join(home, 'pi');
 mkdirSync(join(home, 'pi', 'pi-optchat'), { recursive: true });
-writeFileSync(join(home, 'pi', 'pi-optchat', 'package.json'), JSON.stringify({ name: 'pi-optchat', version: '0.11.12' }));
+writeFileSync(join(home, 'pi', 'pi-optchat', 'package.json'), JSON.stringify({ name: 'pi-optchat', version: '0.11.13' }));
 writeFileSync(join(home, 'pi', 'state.json'), JSON.stringify({ version: '1.5.2', providers: ['anthropic', 'openai'], packages: { 'npm:pi-optchat': join(home, 'pi', 'pi-optchat') } }));
-for (const name of ['chat', 'beside', 'sheet', 'memory', 'rows', 'menus', 'fields', 'asks', 'windows', 'importing', 'keys', 'spend', 'commands', 'arrows', 'mute', 'said', 'images']) {
+for (const name of ['chat', 'beside', 'sheet', 'memory', 'rows', 'menus', 'fields', 'asks', 'windows', 'importing', 'keys', 'spend', 'commands', 'arrows', 'mute', 'said', 'images', 'tabs']) {
   const profile = createProfile(home, name);
   if (['memory', 'windows', 'keys', 'spend', 'arrows'].includes(name)) { writeMemory(profile, 16); continue; }
   seed(profile, TEAM.length, Date.now(), TEAM);
@@ -563,6 +563,25 @@ test('what is selected in a reply or a report is quoted into the composer, under
   assert.equal(await quote.count(), 0);
 });
 
+test('the settings are in tabs: the arrows go from one to the next, the page opens again on the last one, and Esc closes it while the run goes on', async () => {
+  const page = await open('tabs'), settings = page.getByRole('button', { name: 'Settings' }), theme = page.getByRole('radiogroup', { name: 'Theme' });
+  await run(page);
+  await settings.click();
+  await theme.waitFor();
+  await page.getByRole('tab', { name: 'General', selected: true }).focus();
+  await page.keyboard.press('ArrowRight');
+  await page.getByRole('textbox', { name: 'Max active agents' }).waitFor();
+  assert.equal(await theme.count(), 0);
+  assert.equal(await focused(page), 'Profile');
+  await page.keyboard.press('ArrowLeft');
+  await page.keyboard.press('ArrowLeft'); // Round, from the first to the last.
+  await page.getByRole('textbox', { name: 'Instructions' }).waitFor();
+  assert.equal(await focused(page), 'Instructions');
+  await goesOn(page, 'on a tab of the settings');
+  await settings.click();
+  await page.getByRole('tab', { name: 'Instructions', selected: true }).waitFor();
+});
+
 test('a field keeps the focus when Enter saves it, and when what was typed is refused', async () => {
   const page = await open('fields');
   await page.getByRole('button', { name: 'Settings' }).click();
@@ -570,6 +589,7 @@ test('a field keeps the focus when Enter saves it, and when what was typed is re
   await folder.fill('/tmp');
   await page.keyboard.press('Enter');
   assert.equal(await focused(page), 'Folder for new windows');
+  await page.getByRole('tab', { name: 'Profile' }).click();
   const most = page.getByRole('textbox', { name: 'Max active agents' });
   await most.fill('3');
   await page.keyboard.press('Enter');

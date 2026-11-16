@@ -38,7 +38,9 @@ keeps(terminal, { provider: 'anthropic', model: 'claude-fable-5', thinking: 'xhi
 const picks = createProfile(home, 'picks');
 seed(picks, 4, NOW);
 keeps(picks, { provider: 'anthropic', model: 'claude-opus-5-5', thinking: 'high' }, { provider: 'openai', model: 'gpt-6-sol', thinking: 'medium' });
-seed(createProfile(home, 'work'), 95, NOW); // Ends with the turn that ran the tests.
+const work = createProfile(home, 'work');
+writeFileSync(join(work, 'config.json'), '{}'); // pi-optchat's defaults, as a new profile has them: its settings show no test model.
+seed(work, 95, NOW); // Ends with the turn that ran the tests.
 seed(createProfile(home, 'notes'), 2, NOW);
 seed(createProfile(home, 'importing'), 2, NOW); // Its import was paused: pi-optchat takes no message for it.
 // A chat of ten days with its summaries, for the memory view.
@@ -340,6 +342,7 @@ async function pictures(browser: Browser, control: Client) {
   // its field; one that was changed; and one pi-optchat would not have.
   const profile = await open(['notes'], { height: 1500 });
   await profile.getByRole('button', { name: 'Settings' }).click();
+  await profile.getByRole('tab', { name: 'Profile' }).click();
   await profile.locator('datalist option').first().waitFor({ state: 'attached' }); // The models are read, with their levels.
   await profile.getByRole('combobox', { name: 'Compactor model' }).fill('anthropic/claude-opus-5-5');
   await profile.keyboard.press('Enter');
@@ -351,14 +354,13 @@ async function pictures(browser: Browser, control: Client) {
   await profile.keyboard.press('Enter');
   await profile.getByRole('alert').waitFor();
   await shot(profile, '41-settings-profile');
-  const night = await open(['notes'], { dark: true, height: 1500 });
-  await night.getByRole('button', { name: 'Settings' }).click();
-  await night.getByRole('switch', { name: 'Memory search', checked: true }).waitFor();
-  await shot(night, '42-settings-profile-dark');
-  const slender = await open(['notes'], { width: 420, height: 800 });
-  await slender.getByRole('button', { name: 'Settings' }).click();
-  await slender.getByRole('heading', { name: 'Profile: notes' }).scrollIntoViewIfNeeded();
-  await shot(slender, '43-settings-profile-narrow');
+  // One as pi-optchat made it, untouched: its compactor is the default it names.
+  for (const [page, name] of [[await open(['work'], { dark: true, height: 1500 }), '42-settings-profile-dark'], [await open(['work'], { width: 420, height: 800 }), '43-settings-profile-narrow']] as const) {
+    await page.getByRole('button', { name: 'Settings' }).click();
+    await page.getByRole('tab', { name: 'Profile' }).click();
+    await page.locator('datalist option').first().waitFor({ state: 'attached' });
+    await shot(page, name);
+  }
 
   // What a profile used, under its subscription's limits: today's, the week's (light, dark, narrow), a profile that has used
   // nothing and has no limits saved, and a ledger with a line that cannot be read.

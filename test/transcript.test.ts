@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import type { Message, PiRecord } from '../src/protocol.ts';
-import { act, apply, chat, failure, idle, logged, merged, news, parts, quiet, recalled, replay, spoken, stopped, took, without, worked, type Item, type PiMessage, type Tool } from '../src/ui/transcript.ts';
+import { act, apply, chat, failure, idle, logged, merged, news, parts, quiet, quoted, recalled, replay, spoken, stopped, took, without, worked, type Item, type PiMessage, type Tool } from '../src/ui/transcript.ts';
 
 const T = Date.UTC(2026, 0, 1), at = (seconds: number) => new Date(T + seconds * 1000).toISOString();
 const user = (seconds: number, text: string): PiMessage => ({ role: 'user', timestamp: T + seconds * 1000, content: [{ type: 'text', text }] });
@@ -300,6 +300,11 @@ test('↑ in the composer goes back through what you said and ↓ forward again,
   // Only what you said: not a report, and of a message with a picture its words, as the log names the picture too.
   const mixed = logged([entry(0, 'user', 1, 'see this [image 0123456789abcdef]'), entry(1, 'work', 2, '[a1b2c3d4 · Tests] All pass. [image]'), entry(2, 'user', 3, '[image 0123456789abcdef]')]);
   assert.deepEqual([recalled(mixed, '', true), recalled(mixed, 'see this', true)], ['see this', undefined]);
+});
+
+test('what is quoted goes under what is typed, a > before each of its lines, with an empty line to answer on', () => {
+  assert.equal(quoted('', ' Nothing is replayed twice\n'), '> Nothing is replayed twice\n\n');
+  assert.equal(quoted('About the second one:\n', 'one\n\ntwo'), 'About the second one:\n\n> one\n>\n> two\n\n');
 });
 
 test('a message says what pi-optchat would log, with an image named as one and a tool call by its id', () => {

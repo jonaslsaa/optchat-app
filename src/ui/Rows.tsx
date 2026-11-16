@@ -40,7 +40,7 @@ export const UserRow = memo(function UserRow({ part, profile }: { part: Of<'user
         {part.images.length > 0 && <div className="mb-2 flex flex-wrap gap-2">{part.images.map(name => <img key={name} src={`/images/${profile}/${name}`} alt="" className="max-h-48 rounded-lg" />)}</div>}
         <Clamp text={part.text} lines={12}><p className="whitespace-pre-wrap text-sm leading-relaxed [overflow-wrap:anywhere]">{part.text}</p></Clamp>
       </div>
-      <div className="flex max-w-[80%] items-center pe-1 opacity-0 transition-opacity duration-200 group-hover:opacity-100"><Time date={part.date} /></div>
+      <div className="flex max-w-[80%] items-center gap-1.5 pe-1 opacity-0 transition-opacity duration-200 focus-within:opacity-100 group-hover:opacity-100"><CopyButton text={part.text} label="Copy message" /><Time date={part.date} /></div>
     </div>
   );
 });
@@ -56,9 +56,11 @@ export const ReportRow = memo(function ReportRow({ part, onAgent }: { part: Of<'
           {agent && onAgent
             ? <button type="button" title={`Open this agent's chat (${agent})`} onClick={() => onAgent(agent)} className="min-w-0 cursor-pointer truncate rounded-sm font-medium outline-none hover:text-foreground hover:underline hover:underline-offset-2 focus-visible:ring-2 focus-visible:ring-ring/70">{name}</button>
             : <span title={agent} className="min-w-0 truncate font-medium">{name}</span>}
-          <span className="flex-1" /><Time date={part.date} />
+          <span className="flex-1" />
+          <span className="-my-1 opacity-0 transition-opacity duration-200 focus-within:opacity-100 group-hover:opacity-100"><CopyButton text={part.body} label="Copy report" /></span>
+          <Time date={part.date} />
         </div>
-        <Clamp text={part.body} lines={14}><Markdown text={part.body} /></Clamp>
+        <div data-quote><Clamp text={part.body} lines={14}><Markdown text={part.body} /></Clamp></div>
       </div>
     </div>
   );
@@ -149,7 +151,7 @@ export const ReplyRow = memo(function ReplyRow({ part, working, latest }: { part
       )}
       {(working || open) && steps.length > 0 && <div className="flex min-w-0 flex-col py-1">{steps.map(step => <StepRow key={step.key} step={step} tools={working?.tools} />)}</div>}
       {!working && !open && faults.map(step => <StepRow key={step.key} step={step} />)}
-      {answer && <div className="relative min-w-0 px-1 py-0.5 pt-2"><Markdown text={answer.text} streaming={answer.streaming} /></div>}
+      {answer && <div data-quote className="relative min-w-0 px-1 py-0.5 pt-2"><Markdown text={answer.text} streaming={answer.streaming} /></div>}
       {working && <div className="pt-2"><Doing from={part.from} activity={working.activity} thinking={working.thinking} /></div>}
       {!working && answer && (
         <div className={cn('-ms-0.5 flex items-center gap-1.5 px-1 pt-1 transition-opacity duration-200', !latest && 'opacity-0 focus-within:opacity-100 group-hover/reply:opacity-100')}>

@@ -1,4 +1,4 @@
-import { ChevronDownIcon } from 'lucide-react';
+import { ChevronDownIcon, QuoteIcon } from 'lucide-react';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { HandoffRow, NoteRow, ReplyRow, ReportRow, UserRow, Waiting, type Working } from './Rows.tsx';
 import { parts, thinking, type Item, type Live, type Part } from './transcript.ts';
@@ -6,11 +6,22 @@ import { Button, cn } from './ui.tsx';
 
 /** How near the end counts as at the end, in pixels. */
 const EDGE = 48;
+/** What is selected, when it begins in a reply's answer or in a report (`data-quote`), and where its last line ends in
+ * `content`: that is where the button that quotes it stands. A paragraph selected with three clicks ends at the start of what
+ * is under it, so where a selection ends is not asked. */
+function selected(content: HTMLElement) {
+  const selection = getSelection(), text = selection?.toString().trim(), range = selection?.rangeCount ? selection.getRangeAt(0) : undefined;
+  const from = range?.startContainer, begins = from instanceof Element ? from : from?.parentElement;
+  if (!range || !text || !content.contains(begins ?? null) || !begins?.closest('[data-quote]')) return;
+  const line = [...range.getClientRects()].at(-1), frame = content.getBoundingClientRect();
+  return line && { text, left: Math.min(line.right - frame.left, frame.width - 80), top: line.bottom - frame.top };
+}
 
 /** The chat, oldest at the top. It stays at the end while you are there, and stays where you are while you read back; older
  * pages of the log are read as you reach the top. `running` says the agent is in a run, and `live` what it is doing in it.
- * `onAgent` opens the agent a report is from; `narrow` is for a chat in a panel, which has no room for wide margins. */
-export function Timeline({ items, live, running, profile, older, loading, onAgent, narrow = false }: { items: Item[]; live: Live; running: boolean; profile: string; older?: () => void; loading?: boolean; onAgent?: (agent: string) => void; narrow?: boolean }) {
+ * `onAgent` opens the agent a report is from; `narrow` is for a chat in a panel, which has no room for wide margins. Where
+ * there is a composer to quote into (`onQuote`), a "Quote" button stands by what is selected in a reply or a report. */
+export function Timeline({ items, live, running, profile, older, loading, onAgent, onQuote, narrow = false }: { items: Item[]; live: Live; running: boolean; profile: string; older?: () => void; loading?: boolean; onAgent?: (agent: string) => void; onQuote?: (said: string) => void; narrow?: boolean }) {
   const scroller = useRef<HTMLDivElement>(null), content = useRef<HTMLDivElement>(null);
   const atEnd = useRef(true), before = useRef({ first: items[0]?.key, height: 0, top: 0, sent: -1 });
   const [away, setAway] = useState(false);
@@ -43,6 +54,13 @@ export function Timeline({ items, live, running, profile, older, loading, onAgen
     if (content.current) observer.observe(content.current);
     return () => observer.disconnect();
   }, []);
+  // The button is there once a selection is made (the pointer is let go), and gone with the selection.
+  const [quote, setQuote] = useState<ReturnType<typeof selected>>();
+  useEffect(() => {
+    const made = () => setQuote(content.current ? selected(content.current) : undefined), gone = () => { if (getSelection()?.isCollapsed) setQuote(undefined); };
+    document.addEventListener('pointerup', made); document.addEventListener('selectionchange', gone);
+    return () => { document.removeEventListener('pointerup', made); document.removeEventListener('selectionchange', gone); };
+  }, []);
   const scrolled = () => {
     const element = scroller.current!, near = element.scrollHeight - element.scrollTop - element.clientHeight <= EDGE;
     // Only you moving up takes the chat off its end: the chat growing under it leaves it short of the end for a moment too.
@@ -58,7 +76,7 @@ export function Timeline({ items, live, running, profile, older, loading, onAgen
       <div ref={scroller} onScroll={scrolled} tabIndex={-1} className={cn('h-full overflow-y-auto overflow-x-hidden overscroll-y-contain px-3 [mask-image:linear-gradient(to_bottom,transparent,black_1.5rem,black_calc(100%-2.5rem),transparent)] [overflow-anchor:none] focus:outline-none', narrow ? 'px-4' : 'sm:px-12')}>
         {/* The chat fades out under the header and above the composer (as T3 Code's does under its top bar), so no line is cut
             through; the room under the last line lets it be read clear of the fade. */}
-        <div ref={content} className="mx-auto w-full min-w-0 max-w-(--chat-content-max-width) pt-6 pb-10">
+        <div ref={content} className="relative mx-auto w-full min-w-0 max-w-(--chat-content-max-width) pt-6 pb-10">
           {older && (
             <button type="button" disabled={loading} onClick={older} className="mb-4 flex w-full items-center gap-3 py-1.5 text-muted-foreground text-xs hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring disabled:cursor-default">
               <span className="h-px flex-1 bg-border/70" />{loading ? 'Loading earlier messages…' : 'Load earlier messages'}<span className="h-px flex-1 bg-border/70" />
@@ -70,6 +88,12 @@ export function Timeline({ items, live, running, profile, older, loading, onAgen
             : part.type === 'handoff' ? <HandoffRow key={part.key} part={part} writing={running && part === last} />
             : <ReplyRow key={part.key} part={part} working={running && part === last ? working : undefined} latest={part === latest} />)}
           {running && last && last.type !== 'reply' && last.type !== 'handoff' && <Waiting from={last.items[0].date} activity={live.activity} />}
+          {quote && onQuote && (
+            // The press does not take the selection away, and the click that follows it quotes it.
+            <Button size="xs" variant="glass" className="absolute z-20 mt-1" style={{ left: quote.left, top: quote.top }} onPointerDown={event => event.preventDefault()} onClick={() => { onQuote(quote.text); getSelection()?.removeAllRanges(); setQuote(undefined); }}>
+              <QuoteIcon className="size-3.5" />Quote
+            </Button>
+          )}
         </div>
       </div>
       {away && (

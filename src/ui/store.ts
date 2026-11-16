@@ -3,7 +3,7 @@ import { connect, type Client } from '../client.ts';
 import type { Config, Line, Message, Method, ModelChoice, Params, Push, Result, Settings, Setup, WindowState } from '../protocol.ts';
 import { current } from '../window.ts';
 import { calling, key, NO_TREE, path, read, toggled, type Tree } from './memory.ts';
-import { apply, idle, isMessage, isObject, merged, replay, stopped, without, words, type Live, type PiMessage } from './transcript.ts';
+import { apply, idle, isMessage, isObject, merged, quiet, replay, stopped, without, words, type Live, type PiMessage } from './transcript.ts';
 
 /** Everything the page knows, kept outside React: the connection to the server, and what it said. Components read it with
  * `useApp` and change it through `app`'s methods. */
@@ -418,8 +418,14 @@ export class App {
   }
   /** Sends your message. In a run it steers the agent, or with `later` waits until the agent has stopped. */
   async send(window: string, text: string, later = false) {
-    return await this.ask('prompt', { window, text, whenBusy: later ? 'followUp' : 'steer' }) !== undefined;
+    this.quiet(window);
+    const answer = await this.ask('prompt', { window, text, whenBusy: later ? 'followUp' : 'steer' });
+    // A message an extension answered itself (`handled`) was not sent, unless it is a command: pi-optchat refused it, and its
+    // notice says why. So it is not lost, it counts as not sent.
+    return answer !== undefined && (answer.disposition !== 'handled' || text.startsWith('/'));
   }
+  /** Takes a notice off the page, or all of a window's: they stand until they are dismissed or the next message is sent. */
+  quiet(window: string, text?: string) { this.live(window, live => quiet(live, text)); }
   /** Stops the run, and gives back the messages that were still waiting, so they are not lost. */
   async stop(window: string) {
     const queued = await this.ask('abort', { window });

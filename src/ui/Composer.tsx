@@ -1,10 +1,10 @@
-import { CircleAlertIcon, CornerUpRightIcon, ListPlusIcon } from 'lucide-react';
+import { CircleAlertIcon, CornerUpRightIcon, ListPlusIcon, XIcon } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import type { PiRecord, WindowState } from '../protocol.ts';
 import { escapes, label, useShortcuts } from './keys.ts';
 import { Model } from './Model.tsx';
 import { app, type State } from './store.ts';
-import { failure, news, type Live } from './transcript.ts';
+import { failure, news, type Live, type Notice } from './transcript.ts';
 import { Button, cn, Kbd, Spinner } from './ui.tsx';
 
 /** A question from Pi or one of its extensions (`extension_ui_request`): a choice, a yes or no, or a line of text. Esc in it
@@ -47,6 +47,17 @@ function Failure({ error }: { error: string }) {
         <p className="mt-0.5 whitespace-pre-wrap text-foreground/80">{detail}</p>
         <p className="mt-1 text-muted-foreground">{next}</p>
       </div>
+    </div>
+  );
+}
+
+const TONES = { info: 'border-border', warning: 'border-warning/32 bg-warning-surface', error: 'border-error/24 bg-error-surface' };
+/** What Pi or one of its extensions said in passing: why it did not take your message, a warning, a thing it did. */
+function Said({ notice: { text, kind }, onDismiss }: { notice: Notice; onDismiss: () => void }) {
+  return (
+    <div role={kind === 'error' ? 'alert' : 'status'} className={cn('flex shrink-0 items-start gap-2.5 rounded-xl border px-3.5 py-2.5 text-sm [overflow-wrap:anywhere]', TONES[kind])}>
+      <p className="min-w-0 flex-1 whitespace-pre-wrap text-foreground/80">{text}</p>
+      <button type="button" aria-label="Dismiss" onClick={onDismiss} className="rounded-sm p-0.5 text-muted-foreground hover:bg-foreground/10"><XIcon className="size-3.5" /></button>
     </div>
   );
 }
@@ -102,14 +113,19 @@ export function Composer({ state, window, live, onSend }: { state: State; window
     const waiting = await app.stop(window.id);
     if (waiting.length) change([...waiting, app.draft(window.id)].filter(Boolean).join('\n\n'));
   };
+  // The button that dismissed is gone with its notice: the focus is where the next message is typed.
+  const quiet = (text?: string) => { area.current?.focus(); app.quiet(window.id, text); };
   // Esc stops the agent while the keys are the chat's, as they are here: not from the panel beside it, nor from the memory view.
-  useShortcuts((): Record<string, () => void> => running ? { escape: () => void stop() } : {}, [running, window.id], 'chat');
+  // With no run to stop it takes what Pi said off the page.
+  useShortcuts((): Record<string, () => void> => running ? { escape: () => void stop() } : live.notices.length ? { escape: () => quiet() } : {}, [running, window.id, live.notices.length], 'chat');
   return (
     <div data-keys="chat" className="shrink-0 px-3 pb-3 sm:px-12 sm:pb-4">
       <div className="mx-auto flex w-full max-w-(--chat-content-max-width) flex-col gap-2">
         <Queued messages={queued} later={live.queued.followUp.length} />
         {live.dialogs.map(dialog => <Dialog key={String(dialog.id)} window={window.id} dialog={dialog} />)}
         {window.error && window.status === 'stopped' && <Failure error={window.error} />}
+        {/* However much Pi says, the box you type in stays on the page: past a few lines they scroll. */}
+        {live.notices.length > 0 && <div className="flex max-h-40 flex-col gap-2 overflow-y-auto">{live.notices.map(notice => <Said key={notice.text} notice={notice} onDismiss={() => quiet(notice.text)} />)}</div>}
         <div className="relative isolate rounded-2xl bg-card shadow-composer after:pointer-events-none after:absolute after:inset-0 after:rounded-[inherit] after:border after:border-black/8 dark:bg-(--surface-raised) dark:shadow-none dark:after:border-white/8">
           <div className="relative px-4 pt-3.5 pb-2">
             <textarea

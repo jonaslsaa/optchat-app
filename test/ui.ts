@@ -763,6 +763,11 @@ test('what is selected in a reply, a report or a message is cited in the message
   assert.equal(messages.findLast(message => message.kind === 'user')?.text, sent);
   assert.deepEqual(await page.locator('[data-cited]').allInnerTexts(), ['Started two agents. I\'ll tell you when they report.\nMemory · 11', 'Nothing is replayed twice\nMemory · 12']);
   assert.ok(!(await page.locator('main').innerText()).includes('<cite'), 'the chat shows a citation as it is written');
+  // ⌘F finds what a card says, as it finds it in the report: a card is pressed, and its words are the chat's all the same.
+  await page.keyboard.press('ControlOrMeta+f');
+  await page.keyboard.type('replayed twice');
+  await page.getByRole('search', { name: 'Find in chat' }).locator('[aria-live]').getByText(/^[12]\/2$/).waitFor({ timeout: 3000 });
+  await page.keyboard.press('Escape');
   // ↑ brings the message back as it was: its chips, and what was typed.
   await box.press('ArrowUp');
   assert.deepEqual([await chips(), await box.inputValue(), await draft()], [['Started two agents. I\'ll tell you when they report.', 'Nothing is replayed twice'], 'how long?', sent]);

@@ -51,7 +51,7 @@ export function CiteCard({ cite: { text, at }, onOpen }: { cite: Cite; onOpen?: 
   const shown = (
     <>
       {text && <span className="line-clamp-2 whitespace-pre-wrap [overflow-wrap:anywhere]">{text}</span>}
-      {at && <span className="block text-2xs tabular-nums opacity-80">Memory · {named(at)}</span>}
+      {at && <span data-no-find className="block text-2xs tabular-nums opacity-80">Memory · {named(at)}</span>}
     </>
   );
   return opens ? <button type="button" data-cited title="Show it in the memory view" onClick={() => onOpen(at)} className={cn(card, 'outline-none hover:bg-black/12 focus-visible:ring-2 focus-visible:ring-ring/70 dark:hover:bg-white/12')}>{shown}</button>

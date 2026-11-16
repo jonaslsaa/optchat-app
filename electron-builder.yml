@@ -22,11 +22,10 @@ mac:
 # (docs/desktop.md), so nothing needs a block map.
 dmg:
   writeUpdateInfo: false
-  # The window the app is dragged out of. Its picture is build/dmg-dark.png, with the @2x beside it that electron-builder
-  # finds by its name; both are cut from the .svg with `npm run dmg:art` (dmg-light is the same on cream). The window
-  # takes the picture's size, 640 by 432 with its title bar: a `window` here would be ignored beside a picture. Where the
-  # two icons are and how large is the picture's too: its arrow is between them, and a plate for each name under them.
-  background: build/dmg-dark.png
+  # The window the app is dragged out of. Its picture is build/background.png, where electron-builder looks for it, with
+  # the @2x beside it; both are cut from background.svg with `npm run dmg:art`. The window takes the picture's size, 640
+  # by 432 with its title bar: a `window` here would be ignored beside a picture. Where the two icons are and how large
+  # is the picture's too, since its arrow is drawn between them.
   iconSize: 120
   iconTextSize: 12
   contents:

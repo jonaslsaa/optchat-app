@@ -1,6 +1,10 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1280" height="864" viewBox="0 0 640 432">
-  <!-- The dmg's window, light: the picture of dmg-dark.svg on cream (the rules are in that file). The Finder writes the
-       two names in black, which reads here as it is, so there are no plates under them. -->
+  <!-- The dmg's window: the picture behind the two icons, the app icon's rings (build/icon.svg) on cream.
+       `npm run dmg:art` cuts background.png and background@2x.png from it with sips, so it holds only what sips draws:
+       no filters, no tspans, Helvetica. The Finder puts the app at (166, 214) and the Applications folder at (474, 214),
+       120 px each (electron-builder.yml), and writes their names under them in black, whatever the picture and whether
+       the system is light or dark: that is why the picture is light. The window is 432 px high with its title bar, so
+       the picture's lowest 36 px or so are never seen, and nothing is drawn there. -->
   <rect width="640" height="432" fill="#fbf4e6"/>
   <!-- The icon's rings, going on past it. -->
   <circle cx="238.5" cy="159" r="690" fill="#faf1e0"/>

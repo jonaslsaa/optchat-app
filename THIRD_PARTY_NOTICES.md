@@ -22,7 +22,7 @@ Parts of the UI come from [T3 Code](https://github.com/pingdotgg/t3code) (commit
 - `src/ui/paths.ts`: which inline code is a file's path (a folder or a line in it, a file's extension at its end, `:line` or `#L`), after `inlineCodeFilePathCandidate` in `packages/shared/src/markdownLinks.ts`; and `src/server/files.ts`: how each editor is told the line (`-g file:line`, `file:line`), from `packages/contracts/src/editor.ts`.
 - `src/ui/GitHub.tsx`: which glyph and colour stand for a pull request's state, its checks and its review, from `apps/web/src/components/pullRequest/pullRequestIcons.tsx` and `pullRequestPresentation.tsx`.
 - `src/ui/Usage.tsx`: the layout of the usage page (the totals, the share bar with its list, the breakdown table) and their class strings, from `apps/web/src/components/usage/UsagePage.tsx` and `UsageShareBar.tsx` (commit `1f698f01`), without Base UI. The figures and the bars over time are written here.
-- `build/dmg-dark.svg`, `build/dmg-light.svg` and the `dmg` block of `electron-builder.yml`: the layout of the dmg's window (its size, where the two icons are and how large, a name, a headline, an arrow and a line under them), after `apps/desktop/resources/dmg/dmg-background-latest.svg` and `scripts/build-desktop-artifact.ts`. The picture itself is drawn here.
+- `build/background.svg` and the `dmg` block of `electron-builder.yml`: the layout of the dmg's window (its size, where the two icons are and how large, a name, a headline, an arrow and a line under them), after `apps/desktop/resources/dmg/dmg-background-latest.svg` and `scripts/build-desktop-artifact.ts`. The picture itself is drawn here.
 
 ```
 MIT License

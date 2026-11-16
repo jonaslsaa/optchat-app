@@ -5,22 +5,23 @@ import { app, title, UNTITLED, type State } from './store.ts';
 import { Button, cn, Kbd, WindowDot } from './ui.tsx';
 
 /** The profile's windows: its main chat on top, connected windows below, each with Complete and close, under a top row as high
- * as the chat's, where a new window is opened. A row shows its ⌥ digit while ⌥ is held. The row and its states are T3 Code's
+ * as the chat's, where a new window is opened. A row shows its ⌥ digit while ⌥ is held. `onPick`: a window was picked or a
+ * new one asked for, which is what the sidebar was opened for where it lies over the chat. The row and its states are T3 Code's
  * sidebar thread row (MIT, see THIRD_PARTY_NOTICES.md). */
-export function Sidebar({ state, profile, selected }: { state: State; profile: string; selected: string }) {
+export function Sidebar({ state, profile, selected, onPick }: { state: State; profile: string; selected: string; onPick: () => void }) {
   const windows = state.windows.filter(window => window.profile === profile), hints = useAltHeld();
   return (
     <nav aria-label="Windows" className="flex h-full w-(--sidebar-width) shrink-0 flex-col border-sidebar-border border-r bg-sidebar text-sidebar-foreground">
       <div className="window-bar window-start max-md:window-corner flex h-(--topbar-height) shrink-0 items-center justify-between ps-4.5 pe-2.5">
         <span className="text-sidebar-muted-foreground text-xs"><b className="font-semibold text-sidebar-foreground">Opt</b>Chat</span>
-        <Button variant="ghost-muted" size="icon-sm" aria-label="New window" title={`New window (${label('mod+shift+o')})`} onClick={() => void app.newWindow(profile)}><SquarePenIcon /></Button>
+        <Button variant="ghost-muted" size="icon-sm" aria-label="New window" title={`New window (${label('mod+shift+o')})`} onClick={() => { onPick(); void app.newWindow(profile); }}><SquarePenIcon /></Button>
       </div>
       <ul className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto px-2 pb-2">
         {windows.map((window, index) => {
           const active = window.id === selected, name = title(window, state), connected = window.role === 'connected', completes = canComplete(window);
           return (
             <li key={window.id} className="group/row relative">
-              <button type="button" aria-current={active || undefined} onClick={() => app.select(window.id)}
+              <button type="button" aria-current={active || undefined} onClick={() => { onPick(); app.select(window.id); }}
                 className={cn('flex h-9 w-full select-none items-center gap-2.5 overflow-hidden rounded-md px-2.5 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset',
                   active ? 'bg-sidebar-row-active light:ring-1 light:ring-sidebar-border/70 light:ring-inset' : 'hover:bg-sidebar-row-hover')}>
                 {!connected ? <MessagesSquareIcon className="size-4 shrink-0 text-sidebar-muted-foreground" />

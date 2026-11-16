@@ -277,7 +277,15 @@ function steps(items: readonly Item[]): Step[] {
   }
   return result;
 }
-/** How long a reply took, as 42s, 3m 05s or 1h 15m. */
+/** A finished reply's work in a few words: "Worked for 42s", "Stopped after 3m 05s", "Failed after 2s". The time is from
+ * the reply's first message to its last, and the log dates a message when it began, not when it ended: how long the last one
+ * was written is not in it. So a reply of one message, such as one stopped while it was being written, has no time to say,
+ * and says none rather than 0s. */
+export function worked({ from, to, stopped, steps }: Extract<Part, { type: 'reply' }>) {
+  const [verb, word] = stopped ? ['Stopped', 'after'] : steps.some(step => step.type === 'fault') ? ['Failed', 'after'] : ['Worked', 'for'], time = took(from, to);
+  return time === '0s' ? verb : `${verb} ${word} ${time}`;
+}
+/** How long something took, as 42s, 3m 05s or 1h 15m. */
 export function took(from: string, to: string) {
   const seconds = Math.max(0, Math.round((Date.parse(to) - Date.parse(from)) / 1000)), minutes = Math.floor(seconds / 60), two = (count: number) => String(count).padStart(2, '0');
   return seconds < 60 ? `${seconds}s` : minutes < 60 ? `${minutes}m ${two(seconds % 60)}s` : `${Math.floor(minutes / 60)}h ${two(minutes % 60)}m`;

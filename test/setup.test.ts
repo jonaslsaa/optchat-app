@@ -17,7 +17,7 @@ const nowhere = { command: join(home, 'no-such-pi'), args: [] };
 
 /** A server with its own app folder and its own fake Pi folder (which says which Pi the fake one is), and a client that keeps
  * the setups it was pushed. */
-async function setup(t: TestContext, options: ServerOptions = {}, pi?: object) {
+async function setup(t: TestContext, options: Partial<ServerOptions> = {}, pi?: object) {
   const app = mkdtempSync(join(home, 'app-')), folder = process.env.FAKE_PI_HOME = mkdtempSync(join(home, 'pi-'));
   if (pi) writeFileSync(join(folder, 'state.json'), JSON.stringify(pi));
   // A window's Pi gets flags, and after flags Pi reads a word such as `list` as a message to the agent: the setup's commands

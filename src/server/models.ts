@@ -1,4 +1,3 @@
-import { homedir } from 'node:os';
 import { Type } from 'typebox';
 import { Value } from 'typebox/value';
 import { levels, THINKING } from '../models.ts';
@@ -28,9 +27,9 @@ export async function chosen(pi: Pi): Promise<ModelChoice | undefined> {
  * extension and goes nowhere on the network. What it runs on is Pi's own default, which a Pi started now begins on unless
  * something says otherwise. A provider only an extension adds is not in its list; a window's own Pi lists that too. It is
  * ended when `signal` says the server is closing, and after half a minute without an answer. */
-export async function catalog(launch: Launch, signal: AbortSignal): Promise<Result<'models'>> {
+export async function catalog(launch: Launch, cwd: string, signal: AbortSignal): Promise<Result<'models'>> {
   signal.throwIfAborted();
-  const pi = new Pi({ ...launch, args: [...launch.args, '--no-session', '--offline', '--no-extensions'], cwd: homedir(), env: process.env }, () => {}, () => {});
+  const pi = new Pi({ ...launch, args: [...launch.args, '--no-session', '--offline', '--no-extensions'], cwd, env: process.env }, () => {}, () => {});
   const end = () => void pi.stop(0), late = setTimeout(end, 30_000);
   signal.addEventListener('abort', end);
   try { return { models: await offered(pi), preset: await chosen(pi) }; } finally { clearTimeout(late); signal.removeEventListener('abort', end); await pi.stop(2000); }

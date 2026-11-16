@@ -1,9 +1,9 @@
 import { CheckIcon, PanelLeftIcon, PanelRightIcon, SettingsIcon, XIcon } from 'lucide-react';
-import { Fragment, useCallback, useMemo, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { canComplete, current } from '../window.ts';
 import { busy } from './agents.ts';
 import { Composer } from './Composer.tsx';
-import { label, useShortcuts } from './keys.ts';
+import { label, useOverlay, useShortcuts } from './keys.ts';
 import { MemoryView } from './Memory.tsx';
 import { NO_TREE } from './memory.ts';
 import { Outside } from './Outside.tsx';
@@ -24,10 +24,15 @@ const SHOWS = [['Chat', false], ['Memory', true]] as const;
 /** One profile: its windows on the left, the selected window's chat, and beside the main chat its agents or what it named on
  * GitHub, when they are opened. */
 function Profile({ state, profile, onSettings }: { state: State; profile: string; onSettings: () => void }) {
-  const [sidebar, setSidebar] = useState(() => innerWidth >= 768);
-  // In a narrow window the sidebar lies over the chat. Its top row is then not what the desktop app's window is dragged by:
-  // Electron goes by the order in the page, not by what is on top, and the sidebar's buttons would drag instead of being pressed.
-  const covered = !useMedia('(min-width: 48rem)') && sidebar;
+  // The sidebar stands beside the chat in a wide window. In a narrow one it lies over the chat and is opened for one pick: a
+  // window picked, a new one, Esc and a press beside it close it (`useOverlay`), and it is closed again whenever the window
+  // is narrow anew. Its top row is then not what the desktop app's window is dragged by: Electron goes by the order in the
+  // page, not by what is on top, and the sidebar's buttons would drag instead of being pressed.
+  const wide = useMedia('(min-width: 48rem)'), [beside, setBeside] = useState(true), [over, setOver] = useState(false);
+  const sidebar = wide ? beside : over, covered = sidebar && !wide, toggle = () => (wide ? setBeside : setOver)(shown => !shown);
+  const drawer = useRef<HTMLDivElement>(null), opener = useRef<HTMLButtonElement>(null);
+  useEffect(() => { if (wide) setOver(false); }, [wide]);
+  useOverlay(covered, () => setOver(false), drawer, opener);
   // What the panel beside the main chat shows, while it is open: `panel.agent` is the agent whose chat is open in it.
   const [panel, setPanel] = useState<Shown>(), openAgent = useCallback((agent?: string) => setPanel({ agent }), []);
   // The main chat as the agent reads its memory, in the chat's place. A message sent from there is answered in the chat.
@@ -42,11 +47,11 @@ function Profile({ state, profile, onSettings }: { state: State; profile: string
   const items = useMemo(() => chat(before, { ...live, messages: run }), [before, run, live.streaming]);
   const name = window && title(window, state);
   useShortcuts(() => ({
-    'mod+shift+o': () => void app.newWindow(profile),
-    'mod+b': () => setSidebar(shown => !shown),
+    'mod+shift+o': () => { setOver(false); void app.newWindow(profile); },
+    'mod+b': toggle,
     ...!own && { 'alt+m': () => setMemory(shown => !shown) },
-    ...Object.fromEntries(ids.split(' ').slice(0, 9).map((id, index) => [`alt+${index + 1}`, () => app.select(id)])),
-  }), [profile, ids, own]);
+    ...Object.fromEntries(ids.split(' ').slice(0, 9).map((id, index) => [`alt+${index + 1}`, () => { setOver(false); app.select(id); }])),
+  }), [profile, ids, own, wide]);
   // What of the main chat says its agents changed: its Pi started or stopped, an agent was started or ended, a report came.
   const pulse = [window?.status, live.status.optchat, live.messages.length, log?.total].join(' ');
   // What says a turn of it began or ended, for what reads the whole log: that is too much to do at every message.
@@ -59,13 +64,13 @@ function Profile({ state, profile, onSettings }: { state: State; profile: string
   const fresh = items.length === 0 && (own ? window.status === 'stopped' || session !== undefined : log !== undefined);
   return (
     <div className="flex min-h-0 flex-1">
-      {sidebar && <div className="max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:z-40 max-md:shadow-xl"><Sidebar state={state} profile={profile} selected={window.id} /></div>}
-      {sidebar && <button type="button" aria-label="Close the sidebar" onClick={() => setSidebar(false)} className="fixed inset-0 z-30 bg-black/20 md:hidden" />}
+      {sidebar && <div ref={drawer} className="max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:z-40 max-md:shadow-xl"><Sidebar state={state} profile={profile} selected={window.id} onPick={() => setOver(false)} /></div>}
+      {sidebar && <button type="button" aria-label="Close the sidebar" onClick={() => setOver(false)} className="fixed inset-0 z-30 bg-black/20 md:hidden dark:bg-black/60" />}
       {/* The keys in this column are the chat's, or the memory view's while that stands in its place (keys.ts): its top row
           too, where the focus is right after the memory view is chosen. */}
       <main data-keys={memory ? 'memory' : 'chat'} className="flex min-w-0 flex-1 flex-col bg-background">
         <header className={cn('flex h-(--topbar-height) shrink-0 items-center gap-2 px-3 sm:px-5', !covered && 'window-bar', sidebar ? 'max-md:window-start' : 'window-start')}>
-          <Button variant="ghost-muted" size="icon-sm" aria-label="Toggle the sidebar" aria-pressed={sidebar} onClick={() => setSidebar(!sidebar)}><PanelLeftIcon /></Button>
+          <Button ref={opener} variant="ghost-muted" size="icon-sm" aria-label="Toggle the sidebar" aria-pressed={sidebar} onClick={toggle}><PanelLeftIcon /></Button>
           {state.tabs.length === 1 && <><ProfileName state={state} profile={profile} /><span aria-hidden="true" className="-ms-1.5 text-muted-foreground/50 text-sm">/</span></>}
           <h1 className={cn('min-w-0 truncate font-medium text-sm', name === UNTITLED && 'text-muted-foreground')}>{name}</h1>
           {own && <span className="shrink-0 rounded-full border px-2 py-0.5 text-2xs text-muted-foreground">{window.completed ? 'Completed' : 'Connected window'}</span>}

@@ -47,7 +47,7 @@ test('a profile\'s settings are pi-optchat\'s to list, to judge and to write', {
 
   // The page keeps what the server answered, and is told why when a change was refused: by a Pi that holds the profile and
   // takes no changes too (one that is still starting, here), whose file the app then leaves alone.
-  const app = new App({ storage: () => ({ getItem: () => null, setItem: () => {}, removeItem: () => {} }) });
+  const app = new App({ storage: () => ({ getItem: () => null, setItem: () => {} }) });
   t.after(() => app.close());
   await app.start(server.url);
   await app.readConfig('work');

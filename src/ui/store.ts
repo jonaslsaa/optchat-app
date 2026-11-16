@@ -44,7 +44,7 @@ export interface State {
   signingIn?: Provider;
 }
 type Provider = Params<'signIn'>['provider'];
-const PAGE = 200, SAVED = 'optchat-app', SIGN_IN_ASKS = 100;
+const PAGE = 200, SAVED = 'optchat-app', DRAFTS = 'optchat-app-drafts', SIGN_IN_ASKS = 100;
 export const mainOf = (profile: string) => `${profile}/main`;
 const ordered = (windows: WindowState[]) => windows.toSorted((a, b) => a.profile.localeCompare(b.profile) || Number(b.role === 'main') - Number(a.role === 'main') || a.id.localeCompare(b.id, undefined, { numeric: true }));
 export const UNTITLED = 'Untitled window';
@@ -63,7 +63,7 @@ export class App {
   private readonly listeners = new Set<() => void>();
   private readonly loading = new Set<string>();
   private readonly deadlines = new Map<string, ReturnType<typeof setTimeout>>();
-  private readonly storage: () => Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
+  private readonly storage: () => Pick<Storage, 'getItem' | 'setItem'>;
   private readonly retry: number;
   private readonly poll: number;
   /** Which sign-in is being waited for: a later one, or a cancel, ends the wait of the one before. */
@@ -71,7 +71,7 @@ export class App {
 
   /** `storage` keeps which profiles are open and what is typed and not sent, across reloads; `retry` is how long to wait before connecting again, and `poll`
    * between asking whether a sign-in is done. */
-  constructor({ storage = () => localStorage, retry = 1000, poll = 3000 }: { storage?: () => Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>; retry?: number; poll?: number } = {}) {
+  constructor({ storage = () => localStorage, retry = 1000, poll = 3000 }: { storage?: () => Pick<Storage, 'getItem' | 'setItem'>; retry?: number; poll?: number } = {}) {
     this.storage = storage;
     this.retry = retry;
     this.poll = poll;
@@ -127,7 +127,11 @@ export class App {
     const profile = isObject(saved) && typeof saved.profile === 'string' && tabs.includes(saved.profile) ? saved.profile : tabs[0];
     const selected = isObject(saved) && isObject(saved.selected) ? Object.fromEntries(Object.entries(saved.selected).filter((entry): entry is [string, string] => typeof entry[1] === 'string')) : {};
     // A server that started again numbers its windows' records from one: what was kept of a window it does not have is let go.
-    const kept = <T>(by: Record<string, T>) => Object.fromEntries(Object.entries(by).filter(([id]) => windows.windows.some(window => window.id === id)));
+    const here = (id: string) => windows.windows.some(window => window.id === id);
+    const kept = <T>(by: Record<string, T>) => Object.fromEntries(Object.entries(by).filter(([id]) => here(id)));
+    // So is what was typed in one, or a new window with its number would have it. A main chat is the same one whenever it is
+    // opened, so what was typed in it stays.
+    this.keepAll(Object.fromEntries(Object.entries(this.drafts()).filter(([id]) => here(id) || names.some(name => mainOf(name) === id))));
     this.set({ connection: 'open', profiles: names, tabs, profile, selected, windows: ordered(windows.windows), live: kept(this.state.live), sessions: kept(this.state.sessions), error: undefined });
     // Neither is waited for: looking for Pi takes a moment, and the chat does not need it to show.
     void this.ask('settings', {}).then(settings => settings && this.set({ settings }));
@@ -297,9 +301,6 @@ export class App {
   async newWindow(profile: string) {
     const opened = await this.ask('open', { profile, role: 'connected' });
     if (!opened) return;
-    // A server that started again numbers its windows from one: what was typed in the window that had this number is not
-    // this window's.
-    this.keep(opened.window.id, '');
     this.put(opened.window);
     this.set({ selected: { ...this.state.selected, [profile]: opened.window.id } });
   }
@@ -404,12 +405,16 @@ export class App {
     this.tree(profile, tree => tree.search?.text === text ? { ...tree, found: id } : tree);
   }
   /** What is typed in a window and not sent yet. It is kept where the open profiles are, so it is there when the page is
-   * opened again, and until it is sent or its window is closed. */
-  draft(window: string) { return this.storage().getItem(`${SAVED}-draft:${window}`) ?? ''; }
-  keep(window: string, text: string) {
-    if (!text) { this.storage().removeItem(`${SAVED}-draft:${window}`); return; }
+   * opened again, and until it is sent or its window is gone. */
+  draft(window: string) { return this.drafts()[window] ?? ''; }
+  keep(window: string, text: string) { this.keepAll({ ...this.drafts(), [window]: text }); }
+  private drafts() {
+    const saved: unknown = JSON.parse(this.storage().getItem(DRAFTS) ?? '{}');
+    return isObject(saved) ? Object.fromEntries(Object.entries(saved).filter((entry): entry is [string, string] => typeof entry[1] === 'string')) : {};
+  }
+  private keepAll(drafts: Record<string, string>) {
     // A browser with no room left keeps nothing more: the text is in the box, and is lost only to a reload.
-    try { this.storage().setItem(`${SAVED}-draft:${window}`, text); } catch {}
+    try { this.storage().setItem(DRAFTS, JSON.stringify(Object.fromEntries(Object.entries(drafts).filter(([, text]) => text)))); } catch {}
   }
   /** Sends your message. In a run it steers the agent, or with `later` waits until the agent has stopped. */
   async send(window: string, text: string, later = false) {

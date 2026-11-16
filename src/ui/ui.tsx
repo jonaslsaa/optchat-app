@@ -1,7 +1,9 @@
 import { CheckIcon, CopyIcon, LoaderCircleIcon } from 'lucide-react';
 import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type ComponentProps, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import type { WindowState } from '../protocol.ts';
 import { extendTailwindMerge, type ClassNameValue } from 'tailwind-merge';
+import { useOverlay } from './keys.ts';
 
 /** The small parts everything else is built from. The class strings are T3 Code's (MIT, see THIRD_PARTY_NOTICES.md), from its
  * `components/ui`: button, kbd and spinner, without base-ui underneath. */
@@ -120,4 +122,18 @@ export function CopyButton({ text, label, children }: { text: string; label: str
   const [copied, setCopied] = useState(false);
   const copy = () => void navigator.clipboard.writeText(text).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1200); });
   return <Button variant="ghost-muted" size={children ? 'xs' : 'icon-xs'} aria-label={label} title={label} onClick={copy}>{copied ? <CheckIcon className="size-3" /> : <CopyIcon className="size-3" />}{children}</Button>;
+}
+/** A picture, and the same one large over the page once it is clicked: Esc puts that away, or a press beside it (`useOverlay`). */
+export function Picture({ src, alt = '', className }: { src: string; alt?: string; className?: string }) {
+  const [open, setOpen] = useState(false), opener = useRef<HTMLButtonElement>(null), box = useRef<HTMLDialogElement>(null), large = useRef<HTMLImageElement>(null);
+  useEffect(() => { if (open) box.current?.showModal(); }, [open]);
+  // Closed as a dialog is, which is what gives the focus back to the picture it was opened from.
+  useOverlay(open, () => box.current?.close(), large, opener);
+  return (
+    <>
+      <button ref={opener} type="button" aria-label={['Show the image large', alt].filter(Boolean).join(': ')} onClick={() => setOpen(true)} className="inline-block cursor-zoom-in rounded-lg align-top outline-none focus-visible:ring-2 focus-visible:ring-ring"><img src={src} alt={alt} className={className} /></button>
+      {/* A modal dialog, so it lies over everything, a sheet too, and the browser keeps the focus in it. */}
+      {open && createPortal(<dialog ref={box} aria-label="The image, large" onClose={() => setOpen(false)} className="fixed inset-0 m-0 flex size-full max-h-none max-w-none items-center justify-center bg-black/70 p-6 outline-none backdrop:bg-transparent"><img ref={large} src={src} alt={alt} className="max-h-full max-w-full rounded-lg" /></dialog>, document.body)}
+    </>
+  );
 }

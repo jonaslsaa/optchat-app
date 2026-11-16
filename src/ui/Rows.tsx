@@ -2,7 +2,7 @@ import { BotIcon, ChevronRightIcon, EyeIcon, GlobeIcon, HistoryIcon, SearchIcon,
 import { memo, useEffect, useState, type ReactNode } from 'react';
 import { Markdown } from './Markdown.tsx';
 import { act, took, worked, type Part, type Step, type Tool } from './transcript.ts';
-import { Button, cn, CopyButton, Spinner } from './ui.tsx';
+import { Button, cn, CopyButton, Picture, Spinner } from './ui.tsx';
 import { WorkLogDetails, WorkLogRow } from './WorkLog.tsx';
 
 /** The rows of the chat. They only draw: what a row says is worked out in `parts` (transcript.ts). Each is drawn again only when
@@ -37,7 +37,7 @@ export const UserRow = memo(function UserRow({ part, profile }: { part: Of<'user
   return (
     <div className="group flex flex-col items-end gap-1 pt-2 pb-1">
       <div className="relative min-w-0 max-w-[80%] rounded-2xl bg-message p-3 text-message-foreground">
-        {part.images.length > 0 && <div className="mb-2 flex flex-wrap gap-2">{part.images.map(name => <img key={name} src={`/images/${profile}/${name}`} alt="" className="max-h-48 rounded-lg" />)}</div>}
+        {part.images.length > 0 && <div className="mb-2 flex flex-wrap gap-2">{part.images.map((image, at) => <Picture key={at} src={image.startsWith('data:') ? image : `/images/${profile}/${image}`} className="max-h-48 rounded-lg" />)}</div>}
         <Clamp text={part.text} lines={12}><p className="whitespace-pre-wrap text-sm leading-relaxed [overflow-wrap:anywhere]">{part.text}</p></Clamp>
       </div>
       <div className="flex max-w-[80%] items-center gap-1.5 pe-1 opacity-0 transition-opacity duration-200 focus-within:opacity-100 group-hover:opacity-100">{part.text && <CopyButton text={part.text} label="Copy message" />}<Time date={part.date} /></div>

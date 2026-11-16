@@ -2,6 +2,7 @@ import { useSyncExternalStore } from 'react';
 import { connect, type Client } from '../client.ts';
 import type { Command, Config, Line, Message, Method, ModelChoice, Params, Push, Result, Settings, Setup, Usage, WindowState } from '../protocol.ts';
 import { current } from '../window.ts';
+import type { Image } from './images.ts';
 import { calling, key, NO_TREE, path, read, toggled, type Tree } from './memory.ts';
 import { apply, idle, isMessage, isObject, merged, quiet, replay, stopped, without, words, type Live, type PiMessage } from './transcript.ts';
 
@@ -39,6 +40,8 @@ export interface State {
   config: Record<string, Config>;
   /** What each profile used, as last read: in the range that was last asked for. */
   usage: Record<string, Usage>;
+  /** The images that go with what is typed in each window, kept while you look at another one; not when the page is opened again. */
+  attached: Record<string, Image[]>;
   /** Why the last thing you asked for failed. */
   error?: string;
   /** The app's settings, and what a chat needs with whether it is there, once the server has said. */
@@ -60,7 +63,7 @@ export function title(window: WindowState, state: State) {
 }
 
 export class App {
-  state: State = { connection: 'connecting', profiles: [], tabs: [], windows: [], selected: {}, logs: {}, live: {}, sessions: {}, agents: {}, github: {}, models: {}, commands: {}, chats: {}, memory: {}, config: {}, usage: {} };
+  state: State = { connection: 'connecting', profiles: [], tabs: [], windows: [], selected: {}, logs: {}, live: {}, sessions: {}, agents: {}, github: {}, models: {}, commands: {}, chats: {}, memory: {}, config: {}, usage: {}, attached: {} };
   private client?: Client;
   private retrying?: ReturnType<typeof setTimeout>;
   private closed = false;
@@ -133,10 +136,11 @@ export class App {
     // A server that started again numbers its windows' records from one: what was kept of a window it does not have is let go.
     const here = (id: string) => windows.windows.some(window => window.id === id);
     const kept = <T>(by: Record<string, T>) => Object.fromEntries(Object.entries(by).filter(([id]) => here(id)));
-    // So is what was typed in one, or a new window with its number would have it. A main chat is the same one whenever it is
-    // opened, so what was typed in it stays.
-    this.keepAll(Object.fromEntries(Object.entries(this.drafts()).filter(([id]) => here(id) || names.some(name => mainOf(name) === id))));
-    this.set({ connection: 'open', profiles: names, tabs, profile, selected, windows: ordered(windows.windows), live: kept(this.state.live), sessions: kept(this.state.sessions), error: undefined });
+    // So is what was typed in one, and its images, or a new window with its number would have them. A main chat is the same
+    // one whenever it is opened, so what was typed in it stays.
+    const typed = <T>(by: Record<string, T>) => Object.fromEntries(Object.entries(by).filter(([id]) => here(id) || names.some(name => mainOf(name) === id)));
+    this.keepAll(typed(this.drafts()));
+    this.set({ connection: 'open', profiles: names, tabs, profile, selected, windows: ordered(windows.windows), live: kept(this.state.live), sessions: kept(this.state.sessions), attached: typed(this.state.attached), error: undefined });
     // Neither is waited for: looking for Pi takes a moment, and the chat does not need it to show.
     void this.ask('settings', {}).then(settings => settings && this.set({ settings }));
     void this.checkSetup();
@@ -153,7 +157,7 @@ export class App {
     const selected = gone && this.state.selected[window.profile] === window.id ? { ...this.state.selected, [window.profile]: mainOf(window.profile) } : this.state.selected;
     if (!gone) { this.set({ windows: ordered([...others, window]), selected }); return; }
     // What a closed window said and asked goes with it, and what was being typed in it.
-    this.keep(window.id, '');
+    this.keep(window.id, ''); this.attach(window.id, []);
     const { [window.id]: _run, ...live } = this.state.live, { [window.id]: _conversation, ...sessions } = this.state.sessions;
     for (const [key, deadline] of this.deadlines) if (key.startsWith(`${window.id} `)) { clearTimeout(deadline); this.deadlines.delete(key); }
     this.set({ windows: others, selected, live, sessions });
@@ -430,10 +434,11 @@ export class App {
     // A browser with no room left keeps nothing more: the text is in the box, and is lost only to a reload.
     try { this.storage().setItem(DRAFTS, JSON.stringify(Object.fromEntries(Object.entries(drafts).filter(([, text]) => text)))); } catch {}
   }
-  /** Sends your message. In a run it steers the agent, or with `later` waits until the agent has stopped. */
-  async send(window: string, text: string, later = false) {
+  attach(window: string, images: Image[]) { this.set({ attached: { ...this.state.attached, [window]: images } }); }
+  /** Sends your message, with its images. In a run it steers the agent, or with `later` waits until the agent has stopped. */
+  async send(window: string, text: string, later = false, images: Image[] = []) {
     this.quiet(window);
-    const answer = await this.ask('prompt', { window, text, whenBusy: later ? 'followUp' : 'steer' });
+    const answer = await this.ask('prompt', { window, text, images, whenBusy: later ? 'followUp' : 'steer' });
     // A message an extension answered itself (`handled`) was not sent, unless it is a command: pi-optchat refused it, and its
     // notice says why. So it is not lost, it counts as not sent.
     return answer !== undefined && (answer.disposition !== 'handled' || text.startsWith('/'));

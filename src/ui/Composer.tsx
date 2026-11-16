@@ -1,12 +1,13 @@
-import { CircleAlertIcon, CornerUpRightIcon, ListPlusIcon, XIcon } from 'lucide-react';
+import { CircleAlertIcon, CornerUpRightIcon, ImagePlusIcon, ListPlusIcon, XIcon } from 'lucide-react';
 import { useEffect, useImperativeHandle, useRef, useState, type Ref } from 'react';
 import type { PiRecord, WindowState } from '../protocol.ts';
 import { useCommands } from './Commands.tsx';
+import { address, image, KINDS, sorted } from './images.ts';
 import { escapes, label, useShortcuts } from './keys.ts';
 import { Model } from './Model.tsx';
 import { app, type State } from './store.ts';
 import { failure, news, quoted, recalled, type Item, type Live, type Notice } from './transcript.ts';
-import { Button, cn, Kbd, Spinner } from './ui.tsx';
+import { Button, cn, Kbd, Picture, Spinner } from './ui.tsx';
 
 /** A question from Pi or one of its extensions (`extension_ui_request`): a choice, a yes or no, or a line of text. Esc in it
  * says no, or cancels, as its first button does and as Esc does in Pi's terminal; the run it belongs to goes on. */
@@ -73,7 +74,7 @@ export function Queued({ messages, later = 0 }: { messages: readonly string[]; l
           <span className="me-1 flex items-center gap-1 text-muted-foreground text-xs leading-none">
             {index < messages.length - later ? <><CornerUpRightIcon className="size-3" />Steer · waiting to be read</> : <><ListPlusIcon className="size-3" />Queued for after this run</>}
           </span>
-          <p className="whitespace-pre-wrap rounded-2xl border border-muted-foreground/40 border-dashed px-3 py-2 text-muted-foreground text-sm [overflow-wrap:anywhere]">{message}</p>
+          <p className="whitespace-pre-wrap rounded-2xl border border-muted-foreground/40 border-dashed px-3 py-2 text-muted-foreground text-sm [overflow-wrap:anywhere]">{message || 'Image'}</p>
         </li>
       ))}
     </ol>
@@ -96,10 +97,20 @@ export function SendButton({ steer, ...props }: { steer: boolean; disabled: bool
  * (MIT, see THIRD_PARTY_NOTICES.md), over a plain textarea. */
 export function Composer({ state, window, live, chat, onSend, ref }: { state: State; window: WindowState; live: Live; chat: readonly Item[]; onSend?: () => void; ref?: Ref<{ quote: (said: string) => void }> }) {
   const [text, setText] = useState(() => app.draft(window.id)), [sending, setSending] = useState(false);
-  const area = useRef<HTMLTextAreaElement>(null);
+  const images = state.attached[window.id] ?? [], [refused, setRefused] = useState<string>(), [reading, setReading] = useState(0);
+  const area = useRef<HTMLTextAreaElement>(null), picker = useRef<HTMLInputElement>(null);
   const running = window.status === 'running', queued = [...live.queued.steering, ...live.queued.followUp];
   // What is typed is kept as it is typed (`app.draft`): while you look at another window, and when the page is opened again.
   const change = (value: string) => { setText(value); app.keep(window.id, value); };
+  const attached = () => app.state.attached[window.id] ?? [];
+  /** Files that were pasted, dropped or chosen go with the message as images; one that cannot says why, and the rest still do.
+   * Nothing is sent while one is being read, so a message never leaves without the image that was given first. */
+  const add = async (files: Iterable<File>) => {
+    const { taken, refused } = sorted(files, attached());
+    setRefused(refused.join(' ') || undefined); setReading(count => count + 1);
+    const added = await Promise.all(taken.map(image)).finally(() => setReading(count => count - 1));
+    app.attach(window.id, [...attached(), ...added]);
+  };
   useEffect(() => area.current?.focus(), [window.id]);
   const commands = useCommands(state, window, text, change, area);
   // What was selected in the chat goes under what is typed, as a quote, and the keys are after it.
@@ -107,10 +118,10 @@ export function Composer({ state, window, live, chat, onSend, ref }: { state: St
 
   const send = async (later: boolean) => {
     const message = text.trim();
-    if (!message || sending) return;
-    setSending(true); change(''); onSend?.();
-    // A message the server refused goes back where it was typed, before what was typed since.
-    if (!await app.send(window.id, message, later)) change([message, app.draft(window.id)].filter(Boolean).join('\n\n'));
+    if (!message && !images.length || sending || reading) return;
+    setSending(true); change(''); app.attach(window.id, []); setRefused(undefined); onSend?.();
+    // A message the server refused goes back where it was typed, with its images, before what was typed since.
+    if (!await app.send(window.id, message, later, images)) { change([message, app.draft(window.id)].filter(Boolean).join('\n\n')); app.attach(window.id, [...images, ...attached()]); }
     setSending(false);
   };
   const stop = async () => {
@@ -132,13 +143,28 @@ export function Composer({ state, window, live, chat, onSend, ref }: { state: St
         {window.error && window.status === 'stopped' && <Failure error={window.error} />}
         {/* However much Pi says, the box you type in stays on the page: past a few lines they scroll. */}
         {live.notices.length > 0 && <div className="flex max-h-40 flex-col gap-2 overflow-y-auto">{live.notices.map(notice => <Said key={notice.text} notice={notice} onDismiss={() => quiet(notice.text)} />)}</div>}
-        <div className="relative isolate rounded-2xl bg-card shadow-composer after:pointer-events-none after:absolute after:inset-0 after:rounded-[inherit] after:border after:border-black/8 dark:bg-(--surface-raised) dark:shadow-none dark:after:border-white/8">
+        <div onDragOver={event => { if (event.dataTransfer.types.includes('Files')) event.preventDefault(); }} onDrop={event => { if (event.dataTransfer.files.length) { event.preventDefault(); void add(event.dataTransfer.files); } }}
+          className="relative isolate rounded-2xl bg-card shadow-composer after:pointer-events-none after:absolute after:inset-0 after:rounded-[inherit] after:border after:border-black/8 dark:bg-(--surface-raised) dark:shadow-none dark:after:border-white/8">
+          {images.length > 0 && (
+            <ul aria-label="Images to send" className="flex flex-wrap gap-2.5 px-4 pt-3.5">
+              {images.map((picture, at) => (
+                <li key={at} className="relative">
+                  <Picture src={address(picture)} className="size-14 rounded-lg object-cover" />
+                  <button type="button" aria-label="Remove the image" onClick={() => app.attach(window.id, images.filter(other => other !== picture))} className="absolute -end-1.5 -top-1.5 rounded-full border bg-popover p-0.5 text-muted-foreground shadow-xs hover:text-foreground"><XIcon className="size-3" /></button>
+                </li>
+              ))}
+            </ul>
+          )}
+          {refused && <p role="alert" className="px-4 pt-3 text-error-foreground text-xs">{refused}</p>}
           <div ref={commands.root} className="relative px-4 pt-3.5 pb-2">
             {commands.menu}
             <textarea
               ref={area} value={text} rows={1} aria-label="Message" {...commands.field}
               placeholder={running ? 'Steer the agent, or queue a message for later' : window.role === 'main' ? 'Message the main chat' : window.completed ? 'A message starts a new connected window' : 'Message this window'}
               onChange={event => change(event.target.value)}
+              // A file that was copied is attached, and its name, which Finder copies with it, is not typed. Copied cells are
+              // text, a table and a picture of them: there the text is what is pasted.
+              onPaste={event => { const { files, types } = event.clipboardData; if (files.length && !(types.includes('text/plain') && types.includes('text/html'))) { event.preventDefault(); void add(files); } }}
               onKeyDown={event => {
                 // The list a `/` opens gets its keys first: the arrows, Tab and Enter.
                 if (commands.keyed(event)) return;
@@ -159,13 +185,15 @@ export function Composer({ state, window, live, chat, onSend, ref }: { state: St
                 : window.status === 'stopped' ? null
                 : news(live.status.optchat).join(' · ')}
             </p>
+            <input ref={picker} type="file" hidden multiple accept={KINDS.join()} onChange={event => { void add(event.target.files ?? []); event.target.value = ''; }} />
+            <Button variant="ghost-muted" size="icon-sm" aria-label="Attach an image" title="Attach an image" onClick={() => picker.current?.click()}><ImagePlusIcon /></Button>
             <Model state={state} window={window} />
-            {running && !text.trim() ? (
+            {running && !text.trim() && !images.length ? (
               <button type="button" aria-label="Stop the agent" title="Stop (Esc)" onClick={() => void stop()} className="flex size-8 shrink-0 items-center justify-center rounded-full bg-destructive/90 text-white shadow-destructive/24 shadow-xs inset-shadow-control-highlight transition-colors duration-150 hover:bg-destructive active:shadow-none">
                 <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor" aria-hidden="true"><rect x="2" y="2" width="8" height="8" rx="1.5" /></svg>
               </button>
             ) : (
-              <SendButton steer={running} disabled={!text.trim() || sending} onClick={() => void send(false)} />
+              <SendButton steer={running} disabled={!text.trim() && !images.length || sending || reading > 0} onClick={() => void send(false)} />
             )}
           </div>
         </div>

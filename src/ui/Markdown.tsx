@@ -8,7 +8,7 @@ import { splitMarkdownBlocks } from './markdownStreamBlocks.ts';
 import { dollars } from './math.ts';
 import { safe } from './safe.ts';
 import { csv } from './table.ts';
-import { Button, cn, CopyButton } from './ui.tsx';
+import { Button, cn, CopyButton, Picture } from './ui.tsx';
 
 const Line = memo(function Line({ tokens }: { tokens: Token[] }) {
   return tokens.map(({ text, color }, at) => <span key={at} style={{ color }}>{text}</span>);
@@ -66,6 +66,8 @@ function Table({ node, ...props }: ComponentProps<'table'> & ExtraProps) {
 }
 const components: Components = {
   ...safe,
+  // An image that is drawn, which only one of the profile's own is (`safe`), is shown large on a click; a link stays a link.
+  img: props => { const drawn = safe.img(props); return drawn.type === 'img' ? <Picture src={String(props.src)} alt={props.alt} /> : drawn; },
   pre: ({ node: _, ...props }) => <CodeBlock {...props} />,
   code: ({ node: _, className, ...props }) => className?.split(' ').includes('math-inline') ? <Formula tex={String(props.children ?? '')} display={false} /> : <code className={className} {...props} />,
   table: Table,

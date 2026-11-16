@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { homedir, hostname } from 'node:os';
 import { join } from 'node:path';
@@ -81,7 +82,8 @@ const status = (statusKey: string, statusText: string) => write({ type: 'extensi
 /** pi-optchat's role. `after`: when the conversation before this one was handed off, which it says from the next message on. */
 const role = (completed = false, after?: number) => status('optchat.role', JSON.stringify(joins ? { role: 'window', profile, id: 'w1', connected: true, completed, ...after !== undefined && { after } } : { role: 'owner', profile }));
 
-export type Content = { type: 'text'; text: string } | { type: 'thinking'; thinking: string } | { type: 'toolCall'; id: string; name: string; arguments: Record<string, unknown> };
+type Image = { type: 'image'; data: string; mimeType: string };
+export type Content = { type: 'text'; text: string } | Image | { type: 'thinking'; thinking: string } | { type: 'toolCall'; id: string; name: string; arguments: Record<string, unknown> };
 interface Said { role: string; content: Content[]; timestamp: number; stopReason?: string; errorMessage?: string; toolCallId?: string; toolName?: string; customType?: string; display?: boolean }
 const messages: Said[] = [];
 let completed = false, marked: number | undefined, after: number | undefined;
@@ -108,12 +110,21 @@ function picked() {
   if (model && !joins && existsSync(config)) writeFileSync(config, JSON.stringify({ ...JSON.parse(readFileSync(config, 'utf8')), main: { provider: model.provider, model: model.id, thinking: thinkingLevel } }));
 }
 
+/** An image's name in the profile: a hash of it, as pi-optchat names one (its images.ts). */
+const named = (image: Image) => createHash('sha256').update(image.data).digest('hex').slice(0, 16);
 /** The profile's log, as pi-optchat writes it: one entry for each thing a message said. */
 const main = join(process.env.OPTCHAT_HOME ?? '.', 'profiles', profile, 'main');
 let logged = existsSync(main) ? readdirSync(main).reduce((count, name) => count + readFileSync(join(main, name), 'utf8').split('\n').filter(Boolean).length, 0) : 0;
 function log(message: Said) {
   const entries: [string, string][] = [];
-  if (message.role === 'user') entries.push(['user', message.content.map(c => c.type === 'text' ? c.text : '').join('\n')]);
+  // An image is kept in the profile and named in the log by a hash of it, as pi-optchat does (its images.ts).
+  const kept = (image: Image) => {
+    const name = named(image);
+    mkdirSync(join(main, '../images'), { recursive: true });
+    writeFileSync(join(main, '../images', `${name}.${image.mimeType.replace('image/', '').replace('jpeg', 'jpg')}`), Buffer.from(image.data, 'base64'));
+    return `[image ${name}]`;
+  };
+  if (message.role === 'user') entries.push(['user', message.content.map(c => c.type === 'text' ? c.text : c.type === 'image' ? kept(c) : '').filter(Boolean).join('\n')]);
   if (message.role === 'toolResult') entries.push(['echo', `${message.toolName}: ${message.content.map(c => c.type === 'text' ? c.text : '').join('\n')}`]);
   if (message.role === 'assistant') {
     for (const c of message.content) if (c.type === 'text') entries.push(['talk', c.text]); else if (c.type === 'toolCall') entries.push(['tool', `${c.name} ${JSON.stringify(c.arguments)}`]);
@@ -127,7 +138,7 @@ function ended(message: Said) {
   messages.push(message);
   if (!joins) log(message);
 }
-const user = (text: string) => { const message: Said = { role: 'user', content: [{ type: 'text', text }], timestamp: now() }; write({ type: 'message_start', message }); ended(message); };
+const user = (text: string, images: Image[] = []) => { const message: Said = { role: 'user', content: [{ type: 'text', text }, ...images], timestamp: now() }; write({ type: 'message_start', message }); ended(message); };
 
 let running = false, settled = Promise.resolve(), steering: string[] = [], followUp: string[] = [], release: ((held: { aborted: boolean; answer?: string }) => void) | undefined;
 const held = () => new Promise<{ aborted: boolean; answer?: string }>(resolve => { release = held => { release = undefined; resolve(held); }; });
@@ -140,7 +151,7 @@ async function reply(content: Content[], stopReason: string, pause?: { at: numbe
   write({ type: 'message_start', message });
   const update = (assistantMessageEvent: object) => write({ type: 'message_update', assistantMessageEvent });
   for (const [contentIndex, block] of content.entries()) {
-    const text = block.type === 'text' ? block.text : block.type === 'thinking' ? block.thinking : JSON.stringify(block.arguments);
+    const text = block.type === 'text' ? block.text : block.type === 'thinking' ? block.thinking : block.type === 'toolCall' ? JSON.stringify(block.arguments) : '';
     const kind = block.type === 'toolCall' ? 'toolcall' : block.type, half = Math.ceil(text.length / 2);
     update({ type: `${kind}_start`, contentIndex, ...block.type === 'toolCall' && { id: block.id, toolName: block.name } });
     update({ type: `${kind}_delta`, contentIndex, delta: text.slice(0, half) });
@@ -161,11 +172,12 @@ function tool(call: Extract<Content, { type: 'toolCall' }>, output: string) {
   const message: Said = { role: 'toolResult', toolCallId: call.id, toolName: call.name, content: [{ type: 'text', text: output }], timestamp: now() };
   write({ type: 'message_start', message }); ended(message);
 }
-async function run(text: string) {
+async function run(text: string, images?: Image[]) {
   running = true;
   write({ type: 'agent_start' });
-  user(text);
-  let aborted = false, answer = 'reply';
+  user(text, images);
+  // Asked for a picture, it shows the ones it was sent, as the profile keeps them.
+  let aborted = false, answer = text.includes('picture') && images?.length ? images.map(image => `![yours](/images/${profile}/${named(image)})`).join(' ') : 'reply';
   if (text.includes('ask')) {
     write({ type: 'extension_ui_request', id: 'dialog-1', method: 'confirm', title: 'Go on?', message: 'The agent wants to continue.' });
     const answered = await held();
@@ -216,7 +228,7 @@ const commands: Record<string, (command: Record<string, unknown>) => unknown> = 
     return found.id === 'gpt-6.1-terra' ? new Promise(done => setTimeout(() => done(take()), 100)) : take();
   },
   set_thinking_level: ({ level }) => { if (model) thinkingLevel = clamp(levels(model), level as Thinking); picked(); },
-  prompt: ({ message, streamingBehavior }) => {
+  prompt: ({ message, images, streamingBehavior }) => {
     const text = String(message);
     if (text === '/complete') {
       // A reply being written is stopped first, and the handoff follows once that run has ended.
@@ -231,7 +243,7 @@ const commands: Record<string, (command: Record<string, unknown>) => unknown> = 
     if (completed) role(completed = false, after = marked); // The next message begins a new conversation, and pi-optchat says so, and from when, before the run.
     if (text.includes('crash')) { process.stderr.write('out of memory\n'); process.exit(3); }
     if (running) { (streamingBehavior === 'followUp' ? followUp : steering).push(text); write({ type: 'queue_update', steering, followUp }); return { disposition: 'queued' }; }
-    settled = run(text); return { disposition: 'started' };
+    settled = run(text, Array.isArray(images) ? images : []); return { disposition: 'started' };
   },
   release: () => { release?.({ aborted: false }); },
   clear_queue: () => {

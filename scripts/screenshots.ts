@@ -6,7 +6,7 @@ import { connect, type Client } from '../src/client.ts';
 import { startServer } from '../src/server/server.ts';
 // pi-optchat's own lock, which only Pi takes: here it stands for a Pi in a terminal.
 import { describeOwner, lockProfile } from 'pi-optchat/files';
-import { createProfile } from '../test/support.ts';
+import { createProfile, give, png } from '../test/support.ts';
 import { agents, CHANGES, demo, FORMULAS, limited, remember, seed, SHIPPED, SHIPPING, spend, TEAM } from './seed.ts';
 
 /** `npm run screenshots [directory] [--dark]`: a PNG of every main state of the UI, in /tmp/optchat-app-shots unless a directory
@@ -492,6 +492,25 @@ async function pictures(browser: Browser, control: Client) {
   await pick.keyboard.press('Escape');
   await pick.waitForTimeout(300);
   if (!await pick.getByRole('button', { name: 'Stop the agent' }).isVisible()) throw new Error('Esc in the memory view\'s search box stopped the run.');
+  // Images on their way with a message: two that go and one that cannot, then the message in the chat, and its image large.
+  const sends = async (page: Page) => {
+    await give(page, 'paste', [{ name: 'chart.png', type: 'image/png', data: png(240, [38, 99, 235]) }]);
+    await give(page, 'drop', [{ name: 'shot.png', type: 'image/png', data: png(240, [234, 138, 30]) }, { name: 'notes.pdf', type: 'application/pdf', data: Buffer.from('%PDF') }]);
+    await page.getByRole('list', { name: 'Images to send' }).getByRole('listitem').nth(1).waitFor();
+    await page.getByRole('textbox', { name: 'Message' }).fill('Which of these two pictures is the build chart?');
+  };
+  const pictures = await open(['empty']);
+  await sends(pictures);
+  await shot(pictures, '94-composer-images');
+  await pictures.keyboard.press('Enter');
+  await pictures.locator('img[src^="/images/empty/"]').nth(3).waitFor(); // Two of yours, and the two the reply shows.
+  await shot(pictures, '95-image-sent');
+  await pictures.getByRole('button', { name: 'Show the image large' }).first().click();
+  await shot(pictures, '96-image-large');
+  const pocket = await open(['long'], { dark: true, width: 420 });
+  await sends(pocket);
+  await shot(pocket, '97-composer-images-dark-narrow');
+
   // Nor this: what is typed and not sent is there when the page is opened again, and not once it is sent.
   const typed = await open(['notes']), box = typed.getByRole('textbox', { name: 'Message' });
   await box.fill('half a thought');

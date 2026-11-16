@@ -66,7 +66,7 @@ macOS asks once whether OptChat may read your Documents folder (or Desktop, Down
 
 ## Not there yet
 
-- The update's last step is not tried on a real app yet: the checks and the change of places are tested on small signed apps in a temporary folder, but not macOS's answer to an app in `/Applications` that replaces itself, nor the restart after it.
+- An update is tried on the real app only in a folder under `/tmp`, started by its path (macOS 27.2): it downloaded a newer build from a local address, replaced itself as it quit, and opened as the new one. Not tried: an app in `/Applications`, where macOS may refuse an app that changes itself (App Management), an app that was downloaded with a browser, and the two dialogs.
 - A way to look for an update when you ask, and the notice in the page instead of a dialog.
 
 - Windows and Linux: nothing here is tried on them, and the title bar is written for macOS.

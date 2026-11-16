@@ -1,7 +1,6 @@
 import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { accessSync, constants, createWriteStream, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
-import { rm } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { pipeline } from 'node:stream/promises';
 import { promisify } from 'node:util';
@@ -57,10 +56,11 @@ export function replaceable(bundle: string) {
   if (!bundle.endsWith('.app') || bundle.includes('/AppTranslocation/')) return false;
   try { accessSync(dirname(bundle), constants.W_OK); return true; } catch { return false; }
 }
-/** Removes what an update left beside the app: the app it replaced, or a download that was never put in place. */
-export const tidy = (bundle: string) => rm(beside(bundle), { recursive: true, force: true });
-
 const run = promisify(execFile);
+/** Removes what an update left beside the app: the app it replaced, or a download that was never put in place. With `rm` and
+ * not Node's own: in Electron, Node takes the `app.asar` in an app for a folder, and cannot remove the app around it. */
+export async function tidy(bundle: string) { await run('/bin/rm', ['-rf', beside(bundle)]); }
+
 /** Downloads the update's zip and makes the app in it ready beside `bundle`. The zip has to be as long as the release says and
  * have its sha256, so one cut off or changed on the way is not unpacked; and the app in it has to be signed and whole, as
  * macOS wants it to start it (`codesign --verify`: ad hoc, the signature says nothing of who made it. That it is ours is the

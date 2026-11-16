@@ -13,7 +13,7 @@ What the app is made of, what was decided, and what is built. The [README](../RE
 
 ```sh
 npm install
-npm start         # the page in a browser, at http://127.0.0.1:4780/
+npm start         # the page in a browser, at the address it prints (http://127.0.0.1:4780/#<token>)
 npm run desktop   # the desktop app, from this folder
 ```
 

@@ -5,8 +5,8 @@ A web page the local server serves: React, Vite and Tailwind, the same stack as 
 ## Run it
 
 ```bash
-npm start                 # builds the page, then serves it at http://127.0.0.1:4780/
-npm run dev               # the server, and Vite with hot reload (open the address Vite prints)
+npm start                 # builds the page, then serves it at the address it prints (http://127.0.0.1:4780/#<token>)
+npm run dev               # the server, and Vite with hot reload (open the address it prints: Vite's, with the token)
 npm run screenshots       # a PNG of every main state, in /tmp/optchat-app-shots
 ```
 

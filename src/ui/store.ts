@@ -9,7 +9,7 @@ import { apply, idle, isMessage, isObject, merged, quiet, replay, stopped, witho
 /** Everything the page knows, kept outside React: the connection to the server, and what it said. Components read it with
  * `useApp` and change it through `app`'s methods. */
 export interface State {
-  connection: 'connecting' | 'open' | 'lost';
+  connection: 'connecting' | 'open' | 'lost' | 'refused';
   /** The profiles on disk, the ones open as tabs, and the one in front. */
   profiles: string[];
   tabs: string[];
@@ -84,12 +84,13 @@ export class App {
     this.poll = poll;
   }
   /** Connects, and again a while after the connection is lost: windows live in the server, so nothing is lost with it. A socket
-   * that never opened closes too, so its closing is the one place that tries again, with one timer. */
+   * that never opened closes too, so its closing is the one place that tries again, with one timer. A server that refused the
+   * token started again since this page was opened (it has a new one), so trying again would never end. */
   async start(url: string) {
-    const lost = () => {
+    const lost = (refused: boolean) => {
       this.client = undefined;
-      this.set({ connection: 'lost' });
-      if (!this.closed) this.retrying ??= setTimeout(() => { this.retrying = undefined; void this.start(url); }, this.retry);
+      this.set({ connection: refused ? 'refused' : 'lost' });
+      if (!this.closed && !refused) this.retrying ??= setTimeout(() => { this.retrying = undefined; void this.start(url); }, this.retry);
     };
     try {
       this.client = await connect(url, push => this.receive(push), lost);
@@ -109,7 +110,7 @@ export class App {
   private set(patch: Partial<State>) {
     const before = this.state, next = { ...before, ...patch };
     // A lost connection is said once, for as long as it lasts: whatever fails meanwhile fails for that reason.
-    this.state = next.connection === 'lost' ? { ...next, error: undefined } : next;
+    this.state = next.connection === 'lost' || next.connection === 'refused' ? { ...next, error: undefined } : next;
     const { tabs, profile, selected } = this.state;
     if (tabs !== before.tabs || profile !== before.profile || selected !== before.selected) this.storage().setItem(SAVED, JSON.stringify({ tabs, profile, selected }));
     for (const listener of this.listeners) listener();

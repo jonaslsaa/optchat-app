@@ -1,4 +1,4 @@
-import { app, BrowserWindow, clipboard, dialog, Menu, powerSaveBlocker, screen, shell, type MessageBoxOptions } from 'electron';
+import { app, BrowserWindow, clipboard, dialog, Menu, powerSaveBlocker, screen, session, shell, type MessageBoxOptions } from 'electron';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -46,7 +46,7 @@ else {
   const count = (agents: number) => agents === 1 ? '1 agent is' : `${agents} agents are`;
   // The window never leaves the app's page, and there is no second window. A link opens in your browser, one to the app's
   // own server too (a picture, which a link opens in a tab of its own); anything that is not a web page goes nowhere.
-  const browse = (url: string) => { if (destination(url, server.page) !== 'nowhere') void shell.openExternal(url); };
+  const browse = (url: string) => { if (destination(url, server.page) !== 'nowhere') void shell.openExternal(new URL(url).href); };
   /** Where the window was when it was last closed. */
   const place = join(app.getPath('userData'), 'window.json');
   const open = () => {
@@ -99,6 +99,10 @@ else {
   void app.whenReady().then(() => {
     // The packaged app has its icon in it; run from the checkout, Electron would show its own.
     if (!app.isPackaged) app.dock?.setIcon(join(import.meta.dirname, '../../build/icon.png'));
+    // Electron grants a page every permission it asks for. This one needs only to copy text (`navigator.clipboard.writeText`).
+    const copies = (permission: string) => permission === 'clipboard-sanitized-write';
+    session.defaultSession.setPermissionRequestHandler((_contents, permission, done) => done(copies(permission)));
+    session.defaultSession.setPermissionCheckHandler((_contents, permission) => copies(permission));
     open();
     // A signal stops everything in order, as a quit does. Set only now: Electron sets handlers of its own for these as it
     // starts, which would quit as Cmd+Q does, and once only: whoever sets one last gets the signal.

@@ -34,12 +34,13 @@ export function newer(version: string, than: string) {
   const at = a.findIndex((part, i) => part !== b[i]);
   return at >= 0 && a[at] > b[at];
 }
-/** The update a release is for an app at `current`, if it is one: a newer version, with a zip for this machine's kind
- * (`OptChat-<version>-arm64.zip`) that GitHub has a sha256 of. A zip that cannot be checked is not taken. */
+/** The update a release is for an app at `current`, if it is one: a newer version, with that version's zip for this
+ * machine's kind (`OptChat-<version>-arm64.zip`) that GitHub has a sha256 of. A zip that cannot be checked is not taken. */
 export function offered(release: unknown, current: string, arch: string = process.arch): Update | undefined {
   if (!Value.Check(Release, release) || !newer(release.tag_name, current)) return undefined;
-  const zip = release.assets.find(asset => asset.name.endsWith(`-${arch}.zip`)), sha256 = /^sha256:([0-9a-f]{64})$/.exec(zip?.digest ?? '')?.[1];
-  return zip && sha256 ? { version: release.tag_name.replace(/^v/, ''), page: release.html_url, url: zip.browser_download_url, size: zip.size, sha256 } : undefined;
+  const version = release.tag_name.replace(/^v/, ''), zip = release.assets.find(asset => asset.name === `OptChat-${version}-${arch}.zip`);
+  const sha256 = /^sha256:([0-9a-f]{64})$/.exec(zip?.digest ?? '')?.[1];
+  return zip && sha256 ? { version, page: release.html_url, url: zip.browser_download_url, size: zip.size, sha256 } : undefined;
 }
 /** The latest release, when it is an update for an app at `current`. No answer (no network, a private repository) is none. */
 export async function latest(feed: string, current: string): Promise<Update | undefined> {

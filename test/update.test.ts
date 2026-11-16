@@ -19,8 +19,8 @@ test('a version is newer by its numbers, and one that is not three numbers is ne
 test('a release is an update when it is newer and has a zip for this machine that GitHub has a sha256 of', () => {
   const sha256 = 'ab'.repeat(32), asset = (name: string, digest: string | null = `sha256:${sha256}`) => ({ name, size: 7, digest, browser_download_url: `https://example.com/${name}`, state: 'uploaded' });
   const release = (...assets: object[]) => ({ tag_name: 'v0.2.0', html_url: 'https://example.com/v0.2.0', draft: false, assets });
-  const both = release(asset('OptChat-0.2.0-arm64.dmg'), asset('OptChat-0.2.0-x64.zip'), asset('OptChat-0.2.0-arm64.zip'));
-  // The zip of this machine's kind, not the dmg a person downloads and not another machine's.
+  const both = release(asset('OptChat-0.2.0-arm64.dmg'), asset('OptChat-0.2.0-x64.zip'), asset('OptChat-0.1.0-arm64.zip'), asset('OptChat-0.2.0-arm64.zip'));
+  // The zip of this version and this machine's kind: not the dmg a person downloads, another machine's, or an older one's.
   assert.deepEqual(offered(both, '0.1.9', 'arm64'), { version: '0.2.0', page: 'https://example.com/v0.2.0', url: 'https://example.com/OptChat-0.2.0-arm64.zip', size: 7, sha256 } satisfies Update);
   assert.equal(offered(both, '0.2.0', 'arm64'), undefined, 'the same version is not an update');
   assert.equal(offered(both, '0.3.0', 'arm64'), undefined, 'an older release is not an update');

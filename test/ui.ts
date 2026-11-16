@@ -17,9 +17,9 @@ process.env.FAKE_PI_HOME = join(home, 'pi');
 mkdirSync(join(home, 'pi', 'pi-optchat'), { recursive: true });
 writeFileSync(join(home, 'pi', 'pi-optchat', 'package.json'), JSON.stringify({ name: 'pi-optchat', version: '0.11.12' }));
 writeFileSync(join(home, 'pi', 'state.json'), JSON.stringify({ version: '1.5.2', providers: ['anthropic', 'openai'], packages: { 'npm:pi-optchat': join(home, 'pi', 'pi-optchat') } }));
-for (const name of ['chat', 'beside', 'sheet', 'memory', 'rows', 'menus', 'fields', 'asks']) {
+for (const name of ['chat', 'beside', 'sheet', 'memory', 'rows', 'menus', 'fields', 'asks', 'windows']) {
   const profile = createProfile(home, name);
-  if (name === 'memory') { writeMemory(profile, 16); continue; }
+  if (name === 'memory' || name === 'windows') { writeMemory(profile, 16); continue; }
   seed(profile, TEAM.length, Date.now(), TEAM);
   agents(profile, Date.now());
   // More that ended than the list shows at first.
@@ -261,6 +261,53 @@ test('a menu that lies over the page takes Esc and gives the focus back to its b
   assert.equal(await page.getByRole('dialog', { name: 'Model' }).count(), 0);
   assert.equal(await panel(page).getByText('Working ·').count(), 1, 'the agent works on');
   assert.equal(await back(page).count(), 1, 'its chat is still open');
+});
+
+test('the windows over a narrow chat are open for one pick: a window picked, a new one and Esc close them, and that Esc does nothing else', async () => {
+  const page = await open('windows', NARROW), over = page.getByRole('button', { name: 'Close the sidebar' }), beside = page.getByRole('navigation', { name: 'Windows' });
+  const closes = async (how: string, act: () => Promise<unknown>) => {
+    await page.keyboard.press('ControlOrMeta+b');
+    await over.waitFor();
+    await act();
+    await over.waitFor({ state: 'detached', timeout: 3000 }).catch(() => assert.fail(`${how} left the windows open over the chat.`));
+  };
+  await closes('Picking the window in front', () => beside.getByText('Main chat').click());
+  await run(page);
+  await closes('Esc', () => goesOn(page, 'over the windows'));
+  assert.equal(await focused(page), 'Toggle the sidebar');
+  // With the model list open under them, a press closes one of the two, and the next the other.
+  const models = page.getByRole('dialog', { name: 'Model' });
+  await page.getByRole('button', { name: 'Model' }).click();
+  await models.waitFor();
+  await page.keyboard.press('ControlOrMeta+b');
+  await over.waitFor();
+  await goesOn(page, 'with the model list and the windows open');
+  assert.equal(await models.count() + await over.count(), 1, 'one Esc closed one of the two');
+  await goesOn(page, 'with one of the two still open');
+  assert.equal(await models.count() + await over.count(), 0);
+  // A search of the memory under them keeps what it found.
+  const found = page.getByRole('region', { name: 'Messages found' });
+  await page.getByRole('radiogroup', { name: 'What the page shows' }).getByText('Memory').click();
+  await page.keyboard.press('ControlOrMeta+f');
+  await page.keyboard.type('message 1');
+  await found.waitFor();
+  await closes('Esc over a search', () => goesOn(page, 'over the windows, with a search under them'));
+  assert.equal(await found.count(), 1, 'the search under the windows is still on');
+  // A new window is the one in front, and the keys are in its box.
+  await closes('A new window', () => page.getByRole('button', { name: 'New window' }).click());
+  await page.getByRole('heading', { name: 'New connected window' }).waitFor();
+  assert.equal(await focused(page), 'Message');
+  // Left open and the page made wide, they stand beside the chat; made narrow again, they are not over it.
+  await page.keyboard.press('ControlOrMeta+b');
+  await over.waitFor();
+  await page.setViewportSize(WIDE);
+  await page.waitForTimeout(300);
+  assert.equal(await beside.count(), 1);
+  await page.setViewportSize(NARROW);
+  await page.waitForTimeout(300);
+  assert.equal(await beside.count(), 0, 'a window made narrow has the windows closed');
+  await page.setViewportSize(WIDE);
+  await beside.waitFor({ timeout: 3000 }).catch(() => assert.fail('The windows did not come back beside the chat in a wide window.'));
 });
 
 test('a field keeps the focus when Enter saves it, and when what was typed is refused', async () => {

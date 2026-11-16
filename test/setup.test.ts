@@ -246,10 +246,3 @@ test('an install that says all is well and leaves nothing there has failed', asy
   assert.partialDeepStrictEqual(job, { what: 'pi', state: 'failed' });
   assert.match(job?.line ?? '', /ran to its end, but what it was to install is not there/);
 });
-
-test('the fake Pi does not run in a home folder, so a test that forgot where its server runs fails and writes nothing there', () => {
-  // Its own home for the question, so nothing is started in yours.
-  const mine = mkdtempSync(join(home, 'home-'));
-  const { status, stderr } = spawnSync(process.execPath, [join(import.meta.dirname, 'fake-pi.ts'), '--version'], { cwd: mine, env: { ...process.env, HOME: mine }, encoding: 'utf8' });
-  assert.deepEqual([status, stderr.trim()], [70, 'The fake Pi was started in your home folder. Give the server a `cwd`.']);
-});

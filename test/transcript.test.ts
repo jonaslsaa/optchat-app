@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import type { Message, PiRecord } from '../src/protocol.ts';
-import { act, apply, chat, failure, idle, logged, merged, news, parts, replay, spoken, stopped, took, without, type Item, type PiMessage, type Tool } from '../src/ui/transcript.ts';
+import { act, apply, chat, failure, idle, logged, merged, news, parts, replay, spoken, stopped, took, without, worked, type Item, type PiMessage, type Tool } from '../src/ui/transcript.ts';
 
 const T = Date.UTC(2026, 0, 1), at = (seconds: number) => new Date(T + seconds * 1000).toISOString();
 const user = (seconds: number, text: string): PiMessage => ({ role: 'user', timestamp: T + seconds * 1000, content: [{ type: 'text', text }] });
@@ -191,6 +191,15 @@ test('an opened tool call shows what its line does not say, and no JSON for a ca
 test('how long a reply took is said in hours past an hour', () => {
   const after = (seconds: number) => took('2026-01-01T00:00:00Z', new Date(Date.UTC(2026, 0, 1) + seconds * 1000).toISOString());
   assert.deepEqual([42, 185, 4503].map(after), ['42s', '3m 05s', '1h 15m']);
+});
+
+test('a finished reply says how long its work took, and no time where the log has none to tell', () => {
+  const replies = (...messages: PiMessage[]) => parts(chat([], run(...messages.map(ended)))).flatMap(part => part.type === 'reply' ? worked(part) : []);
+  // Messages are dated when they begin. A reply of one message spans no time, however long it was written for.
+  assert.deepEqual(replies(user(0, 'tell me a story'), { ...reply(1, text('Once upon a')), stopReason: 'aborted' }), ['Stopped']);
+  assert.deepEqual(replies(user(0, 'check'), reply(1, bash('c1', 'one')), result(43, 'done'), reply(43, text('All good.'))), ['Worked for 42s']);
+  assert.deepEqual(replies(user(0, 'check'), reply(1, bash('c1', 'one')), result(3, 'done'), { ...reply(6, bash('c2', 'two')), stopReason: 'aborted' }), ['Stopped after 5s']);
+  assert.deepEqual(replies(user(0, 'check'), reply(1, bash('c1', 'one')), result(3, 'done'), { ...reply(4), stopReason: 'error', errorMessage: 'overloaded' }), ['Failed after 3s']);
 });
 
 test('a tool call that failed is marked so', () => {

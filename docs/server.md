@@ -20,7 +20,7 @@ npm run test:live         # real turns through your Pi and its model login, on t
 PI_OPTCHAT=<checkout> npm run test:live   # the same through a pi-optchat checkout, not the one installed in Pi
 ```
 
-Tests only ever use a throwaway `OPTCHAT_HOME` under `/tmp`, and a throwaway folder for the app's own files (`OPTCHAT_APP_HOME`).
+Tests only ever use a throwaway `OPTCHAT_HOME` under `/tmp`, and a throwaway folder for the app's own files (`OPTCHAT_APP_HOME`). `startServer` has to be told where its Pis run (`cwd`: a window's, and one that is only asked its version or its models), so no test starts one in your home folder; the app itself names that folder.
 
 ## The protocol
 

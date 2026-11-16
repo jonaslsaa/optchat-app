@@ -1,7 +1,7 @@
 import { BotIcon, ChevronRightIcon, EyeIcon, GlobeIcon, HistoryIcon, SearchIcon, SquarePenIcon, StickyNoteIcon, TerminalIcon, WrenchIcon, XIcon, type LucideIcon } from 'lucide-react';
 import { memo, useEffect, useState, type ReactNode } from 'react';
 import { Markdown } from './Markdown.tsx';
-import { act, took, type Part, type Step, type Tool } from './transcript.ts';
+import { act, took, worked, type Part, type Step, type Tool } from './transcript.ts';
 import { Button, cn, CopyButton, Spinner } from './ui.tsx';
 import { WorkLogDetails, WorkLogRow } from './WorkLog.tsx';
 
@@ -137,7 +137,7 @@ export const ReplyRow = memo(function ReplyRow({ part, working, latest }: { part
       {!working && steps.length > 0 && (
         <div className="border-border/60 border-b pt-1 pb-2">
           <Fold open={open} toggle={() => setOpen(!open)}>
-            {part.stopped ? 'Stopped after' : faults.length ? 'Failed after' : 'Worked for'} {took(part.from, part.to)}{tools.length > 0 && ` · ${tools.length} tool ${tools.length === 1 ? 'call' : 'calls'}`}
+            {worked(part)}{tools.length > 0 && ` · ${tools.length} tool ${tools.length === 1 ? 'call' : 'calls'}`}
             {failed > 0 && <span className="text-destructive-foreground">· {failed} failed</span>}
           </Fold>
         </div>

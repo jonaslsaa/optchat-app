@@ -1,7 +1,7 @@
 // The ledger's "Today" is by the clock on the wall, and the terminal's lines below were taken in UTC.
 process.env.TZ = 'UTC';
 import assert from 'node:assert/strict';
-import { copyFileSync, readFileSync, statSync } from 'node:fs';
+import { copyFileSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { connect } from '../src/client.ts';
@@ -53,6 +53,15 @@ test('the bars cover the range from its first spending to now, add up to its tot
   const nothing = { tokens: 0, cost: { main: 0, subagent: 0, compactor: 0, import: 0 } };
   assert.deepEqual(chart({ step: 'hour', bars: [{ start: '2026-11-16T23:00:00.000Z', ...nothing }, { start: '2026-11-17T00:00:00.000Z', ...nothing }] }, 'en-GB', 'UTC').ends, ['16 Nov, 23:00', '17 Nov, 00:00']);
   assert.deepEqual(chart(usage(work, 'All time', NOW), 'en-GB', 'UTC').ends, ['27 Oct', '16 Nov']);
+  // The night the clocks go back an hour comes twice (here 01:00 to 02:00 in New York, at 05:00 and at 06:00 UTC): the bars go on
+  // through both, five minutes each, and an answer in the second is in its own bar, not in the first hour's.
+  const night = createProfile(home, 'night'), at = (time: string) => `2026-11-01T${time}:00.000Z`;
+  writeFileSync(join(night, 'usage.jsonl'), [at('05:50'), at('06:35')].map(date => `${JSON.stringify({ date, role: 'main', model: 'claude-opus-5-5', usage: { input: 1, output: 1, cacheRead: 0, cacheWrite: 0, totalTokens: 2, cost: { input: 0, output: 1, cacheRead: 0, cacheWrite: 0, total: 1 } } })}\n`).join(''));
+  process.env.TZ = 'America/New_York';
+  try {
+    assert.deepEqual(usage(night, 'Last hour', Date.parse(at('06:45'))).bars.map(bar => [bar.start.slice(11, 16), bar.tokens]),
+      [['05:50', 2], ...['05:55', '06:00', '06:05', '06:10', '06:15', '06:20', '06:25', '06:30'].map(time => [time, 0]), ['06:35', 2], ['06:40', 0], ['06:45', 0]]);
+  } finally { process.env.TZ = 'UTC'; }
   const [main, subagents] = breakdown(today);
   assert.deepEqual([main.name, main.cost, main.share, main.out, main.cached, subagents.name, subagents.cost, subagents.share, subagents.out, subagents.cached], ['Main chat', '$0.31', '34%', '3.9k', '98%', 'Subagents', '$0.55', '60%', '11.8k', '90%']);
 });

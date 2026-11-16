@@ -20,10 +20,12 @@ const Metric = ({ label, value, more }: { label: string; value: string; more?: s
 type Rows = ReturnType<typeof breakdown>;
 /** Whose the cost was, as one bar. The list under it has every figure: the bar's parts speak only when pointed at. */
 function Shares({ rows }: { rows: Rows }) {
+  // As shares of the whole, which fill the bar whatever the sum is: dollars as they are leave it part empty under one dollar.
+  const total = rows.reduce((sum, row) => sum + row.dollars, 0);
   return (
     <>
       <div aria-hidden="true" className="flex h-2 gap-0.5">
-        {rows.filter(row => row.dollars > 0).map(row => <div key={row.role} title={`${row.name} · ${row.cost} · ${row.share}`} className={cn('h-full min-w-1 rounded-xs first:rounded-l-full last:rounded-r-full', row.colour)} style={{ flex: `${row.dollars} 1 0` }} />)}
+        {rows.filter(row => row.dollars > 0).map(row => <div key={row.role} title={`${row.name} · ${row.cost} · ${row.share}`} className={cn('h-full min-w-1 rounded-xs first:rounded-l-full last:rounded-r-full', row.colour)} style={{ flex: `${100 * row.dollars / total} 1 0` }} />)}
       </div>
       <ul aria-label="Cost by role" className="mt-2.5 flex flex-wrap gap-x-4 gap-y-1 text-xs">
         {rows.map(row => (
@@ -71,10 +73,13 @@ function Table({ rows }: { rows: Rows }) {
       {rows.map(row => (
         <tbody key={row.role} className="text-right tabular-nums">
           <tr className="border-border/50 border-b">
-            <th scope="rowgroup" className="py-2 text-left font-medium"><span aria-hidden="true" className={cn('me-2 inline-block size-2 rounded-xs', row.colour)} />{row.name}</th>
+            {/* A role with one model is one line, which names it: its model's line would say the same again. */}
+            <th scope="rowgroup" title={row.only} className="w-full max-w-0 truncate py-2 text-left font-medium">
+              <span aria-hidden="true" className={cn('me-2 inline-block size-2 rounded-xs', row.colour)} />{row.name}{row.only && <span className="ms-2 font-normal text-muted-foreground">{row.only}</span>}
+            </th>
             <td className={CELL}>{row.cost}</td><td className={cn(CELL, 'hidden sm:table-cell')}>{row.share}</td><td className={CELL}>{row.out}</td><td className={CELL}>{row.cached}</td>
           </tr>
-          {row.models.map(model => (
+          {!row.only && row.models.map(model => (
             <tr key={model.model} className="border-border/50 border-b text-muted-foreground">
               {/* A cell that may be narrower than its text, so a long name is cut and the figures stay in sight. */}
               <th scope="row" title={model.model} className="w-full max-w-0 truncate py-2 ps-4 text-left font-normal">{model.model}</th>
@@ -123,7 +128,8 @@ export function UsagePage({ state, profile, onClose }: { state: State; profile: 
         <p className="min-w-0 truncate text-muted-foreground text-sm">What <span className="font-medium text-foreground">{profile}</span> used</p>
         {usage && <Choice label="Period" name={`usage-${profile}`} options={usage.ranges.map(range => [range, range] as const)} value={range} onChange={setRange} />}
       </div>
-      {usage ? <Figures usage={usage} /> : <p className="py-8 text-center text-muted-foreground text-sm">Reading the ledger…</p>}
+      {/* Figures of another period than the one picked are on their way out, or stay if the server does not answer: dimmed, so they are not taken for it. */}
+      {usage ? <div aria-busy={usage.range !== range} className={cn(usage.range !== range && 'opacity-50')}><Figures usage={usage} /></div> : <p className="py-8 text-center text-muted-foreground text-sm">Reading the ledger…</p>}
       <footer className="flex flex-col gap-1 pt-4 text-muted-foreground text-xs">
         <p>Estimated at API prices, not your subscription bill.</p>
         {window?.outside && <p>A Pi in a terminal has this chat and tells the app nothing as it goes: read the usage again for what it has used since.</p>}

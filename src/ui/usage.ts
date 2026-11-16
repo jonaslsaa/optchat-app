@@ -26,10 +26,11 @@ export function short(n: number) {
 export const headline = ({ usage, cached }: Used) => `${dollars(usage.cost.total)} estimated · ${short(usage.totalTokens)} tokens · ${cached}% cached`;
 /** A line of the table: what it cost, its share of the whole, the tokens that came out and how much of what went in was cached. */
 const figures = ({ usage, cached }: Used, total: number) => ({ cost: dollars(usage.cost.total), share: `${total ? Math.round(100 * usage.cost.total / total) : 0}%`, out: short(usage.output), cached: `${cached}%` });
-/** The table: the roles that used something, in their order, each with its models, the dearest first. */
+/** The table: the roles that used something, in their order, each with its models, the dearest first, and the model's name
+ * where a role has `only` one: its line and the role's are then the same. */
 export function breakdown({ usage: { cost: { total } }, roles }: Pick<Usage, 'usage' | 'roles'>) {
   return ROLES.flatMap(names => roles.filter(({ role }) => role === names.role).map(role => ({
-    ...names, dollars: role.usage.cost.total, ...figures(role, total),
+    ...names, dollars: role.usage.cost.total, ...figures(role, total), only: role.models.length === 1 ? role.models[0].model : undefined,
     models: role.models.toSorted((a, b) => b.usage.cost.total - a.usage.cost.total).map(model => ({ model: model.model, ...figures(model, total) })),
   })));
 }

@@ -18,7 +18,7 @@ export function placed(saved: unknown, screens: readonly Bounds[]): Bounds | und
 }
 
 /** Says, each time the page's process is gone, after how long the page is loaded again: half a second, then one, then two,
- * and not at all after three times in a minute (T3 Code's numbers), since a page that crashes as it loads would be loaded
+ * and not at all after three times in a minute (as T3 Code does; the longer waits are ours), since a page that crashes as it loads would be loaded
  * for ever. A process that was ended on purpose (`clean-exit`), or that could not start, is not loaded again either. */
 export function recovery(most = 3, within = 60_000) {
   let times: number[] = [];

@@ -66,7 +66,7 @@ else {
       if (wait !== undefined) setTimeout(() => { if (!window.isDestroyed()) void load().catch(() => {}); }, wait);
     });
     // Shown once the page is there and marked: the first time it loads whole, which may be after a crash.
-    webContents.once('did-finish-load', () => window.show());
+    webContents.once('did-finish-load', () => { if (!leaving) window.show(); });
     void load().catch(() => {});
   };
   // Electron is ready only once this file has run to its end, so the window is not waited for here.
@@ -79,7 +79,7 @@ else {
     for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP'] as const) process.on(signal, () => { sure = true; app.quit(); });
     // The window closed, the app is still in the Dock, and a click on it there opens the window again.
     app.on('activate', () => { if (!current() && !leaving) open(); });
-    app.on('second-instance', () => { const window = current(); if (!window) open(); else { if (window.isMinimized()) window.restore(); window.focus(); } });
+    app.on('second-instance', () => { const window = current(); if (!window) { if (!leaving) open(); } else { if (window.isMinimized()) window.restore(); window.focus(); } });
     // The packaged app updates itself (update.ts): it looks soon after it opens and every four hours, downloads a newer
     // release without a word, and asks once. It never restarts on its own: a restart stops every Pi, as quitting does.
     if (app.isPackaged) {

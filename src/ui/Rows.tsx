@@ -47,7 +47,7 @@ function SkillChip({ skill: { name, path, body }, className }: { skill: Skill; c
   const look = 'flex max-w-full items-center gap-1 rounded-sm font-medium text-sm leading-relaxed';
   return (
     <div className={className}>
-      {body ? <button type="button" aria-expanded={open} title={path} onClick={() => setOpen(!open)} className={cn(look, 'cursor-pointer outline-none hover:underline hover:underline-offset-2 focus-visible:ring-2 focus-visible:ring-ring/70')}>{chip}</button>
+      {body ? <button type="button" data-skill aria-expanded={open} title={path} onClick={() => setOpen(!open)} className={cn(look, 'cursor-pointer outline-none hover:underline hover:underline-offset-2 focus-visible:ring-2 focus-visible:ring-ring/70')}>{chip}</button>
         : <span className={look}>{chip}</span>}
       {open && <p className="mt-1 whitespace-pre-wrap text-muted-foreground text-xs leading-relaxed [overflow-wrap:anywhere]">{body}</p>}
     </div>

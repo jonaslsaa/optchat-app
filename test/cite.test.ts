@@ -45,6 +45,8 @@ test('a message that runs a skill is its name and what was typed after it, as Pi
   const sent = `<skill name="sol-loop" location="${path}">\n${body}\n</skill>`;
   assert.deepEqual(skilled(`${sent}\n\nthe last commit\n\nand the one before`), { skill: { name: 'sol-loop', path, body }, text: 'the last commit\n\nand the one before' });
   assert.deepEqual(skilled(sent), { skill: { name: 'sol-loop', path, body }, text: '' });
+  // Sent with an image and no words, it is logged with the image's name a line under it.
+  assert.deepEqual(skilled(`${sent}\n[image 0123456789abcdef]`), { skill: { name: 'sol-loop', path, body }, text: '[image 0123456789abcdef]' });
   assert.deepEqual(skilled('/skill:sol-loop the last commit'), { skill: { name: 'sol-loop' }, text: 'the last commit' });
   assert.equal(typed(skilled(`${sent}\n\nthe last commit`).skill, 'the last commit'), '/skill:sol-loop the last commit');
   assert.equal(typed(skilled(sent).skill, ''), '/skill:sol-loop');

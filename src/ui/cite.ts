@@ -45,8 +45,9 @@ export function cited(message: string): { cites: Cite[]; text: string } {
 /** The skill a message runs: `/skill:name what was typed`, which Pi sends as the skill's file (`body`, from `path`) with what
  * was typed under it. A message as typed has only the name. */
 export interface Skill { name: string; path?: string; body?: string }
-// Pi's own format (its `parseSkillBlock`), and its rule for a name: up to the first space.
-const SKILL = /^<skill name="([^"]+)" location="([^"]+)">\n([\s\S]*?)\n<\/skill>(?:\n\n([\s\S]+))?$/, TYPED = /^\/skill:(\S+)(?: ([\s\S]*))?$/;
+// Pi's own format (its `parseSkillBlock`), with what was typed under it, or only the images sent with it (one newline, as
+// pi-optchat logs them); and Pi's rule for a name as typed: up to the first space.
+const SKILL = /^<skill name="([^"]+)" location="([^"]+)">\n([\s\S]*?)\n<\/skill>(?:\n\n?([\s\S]+))?$/, TYPED = /^\/skill:(\S+)(?: ([\s\S]*))?$/;
 /** The skill a message runs and what was typed after its name, as Pi sent it or as it was typed; and the message as it was
  * typed. Only a message that begins with a skill runs one. */
 export function skilled(message: string): { skill?: Skill; text: string } {

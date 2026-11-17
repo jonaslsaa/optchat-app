@@ -6,11 +6,11 @@
  * (a reply's work, a tool call, what the agent thought). What is folded shut is not on the page and is not searched. A long
  * message that is cut short is on the page whole, so it is searched whole, and opens when the match in it is the one shown.
  * The words of buttons, the times beside the messages and the line that says the agent is working are the page's, not the
- * chat's, and are left out; a file's name that opens the file is a button too, and so is the card of what a message cites,
- * and those are the chat's text all the same. */
+ * chat's, and are left out; a file's name that opens the file is a button too, and so are the card of what a message cites
+ * and the name of the skill it runs, and those are the chat's text all the same. */
 
 /** What holds text that is not the chat's. */
-const LEFT_OUT = 'button:not(.file-link, [data-cited]), time, svg, math, [data-no-find]';
+const LEFT_OUT = 'button:not(.file-link, [data-cited], [data-skill]), time, svg, math, [data-no-find]';
 /** Tags that begin a line of their own: a text does not run from one into the next. */
 const BLOCKS = new Set(['P', 'DIV', 'LI', 'UL', 'OL', 'PRE', 'TABLE', 'TR', 'TD', 'TH', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'BLOCKQUOTE', 'BR', 'HR', 'DETAILS', 'SUMMARY']);
 type Place = readonly [from: number, to: number];

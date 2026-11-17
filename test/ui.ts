@@ -766,6 +766,8 @@ test('what is selected in a reply, a report or a message is cited in the message
   await report.click({ clickCount: 3 });
   await cite.click();
   assert.deepEqual([await chips(), await box.inputValue(), await focused(page), await cite.count()], [['Nothing is replayed twice'], '', 'Message', 0]);
+  // The box has its caret too, so it is seen that the keys are in it: the selection is not taken away after they are put there.
+  assert.equal(await page.evaluate(() => getSelection()?.type), 'Caret', 'the box has the keys but no caret once something is cited');
   // A reply, with something typed already. Three clicks on its last paragraph select on into the row under it: the button is
   // at the paragraph's end all the same.
   await box.fill('About the agents:');

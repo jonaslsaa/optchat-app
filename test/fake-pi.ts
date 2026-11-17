@@ -259,7 +259,7 @@ const commands: Record<string, (command: Record<string, unknown>) => unknown> = 
     }
     if (completed) role(completed = false, after = marked); // The next message begins a new conversation, and pi-optchat says so, and from when, before the run.
     if (text.includes('crash')) { process.stderr.write('out of memory\n'); process.exit(3); }
-    if (running) { (streamingBehavior === 'followUp' ? followUp : steering).push(text); write({ type: 'queue_update', steering, followUp }); return { disposition: 'queued' }; }
+    if (running) { (streamingBehavior === 'followUp' ? followUp : steering).push(expanded(text)); write({ type: 'queue_update', steering, followUp }); return { disposition: 'queued' }; }
     settled = run(text, Array.isArray(images) ? images : []); return { disposition: 'started' };
   },
   release: () => { release?.({ aborted: false }); },

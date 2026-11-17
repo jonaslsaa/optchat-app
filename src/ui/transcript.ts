@@ -1,6 +1,6 @@
 import { said as recorded } from 'pi-optchat/core';
 import type { Message, PiRecord } from '../protocol.ts';
-import { cited, citing, skilled, typed, type Cite, type Skill } from './cite.ts';
+import { asTyped, yours, type Cite, type Skill } from './cite.ts';
 
 /** What the chat shows, and how it gets there. The chat is the profile's log: every item is a log entry, or what a message Pi
  * has not logged yet will be logged as, so a reply looks the same while it streams, after it is logged, and a year later.
@@ -305,7 +305,7 @@ function part(items: readonly Item[]): Part {
   }
   if (first.kind === 'user') {
     // A picture is named under what was typed. One that is named in what the message cites is the cited message's.
-    const { skill, text: rest } = skilled(first.text), { cites, text } = cited(rest);
+    const { skill, cites, text } = yours(first.text);
     return { ...common, type: 'user', date: first.date, cites, ...skill && { skill }, text: text.replace(IMAGE, '').trim(), images: first.images ?? [...text.matchAll(IMAGE)].map(match => match[1]) };
   }
   if (first.kind === 'note') return { ...common, type: 'note', text: first.text };
@@ -358,12 +358,12 @@ export function worked({ from, to, stopped, steps }: Extract<Part, { type: 'repl
 /** What ↑ (`back`) or ↓ in the composer brings back of what you said in the chat: the message before the one in the box or the
  * one after it, and an empty box after the newest. Only while the box is empty or holds one of them as it was sent, so the
  * key never takes what you are typing. A message sent twice is there once, where it was sent last. A message is here as it was
- * sent, with what it cites (`citing`). */
+ * typed, with what it cites (`asTyped`). */
 export function recalled(chat: readonly Item[], text: string, back: boolean) {
   // A picture you sent is not text to send again: the log names it, and a message as Pi has it says only that there was one.
   const said = chat.flatMap(item => {
-    const { skill, text: rest } = skilled(item.kind === 'user' ? item.text : ''), { cites, text } = cited(rest);
-    return typed(skill, citing(cites, text.replace(/\[image(?: [0-9a-f]{16})?\]/g, '').trim()).trim()) || [];
+    const said = yours(item.kind === 'user' ? item.text : '');
+    return asTyped({ ...said, text: said.text.replace(/\[image(?: [0-9a-f]{16})?\]/g, '').trim() }).trim() || [];
   });
   const past = [...new Set(said.reverse())], at = past.indexOf(text);
   if (text ? at < 0 : !back) return;

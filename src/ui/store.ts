@@ -3,7 +3,7 @@ import { connect, type Client } from '../client.ts';
 import type { Command, Config, Line, Message, Method, ModelChoice, Params, Push, Result, Settings, Setup, Updating, Usage, WindowState } from '../protocol.ts';
 import { current } from '../window.ts';
 import type { Image } from './images.ts';
-import { cited, skilled, typed } from './cite.ts';
+import { asTyped, yours } from './cite.ts';
 import { calling, key, NO_TREE, path, read, toggled, type Tree } from './memory.ts';
 import { apply, idle, isMessage, isObject, merged, quiet, replay, stopped, without, words, type Live, type PiMessage } from './transcript.ts';
 
@@ -63,8 +63,8 @@ export function title(window: WindowState, state: State) {
   if (window.role === 'main') return 'Main chat';
   const first = current(window, [...state.sessions[window.id] ?? [], ...state.live[window.id]?.messages ?? []]).find(message => message.role === 'user');
   // A message that only cites something is called by what it cites, and one that runs a skill as it was typed.
-  const { skill, text: rest } = skilled(first ? words(first.content) : ''), { cites, text } = cited(rest);
-  return first ? (typed(skill, text) || cites[0]?.text || '').split('\n')[0] : UNTITLED;
+  const said = yours(first ? words(first.content) : '');
+  return first ? ((said.skill ? asTyped(said) : said.text) || said.cites[0]?.text || '').split('\n')[0] : UNTITLED;
 }
 
 export class App {
@@ -458,7 +458,7 @@ export class App {
     this.quiet(window);
     // It is in the chat at once, as Pi will have it (`Live.sent`). Not a command, which is no message (a skill is one), and not in a run, where
     // it waits under the chat until the agent reads it (`queued`).
-    const shown = (!text.startsWith('/') || skilled(text).skill !== undefined) && this.window(window)?.status !== 'running';
+    const command = text.startsWith('/') && !yours(text).skill, shown = !command && this.window(window)?.status !== 'running';
     if (shown) this.live(window, live => ({ ...live, sent: { role: 'user', timestamp: Date.now(), content: [{ type: 'text', text }, ...images.map(({ data, mimeType }) => ({ type: 'image', data, mimeType }))] } }));
     const answer = await this.ask('prompt', { window, text, images, whenBusy: later ? 'followUp' : 'steer' });
     // Taken back unless it began a run, whose first record is Pi's copy of it: it was refused, it failed, or a run that began

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { appendFileSync, mkdirSync, readdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { after, before, test } from 'node:test';
-import { chromium, type Browser, type Page } from 'playwright-core';
+import { chromium, type Browser, type Locator, type Page } from 'playwright-core';
 import { build } from 'vite';
 import { agents, CHANGES, FILES, FORMULAS, NAMED, remember, seed, TEAM } from '../scripts/seed.ts';
 import type { Launch } from '../src/server/files.ts';
@@ -327,23 +327,44 @@ test('a message is in the chat the moment it is sent, with the agent at work und
   assert.deepEqual([await bubble.count(), await drawn?.evaluate(node => node.isConnected)], [1, true]);
 });
 
-test('a message that runs a skill shows the skill by its name over what was typed, its file only once the name is clicked, and copies as it was typed', async () => {
-  const page = await open('skills'), bubble = page.locator('.bg-message'), chip = bubble.getByRole('button', { name: 'sol-loop' });
+test('a message that runs a skill shows the skill by its name over what was typed, from the moment it is sent and while it waits; its file only once the name is clicked; and it copies and comes back as it was typed', async () => {
+  const page = await open('skills'), box = page.getByRole('textbox', { name: 'Message' }), bubble = page.locator('.bg-message').first(), chip = bubble.getByRole('button', { name: 'sol-loop' });
+  const lines = async (of: Locator) => (await of.innerText()).split(/\n+/);
+  const skill = async (key: string) => {
+    await box.fill('/skill:sol-loop');
+    await page.getByRole('listbox', { name: 'Commands' }).getByRole('option', { name: '/skill:sol-loop' }).waitFor();
+    await box.pressSequentially(' the last commit');
+    await page.keyboard.press(key);
+  };
   await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
-  const box = page.getByRole('textbox', { name: 'Message' });
-  await box.fill('/skill:sol-loop');
-  await page.getByRole('listbox', { name: 'Commands' }).getByRole('option', { name: '/skill:sol-loop' }).waitFor();
-  await box.pressSequentially(' the last commit');
-  await page.keyboard.press('Enter');
-  // Pi sends the skill's file with what was typed under it: the name is a button once that is the message.
+  // The row that is there at once, before Pi's copy (whose name opens the file), already has the chip.
+  await page.evaluate(() => new MutationObserver((_, observer) => {
+    const first = document.querySelector<HTMLElement>('.bg-message');
+    if (first) { document.body.dataset.first = JSON.stringify([...first.innerText.split(/\n+/), !!first.querySelector('[data-skill]')]); observer.disconnect(); }
+  }).observe(document.body, { childList: true, subtree: true }));
+  await skill('Enter');
   await chip.waitFor();
-  const lines = async () => (await bubble.innerText()).split(/\n+/);
-  assert.deepEqual(await lines(), ['sol-loop', 'the last commit']);
+  assert.deepEqual(JSON.parse(await page.evaluate(() => document.body.dataset.first ?? 'null')), ['sol-loop', 'the last commit', false]);
+  assert.deepEqual(await lines(bubble), ['sol-loop', 'the last commit']);
+  // ⌘F finds the skill by its name, and not in its file, which is shut.
+  await page.keyboard.press('ControlOrMeta+f');
+  await page.keyboard.type('sol-loop');
+  await page.getByRole('search', { name: 'Find in chat' }).locator('[aria-live]').getByText('1/1', { exact: true }).waitFor({ timeout: 3000 });
+  await page.keyboard.press('Escape');
   await chip.click();
-  assert.deepEqual(await lines(), ['sol-loop', 'References are relative to /home/.agents/skills/sol-loop.', '# sol-loop', 'Review a code change in a loop with an OpenAI GPT Sol subagent and fix what it finds, before (or after) opening a PR. Use when the user says "sol loop".', 'the last commit']);
+  assert.deepEqual(await lines(bubble), ['sol-loop', 'References are relative to /home/.agents/skills/sol-loop.', '# sol-loop', 'Review a code change in a loop with an OpenAI GPT Sol subagent and fix what it finds, before (or after) opening a PR. Use when the user says "sol loop".', 'the last commit']);
   await bubble.hover();
   await page.getByRole('button', { name: 'Copy message' }).click();
   assert.equal(await page.evaluate(() => navigator.clipboard.readText()), '/skill:sol-loop the last commit');
+  // Sent in a run, it waits as Pi has it, the skill's file: shown by its name, and taken back with ⌥↑ as it was typed.
+  await run(page);
+  await skill('Enter');
+  const waiting = page.getByLabel('Messages waiting for the agent').locator('p');
+  await waiting.getByRole('button', { name: 'sol-loop' }).waitFor();
+  assert.deepEqual(await lines(waiting), ['sol-loop', 'the last commit']);
+  await page.keyboard.press('Alt+ArrowUp');
+  await waiting.waitFor({ state: 'detached' });
+  assert.equal(await box.inputValue(), '/skill:sol-loop the last commit');
   await page.context().close();
 });
 

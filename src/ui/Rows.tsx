@@ -1,11 +1,11 @@
-import { BotIcon, BoxIcon, CheckIcon, ChevronRightIcon, CircleSlashIcon, EyeIcon, GlobeIcon, HistoryIcon, SearchIcon, SquarePenIcon, StickyNoteIcon, TerminalIcon, WrenchIcon, XIcon, type LucideIcon } from 'lucide-react';
+import { BotIcon, CheckIcon, ChevronRightIcon, CircleSlashIcon, EyeIcon, GlobeIcon, HistoryIcon, SearchIcon, SquarePenIcon, StickyNoteIcon, TerminalIcon, WrenchIcon, XIcon, type LucideIcon } from 'lucide-react';
 import { createContext, memo, useContext, useEffect, useState, type ReactNode } from 'react';
 import { flushSync } from 'react-dom';
 import { working as agentWorks } from '../agent.ts';
 import type { Agent } from '../protocol.ts';
 import { among, doing, named, stood } from './agents.ts';
-import { CiteCard } from './Cite.tsx';
-import { citing, typed, type Place, type Skill } from './cite.ts';
+import { CiteCard, SkillChip } from './Cite.tsx';
+import { asTyped, type Place } from './cite.ts';
 import { Markdown } from './Markdown.tsx';
 import { act, started, took, worked, type Part, type Step, type Thinking, type Tool } from './transcript.ts';
 import { Button, cn, CopyButton, Picture, Spinner, StatusDot } from './ui.tsx';
@@ -40,23 +40,10 @@ function Clamp({ text, lines, children }: { text: string; lines: number; childre
   );
 }
 
-/** The skill a message runs, by its name (T3 Code's skill chip, MIT, see THIRD_PARTY_NOTICES.md). Its file, as Pi sent it, is
- * shut away under the name, which opens it; a message not in Pi's log yet has only the name. */
-function SkillChip({ skill: { name, path, body }, className }: { skill: Skill; className?: string }) {
-  const [open, setOpen] = useState(false), chip = <><BoxIcon className="size-3.5 shrink-0" /><span className="min-w-0 truncate">{name}</span></>;
-  const look = 'flex max-w-full items-center gap-1 rounded-sm font-medium text-sm leading-relaxed';
-  return (
-    <div className={className}>
-      {body ? <button type="button" data-skill aria-expanded={open} title={path} onClick={() => setOpen(!open)} className={cn(look, 'cursor-pointer outline-none hover:underline hover:underline-offset-2 focus-visible:ring-2 focus-visible:ring-ring/70')}>{chip}</button>
-        : <span className={look}>{chip}</span>}
-      {open && <p className="mt-1 whitespace-pre-wrap text-muted-foreground text-xs leading-relaxed [overflow-wrap:anywhere]">{body}</p>}
-    </div>
-  );
-}
 /** Your message: a bubble on the right, with the images you sent. */
 export const UserRow = memo(function UserRow({ part, profile, onPlace }: { part: Of<'user'>; profile: string; onPlace?: (at: Place) => void }) {
   // The message as it was sent: copied, it is pasted into the box as it was, with what it cites and the skill as it was typed.
-  const sent = typed(part.skill, citing(part.cites, part.text));
+  const sent = asTyped(part);
   return (
     <div className="group flex flex-col items-end gap-1 pt-2 pb-1">
       <div className="relative min-w-0 max-w-[80%] rounded-2xl bg-message p-3 text-message-foreground">

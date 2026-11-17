@@ -1,8 +1,8 @@
 import { CircleAlertIcon, CornerUpRightIcon, ImagePlusIcon, ListPlusIcon, QuoteIcon, XIcon } from 'lucide-react';
 import { useEffect, useImperativeHandle, useMemo, useRef, useState, type Ref } from 'react';
 import type { PiRecord, WindowState } from '../protocol.ts';
-import { CiteCard } from './Cite.tsx';
-import { called, cited, citing, joined, type Cite } from './cite.ts';
+import { CiteCard, SkillChip } from './Cite.tsx';
+import { called, cited, citing, joined, yours, type Cite } from './cite.ts';
 import { useCommands } from './Commands.tsx';
 import { address, image, KINDS, sorted } from './images.ts';
 import { escapes, label, matches, useShortcuts } from './keys.ts';
@@ -72,14 +72,14 @@ export function Queued({ messages, later = 0, editable = false }: { messages: re
   if (!messages.length) return null;
   return (
     <ol aria-label="Messages waiting for the agent" className="flex flex-col items-end gap-2 pb-1">
-      {messages.map(cited).map(({ cites, text }, index) => (
+      {messages.map(yours).map(({ skill, cites, text }, index) => (
         <li key={index} className="flex min-w-0 max-w-[80%] flex-col items-end gap-0.5">
           <span className="me-1 flex items-center gap-1 text-muted-foreground text-xs leading-none">
             {index < messages.length - later ? <><CornerUpRightIcon className="size-3" />Steer · waiting to be read</> : <><ListPlusIcon className="size-3" />Queued for after this run</>}
             {editable && !index && <> · <Kbd>{label('alt+↑')}</Kbd> edit</>}
           </span>
           <p className="flex flex-col gap-1.5 whitespace-pre-wrap rounded-2xl border border-muted-foreground/40 border-dashed px-3 py-2 text-muted-foreground text-sm [overflow-wrap:anywhere]">
-            {cites.map((cite, at) => <CiteCard key={at} cite={cite} />)}{(text || !cites.length) && <span>{text || 'Image'}</span>}
+            {skill && <SkillChip skill={skill} />}{cites.map((cite, at) => <CiteCard key={at} cite={cite} />)}{(text || !cites.length && !skill) && <span>{text || 'Image'}</span>}
           </p>
         </li>
       ))}

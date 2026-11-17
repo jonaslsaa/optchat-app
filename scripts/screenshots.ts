@@ -556,6 +556,16 @@ async function pictures(browser: Browser, control: Client) {
     await page.getByRole('button', { name: 'sol-loop' }).click();
     await shot(page, '164-skill-opened');
   }
+  // And one sent in a run, waiting under the chat as Pi has it: by its name too.
+  const steering = await open(['skills']);
+  await say(steering, 'wait');
+  await steering.getByRole('button', { name: 'Stop the agent' }).waitFor();
+  await steering.getByRole('textbox', { name: 'Message' }).fill('/skill:use-codex');
+  await steering.getByRole('option', { name: '/skill:use-codex' }).waitFor();
+  await steering.getByRole('textbox', { name: 'Message' }).pressSequentially(' is the fix right?');
+  await steering.keyboard.press('Enter');
+  await steering.getByLabel('Messages waiting for the agent').getByRole('button', { name: 'use-codex' }).waitFor();
+  await shot(steering, '165-skill-waiting');
   // Formulas in a reply, a price beside them as written, and a table with its copy buttons.
   for (const [name, options] of [['91-formulas-and-table', {}], ['92-formulas-and-table-dark', { dark: true }], ['93-formulas-and-table-narrow', { width: 420 }]] as const) {
     const page = await open(['formulas'], options);

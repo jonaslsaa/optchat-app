@@ -5,7 +5,7 @@ import { CiteCard } from './Cite.tsx';
 import { called, cited, citing, joined, type Cite } from './cite.ts';
 import { useCommands } from './Commands.tsx';
 import { address, image, KINDS, sorted } from './images.ts';
-import { escapes, label, useShortcuts } from './keys.ts';
+import { escapes, label, matches, useShortcuts } from './keys.ts';
 import { Model } from './Model.tsx';
 import { app, type State } from './store.ts';
 import { failure, news, recalled, type Item, type Live, type Notice } from './transcript.ts';
@@ -66,8 +66,9 @@ function Said({ notice: { text, kind }, onDismiss }: { notice: Notice; onDismiss
   );
 }
 
-/** Your messages an agent has not read yet, under its chat: the last `later` of them wait for its run to end. */
-export function Queued({ messages, later = 0 }: { messages: readonly string[]; later?: number }) {
+/** Your messages an agent has not read yet, under its chat: the last `later` of them wait for its run to end. Where ⌥↑ takes
+ * them back into the box (`editable`), the first says so. */
+export function Queued({ messages, later = 0, editable = false }: { messages: readonly string[]; later?: number; editable?: boolean }) {
   if (!messages.length) return null;
   return (
     <ol aria-label="Messages waiting for the agent" className="flex flex-col items-end gap-2 pb-1">
@@ -75,6 +76,7 @@ export function Queued({ messages, later = 0 }: { messages: readonly string[]; l
         <li key={index} className="flex min-w-0 max-w-[80%] flex-col items-end gap-0.5">
           <span className="me-1 flex items-center gap-1 text-muted-foreground text-xs leading-none">
             {index < messages.length - later ? <><CornerUpRightIcon className="size-3" />Steer · waiting to be read</> : <><ListPlusIcon className="size-3" />Queued for after this run</>}
+            {editable && !index && <> · <Kbd>{label('alt+↑')}</Kbd> edit</>}
           </span>
           <p className="flex flex-col gap-1.5 whitespace-pre-wrap rounded-2xl border border-muted-foreground/40 border-dashed px-3 py-2 text-muted-foreground text-sm [overflow-wrap:anywhere]">
             {cites.map((cite, at) => <CiteCard key={at} cite={cite} />)}{(text || !cites.length) && <span>{text || 'Image'}</span>}
@@ -132,11 +134,19 @@ export function Composer({ state, window, live, chat, onSend, ref }: { state: St
     if (!await app.send(window.id, message, later, images)) { keep(joined([message, app.draft(window.id)])); app.attach(window.id, [...images, ...attached()]); }
     setSending(false);
   };
-  const stop = async () => {
+  // What the agent had not read yet is back in the box, in front of what was typed since, as Pi's terminal puts it back: on
+  // Esc, which stops the run, and on ⌥↑, which lets it go on.
+  const takeBack = async (method: 'abort' | 'dequeue') => {
+    const waiting = await app.takeBack(window.id, method);
+    if (!waiting.length) return;
+    keep(joined([...waiting, app.draft(window.id)]));
+    // The caret is at the end, once the box holds it: also where only its citations changed, which leave the text as it was.
+    requestAnimationFrame(() => area.current?.setSelectionRange(area.current.value.length, area.current.value.length));
+  };
+  const stop = () => {
     // The button that stops is gone once it has: the focus is where the next message is typed.
     area.current?.focus();
-    const waiting = await app.stop(window.id);
-    if (waiting.length) keep(joined([...waiting, app.draft(window.id)]));
+    return takeBack('abort');
   };
   // The button that dismissed is gone with its notice: the focus is where the next message is typed.
   const quiet = (text?: string) => { area.current?.focus(); app.quiet(window.id, text); };
@@ -146,7 +156,7 @@ export function Composer({ state, window, live, chat, onSend, ref }: { state: St
   return (
     <div data-keys="chat" className="shrink-0 px-3 pb-3 sm:px-12 sm:pb-4">
       <div className="mx-auto flex w-full max-w-(--chat-content-max-width) flex-col gap-2">
-        <Queued messages={queued} later={live.queued.followUp.length} />
+        <Queued messages={queued} later={live.queued.followUp.length} editable />
         {live.dialogs.map(dialog => <Dialog key={String(dialog.id)} window={window.id} dialog={dialog} />)}
         {window.error && window.status === 'stopped' && <Failure error={window.error} />}
         {/* However much Pi says, the box you type in stays on the page: past a few lines they scroll. */}
@@ -189,6 +199,8 @@ export function Composer({ state, window, live, chat, onSend, ref }: { state: St
                 if (commands.keyed(event)) return;
                 // Backspace in an empty box takes the last citation off, as it would the letter before the caret.
                 if (event.key === 'Backspace' && !text && cites.length) { event.preventDefault(); keep(citing(cites.slice(0, -1), '')); return; }
+                // ⌥↑ takes the messages still waiting back into the box, to be edited and sent again; the run goes on.
+                if (queued.length && matches(event, 'alt+arrowup') && !event.nativeEvent.isComposing) { event.preventDefault(); void takeBack('dequeue'); return; }
                 if (event.shiftKey || event.altKey || event.nativeEvent.isComposing) return;
                 if (event.key === 'Enter') { event.preventDefault(); void send(event.metaKey || event.ctrlKey); }
                 // ↑ on the first line and ↓ on the last go through what you said; on a line between, they move in the text.

@@ -150,6 +150,15 @@ async function pictures(browser: Browser, control: Client) {
   await say(work, 'Then open the pull request', 'ControlOrMeta+Enter');
   await work.getByText('Queued for after this run').waitFor();
   await shot(work, '05-queued-messages');
+  // ⌥↑ takes them back into the box while the run goes on; sent again as they were, the run ends as before.
+  await work.keyboard.press('Alt+ArrowUp');
+  await work.getByLabel('Messages waiting for the agent').waitFor({ state: 'detached' });
+  await shot(work, '05b-queued-taken-back');
+  await work.getByRole('textbox', { name: 'Message' }).fill('');
+  await say(work, 'Also check the tests before you finish');
+  await work.getByText('waiting to be read').waitFor();
+  await say(work, 'Then open the pull request', 'ControlOrMeta+Enter');
+  await work.getByText('Queued for after this run').waitFor();
   await control.request('command', { window: 'work/main', command: { type: 'release' } });
   await work.getByText('Next I would wire the agents panel.').waitFor();
   await work.getByText('Opened the pull request').waitFor();

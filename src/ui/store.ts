@@ -470,9 +470,10 @@ export class App {
   }
   /** Takes a notice off the page, or all of a window's: they stand until they are dismissed or the next message is sent. */
   quiet(window: string, text?: string) { this.live(window, live => quiet(live, text)); }
-  /** Stops the run, and gives back the messages that were still waiting, so they are not lost. */
-  async stop(window: string) {
-    const queued = await this.ask('abort', { window });
+  /** Stops the run (`abort`), or takes back what it has not read and lets it go on (`dequeue`): either gives back the messages
+   * that were still waiting, so they are not lost. */
+  async takeBack(window: string, method: 'abort' | 'dequeue') {
+    const queued = await this.ask(method, { window });
     return queued ? [...queued.steering, ...queued.followUp] : [];
   }
   async complete(window: string) { await this.ask('complete', { window }); }

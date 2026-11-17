@@ -99,9 +99,11 @@ export class Windows {
     // pi-optchat's command, typed as a message, is Complete all the same.
     return answered('prompt', methods.prompt.result, await (text.trim() === '/complete' ? this.handingOff(opened, send) : send()));
   }
+  async dequeue({ window }: Params<'dequeue'>): Promise<Result<'dequeue'>> {
+    return answered('clear_queue', methods.dequeue.result, await this.running(window).request({ type: 'clear_queue' }));
+  }
   async abort({ window }: Params<'abort'>): Promise<Result<'abort'>> {
-    const pi = this.running(window);
-    const queued = answered('clear_queue', methods.abort.result, await pi.request({ type: 'clear_queue' }));
+    const pi = this.running(window), queued = await this.dequeue({ window });
     await pi.request({ type: 'abort' });
     return queued;
   }

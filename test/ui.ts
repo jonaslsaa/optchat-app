@@ -21,9 +21,9 @@ process.env.FAKE_PI_HOME = join(home, 'pi');
 mkdirSync(join(home, 'pi', 'pi-optchat'), { recursive: true });
 writeFileSync(join(home, 'pi', 'pi-optchat', 'package.json'), JSON.stringify({ name: 'pi-optchat', version: '0.11.13' }));
 writeFileSync(join(home, 'pi', 'state.json'), JSON.stringify({ version: '1.5.2', providers: ['anthropic', 'openai'], packages: { 'npm:pi-optchat': join(home, 'pi', 'pi-optchat') } }));
-for (const name of ['bar', 'cold', 'colder', 'chat', 'beside', 'sheet', 'memory', 'rows', 'menus', 'fields', 'asks', 'windows', 'importing', 'keys', 'spend', 'commands', 'arrows', 'mute', 'said', 'images', 'tabs', 'slow', 'inline', 'held']) {
+for (const name of ['bar', 'cold', 'colder', 'chat', 'beside', 'sheet', 'memory', 'rows', 'menus', 'fields', 'asks', 'windows', 'importing', 'keys', 'spend', 'commands', 'arrows', 'mute', 'said', 'images', 'tabs', 'slow', 'inline', 'held', 'unread']) {
   const profile = createProfile(home, name);
-  if (['bar', 'cold', 'colder', 'memory', 'windows', 'keys', 'spend', 'arrows'].includes(name)) { writeMemory(profile, 16); continue; }
+  if (['bar', 'cold', 'colder', 'memory', 'windows', 'keys', 'spend', 'arrows', 'unread'].includes(name)) { writeMemory(profile, 16); continue; }
   seed(profile, TEAM.length, Date.now(), TEAM);
   agents(profile, Date.now());
   // More that ended than the list shows at first.
@@ -135,6 +135,39 @@ test('Esc stops the run when the keys are in the chat, or outside every part tha
   await stop(page).click();
   await stop(page).waitFor({ state: 'detached' });
   assert.equal(await focused(page), 'Message');
+});
+
+test('⌥↑ takes the messages still waiting back into the box, in front of what is typed, and the run goes on', async () => {
+  const page = await open('unread'), box = page.getByRole('textbox', { name: 'Message' }), waiting = page.getByLabel('Messages waiting for the agent');
+  await run(page);
+  await box.fill('Check the tests first');
+  await page.keyboard.press('Enter');
+  await waiting.getByText('Check the tests first').waitFor();
+  await box.fill('Then open the pull request');
+  await page.keyboard.press('ControlOrMeta+Enter');
+  await waiting.getByText('Then open the pull request').waitFor();
+  await box.fill('and say why');
+  await page.keyboard.press('Alt+ArrowUp');
+  await waiting.waitFor({ state: 'detached', timeout: 5000 }).catch(() => assert.fail('⌥↑ left the messages waiting.'));
+  assert.equal(await box.inputValue(), 'Check the tests first\n\nThen open the pull request\n\nand say why');
+  assert.deepEqual([await focused(page), await box.evaluate((area: HTMLTextAreaElement) => area.selectionStart === area.value.length)], ['Message', true]);
+  await page.waitForTimeout(300);
+  assert.ok(await page.getByRole('button', { name: 'Steer the agent' }).isVisible(), '⌥↑ stopped the run.');
+  // With nothing waiting the key is the text's, as it was.
+  await page.evaluate(() => addEventListener('keydown', event => { document.body.dataset.kept = String(event.defaultPrevented); }));
+  await page.keyboard.press('Alt+ArrowUp');
+  assert.deepEqual([await page.evaluate(() => document.body.dataset.kept), await box.inputValue()], ['false', 'Check the tests first\n\nThen open the pull request\n\nand say why']);
+  // A message that only cites comes back as its chip, and the caret goes to the end of what is typed, which did not change.
+  await box.fill('<cite>the line</cite>\n');
+  await page.keyboard.press('Enter');
+  await waiting.waitFor();
+  await box.fill('abc');
+  await box.evaluate((area: HTMLTextAreaElement) => area.setSelectionRange(1, 1));
+  await page.keyboard.press('Alt+ArrowUp');
+  await waiting.waitFor({ state: 'detached' });
+  await page.getByLabel('Cited in the message').getByText('the line').waitFor();
+  await page.waitForFunction(() => document.querySelector<HTMLTextAreaElement>('textarea[aria-label=Message]')?.selectionStart === 3, null, { timeout: 2000 }).catch(() => assert.fail('The caret stayed where it was.'));
+  assert.equal(await box.inputValue(), 'abc');
 });
 
 test('the usage page closes on Esc and the run goes on, and it reads the ledger again when the main chat changes', async () => {

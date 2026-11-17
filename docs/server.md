@@ -47,6 +47,7 @@ The client sends `{ id, method, params }` and gets `{ id, result }` or `{ id, er
 | `windows` | Every window and its state. |
 | `open { profile, role?, cwd? }` | The profile's main window (always the same one), or a new connected window. Starts nothing. `cwd` is where the window runs, set when it is first opened. |
 | `prompt { window, text, images?, whenBusy? }` | Sends your message, starting the window's Pi if it has none. In a run it is queued (`steer` by default, or `followUp`). Answers Pi's `disposition`: `started`, `queued` or `handled`. |
+| `dequeue { window }` | Takes back the messages the agent has not read yet (Pi's `clear_queue`) and returns them; the run goes on. |
 | `abort { window }` | Stops the run, and returns the messages that were still queued. |
 | `complete { window }` | A connected conversation's `/complete`: it writes its handoff and the main chat gets it. Until it has answered, the window takes no prompt; its next prompt begins a new conversation, and the window's `since` then says when the last one was handed off: pi-optchat's own cut (`after` in its `optchat.role`), the one its agent reads from. |
 | `close { window }` | Stops the window's Pi cleanly. A connected window leaves the list. |

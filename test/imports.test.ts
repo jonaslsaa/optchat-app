@@ -62,7 +62,11 @@ test('an import runs in the profile\'s own Pi: previewed, started, paused and re
   const { window } = await client.request('open', { profile: 'work' });
   assert.equal((await client.request('prompt', { window: window.id, text: 'hello' })).disposition, 'handled');
 
+  // It is work under way, which quitting would cut short; paused, it is not.
+  assert.equal(await server.working(), 1);
   assert.equal((await client.request('importControl', { profile: 'work', action: 'pause' })).state, 'paused');
+  assert.equal(await server.working(), 0);
+  await assert.rejects(client.request('importControl', { profile: 'work', action: 'pause' }), /No import is running/);
   assert.equal((await client.request('importControl', { profile: 'work', action: 'resume' })).state, 'running');
   writeFileSync(join(directory, 'import-done'), '');
   const done = await settled(() => client.request('importStatus', { profile: 'work' }), status => status.state === 'idle');

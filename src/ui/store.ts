@@ -420,7 +420,13 @@ export class App {
     const before = this.state.imports[profile];
     const finished = before && before.state !== 'idle' && status.state === 'idle' && status.last && Date.parse(status.last.completed) >= Date.parse(before.created) ? status.last : undefined;
     this.set({ imports: { ...this.state.imports, [profile]: status }, ...finished && { imported: { ...this.state.imported, [profile]: { added: finished.added } } } });
-    if (finished) { void this.read(profile); if (this.state.memory[profile]) void this.readMemory(profile); }
+    // The messages are numbered again in the memory the import made: what was read of the one before goes, not merged in.
+    if (finished) {
+      const { [profile]: _, ...logs } = this.state.logs;
+      this.set({ logs });
+      void this.read(profile);
+      if (this.state.memory[profile]) void this.readMemory(profile);
+    }
   }
   async readImport(profile: string) {
     const status = await this.client?.request('importStatus', { profile }).catch(() => undefined);

@@ -198,12 +198,14 @@ export async function startServer({ port = 0, origins = [], ui = join(import.met
     updating(state: Updating) { updating = state; push({ push: 'update', update: state }); },
     /** The app's settings as they are now. */
     settings: () => settings,
-    /** How many agents stopping the server would cut short: every chat of its own that is in a run, and every agent that
-     * is running under a main chat it runs (not one that is paused, or only waits for its own agents). A chat no Pi of the
-     * server's runs, such as one a terminal has, is stopped here, and its agents are not the server's to stop. */
+    /** How many agents stopping the server would cut short: every chat of its own that is in a run, every agent that is
+     * running under a main chat it runs (not one that is paused, or only waits for its own agents), and an import running in
+     * one, which its compactor runs outside any turn. A chat no Pi of the server's runs, such as one a terminal has, is
+     * stopped here, and its agents are not the server's to stop. */
     async working() {
       const own = windows.list().windows.filter(window => window.status !== 'stopped' && window.status !== 'closed');
-      const under = await Promise.all(own.filter(window => window.role === 'main').map(({ profile }) => agents.running(profile).catch(() => 0)));
+      const importing = async (profile: string) => (await imports.status({ profile })).state === 'running' ? 1 : 0;
+      const under = await Promise.all(own.filter(window => window.role === 'main').map(async ({ profile }) => await agents.running(profile).catch(() => 0) + await importing(profile).catch(() => 0)));
       return own.filter(window => window.status === 'running').length + under.reduce((sum, count) => sum + count, 0);
     },
     /** No request is taken from here on; one already under way ends with its Pi. */

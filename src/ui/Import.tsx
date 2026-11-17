@@ -49,6 +49,8 @@ function Sources({ state, sources, onSources }: { state: State; sources: Source[
           {sources.includes(source) && <CheckIcon className="mt-0.5 size-3.5 shrink-0" />}
         </label>
         {failed && <p className="px-2.5 pb-1 text-error-foreground text-xs">{failed}</p>}
+        {/* What the scan could not read is left out of its count, and said. */}
+        {scan && 'warnings' in scan && scan.warnings.length > 0 && <p title={scan.warnings.join('\n')} className="px-2.5 pb-1 text-warning-foreground text-xs">{scan.warnings.length} {scan.warnings.length === 1 ? 'file' : 'files'} could not be read</p>}
       </li>
     );
   };
@@ -58,7 +60,7 @@ function Sources({ state, sources, onSources }: { state: State; sources: Source[
       <div className="flex items-center justify-between px-2.5"><h2 className="font-medium text-muted-foreground text-xs">Sources</h2>
         <Button variant="ghost-muted" size="icon-xs" aria-label="Look again" title="Look again" onClick={() => { for (const source of LOCAL) void app.scan(source, true); }}><RefreshCwIcon /></Button>
       </div>
-      <ul className="grid grid-cols-2 gap-0.5 md:flex md:flex-col">{LOCAL.map(row)}{foundIn(state.scans, 'chatgpt').length > 0 && row('chatgpt')}</ul>
+      <ul className="grid grid-cols-2 gap-0.5 md:flex md:flex-col">{LOCAL.map(row)}{'chatgpt' in state.scans && row('chatgpt')}</ul>
       {/* A ChatGPT export is not on the Mac where the page can find it: it is given, by a drop or by choosing it. */}
       <div onDragOver={event => { event.preventDefault(); setOver(true); }} onDragLeave={() => setOver(false)} onDrop={event => { event.preventDefault(); setOver(false); void give(event.dataTransfer.files[0]); }}
         className={cn('mx-1 flex items-center gap-x-2.5 gap-y-1.5 rounded-lg border border-dashed px-3 py-2 text-xs md:flex-col md:py-4 md:text-center', over ? 'border-foreground/40 bg-accent' : 'border-border')}>
@@ -241,7 +243,8 @@ export function ImportPage({ state, profile, from = [], onClose, onMemory, onCha
     setRefused(why);
     if (!why) setPicks(new Set());
   };
-  const ask = () => { app.keep(mainOf(profile), FIRST_QUESTION); app.seenImport(profile); onChat(); };
+  // The question goes to the main chat, which is put in front: the page may have been opened over a connected window.
+  const ask = () => { app.keep(mainOf(profile), FIRST_QUESTION); app.select(mainOf(profile)); app.seenImport(profile); onChat(); };
   const busy = underway(status);
   return (
     <main className="flex min-h-0 flex-1 flex-col bg-background">
@@ -266,16 +269,17 @@ export function ImportPage({ state, profile, from = [], onClose, onMemory, onCha
   );
 }
 
-/** How a profile's import stands, read when its page or chat is shown and every second while it runs. pi-optchat writes it to
- * the profile's files as it goes, so nothing is pushed. */
+/** How a profile's import stands, read when its page or chat is shown and every second while one is under way. pi-optchat
+ * writes it to the profile's files as it goes, so nothing is pushed. */
 export function useImport(profile: string, pulse = '') {
-  const running = useApp().imports[profile]?.state === 'running';
+  // Paused or failed too: a terminal, or another of the app's pages, may resume or discard it.
+  const pending = underway(useApp().imports[profile]) !== undefined;
   useEffect(() => { void app.readImport(profile); }, [profile, pulse]);
   useEffect(() => {
-    if (!running) return;
+    if (!pending) return;
     const timer = setInterval(() => void app.readImport(profile), 1000);
     return () => clearInterval(timer);
-  }, [profile, running]);
+  }, [profile, pending]);
 }
 /** In place of the composer while the profile has an import under way, paused or failed: pi-optchat takes no message then. */
 export function ImportLine({ status, onShow }: { status: Underway; onShow: () => void }) {

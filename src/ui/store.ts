@@ -412,12 +412,13 @@ export class App {
   async preview(profile: string, picked: Params<'importPreview'>['picked']): Promise<{ preview?: ImportPreview; error?: string }> {
     try { return { preview: await this.request('importPreview', { profile, picked }) }; } catch (error) { return { error: reason(error) }; }
   }
-  /** Keeps how a profile's import stands. One the page saw under way finished when pi-optchat's last finished import is newer
-   * than it, and not when it was discarded, here or anywhere: then the profile has another memory, which the chat and the
+  /** Keeps how a profile's import stands. One the page saw under way finished when pi-optchat's last finished import ended
+   * after it began (a clock that stands still, as the screenshots' does, ends it when it began), and not when it was
+   * discarded, here or anywhere: then the profile has another memory, which the chat and the
    * memory view read again. */
   private importing(profile: string, status: ImportStatus) {
     const before = this.state.imports[profile];
-    const finished = before && before.state !== 'idle' && status.state === 'idle' && status.last && Date.parse(status.last.completed) > Date.parse(before.created) ? status.last : undefined;
+    const finished = before && before.state !== 'idle' && status.state === 'idle' && status.last && Date.parse(status.last.completed) >= Date.parse(before.created) ? status.last : undefined;
     this.set({ imports: { ...this.state.imports, [profile]: status }, ...finished && { imported: { ...this.state.imported, [profile]: { added: finished.added } } } });
     if (finished) { void this.read(profile); if (this.state.memory[profile]) void this.readMemory(profile); }
   }

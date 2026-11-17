@@ -1,6 +1,6 @@
-import { QuoteIcon } from 'lucide-react';
+import { BoxIcon, QuoteIcon } from 'lucide-react';
 import { useEffect, useState, type RefObject } from 'react';
-import { cite, named, place, type Cite, type Place } from './cite.ts';
+import { cite, named, place, type Cite, type Place, type Skill } from './cite.ts';
 import { escapes } from './keys.ts';
 import { Button, cn } from './ui.tsx';
 
@@ -57,4 +57,18 @@ export function CiteCard({ cite: { text, at }, onOpen }: { cite: Cite; onOpen?: 
   );
   return opens ? <button type="button" data-cited title="Show it in the memory view" onClick={() => onOpen(at)} className={cn(card, 'outline-none hover:bg-black/12 focus-visible:ring-2 focus-visible:ring-ring/70 dark:hover:bg-white/12')}>{shown}</button>
     : <span data-cited className={card}>{shown}</span>;
+}
+/** The skill a message runs, by its name (T3 Code's skill chip, MIT, see THIRD_PARTY_NOTICES.md). Its file, as Pi sent it, is
+ * shut away under the name, which opens it; a message not in Pi's log yet has only the name. In the chat and in the messages
+ * waiting under it alike. */
+export function SkillChip({ skill: { name, path, body }, className }: { skill: Skill; className?: string }) {
+  const [open, setOpen] = useState(false), chip = <><BoxIcon className="size-3.5 shrink-0" /><span className="min-w-0 truncate">{name}</span></>;
+  const look = 'flex max-w-full items-center gap-1 rounded-sm font-medium text-sm leading-relaxed';
+  return (
+    <span className={cn('block', className)}>
+      {body ? <button type="button" data-skill aria-expanded={open} title={path} onClick={() => setOpen(!open)} className={cn(look, 'cursor-pointer outline-none hover:underline hover:underline-offset-2 focus-visible:ring-2 focus-visible:ring-ring/70')}>{chip}</button>
+        : <span className={look}>{chip}</span>}
+      {open && <span className="mt-1 block whitespace-pre-wrap text-muted-foreground text-xs leading-relaxed [overflow-wrap:anywhere]">{body}</span>}
+    </span>
+  );
 }

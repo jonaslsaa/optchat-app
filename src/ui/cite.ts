@@ -42,8 +42,26 @@ export function cited(message: string): { cites: Cite[]; text: string } {
   const cites = [...head.matchAll(TAG)].map(([, name, text = '']): Cite => { const at = place(name); return { text: plain(text), ...at && { at } }; });
   return { cites, text: message.slice(head.length).replace(/^\n/, '') };
 }
+/** The skill a message runs: `/skill:name what was typed`, which Pi sends as the skill's file (`body`, from `path`) with what
+ * was typed under it. A message as typed has only the name. */
+export interface Skill { name: string; path?: string; body?: string }
+// Pi's own format (its `parseSkillBlock`), with what was typed under it, or only the images sent with it (one newline, as
+// pi-optchat logs them); and Pi's rule for a name as typed: up to the first space.
+const SKILL = /^<skill name="([^"]+)" location="([^"]+)">\n([\s\S]*?)\n<\/skill>(?:\n\n?([\s\S]+))?$/, TYPED = /^\/skill:(\S+)(?: ([\s\S]*))?$/;
+/** Your message as the chat shows it: the skill it runs, what it cites, and what was typed. */
+export interface Yours { skill?: Skill; cites: Cite[]; text: string }
+/** Your message, read as Pi sent it or as it was typed: a skill and what was typed after its name, or what it cites (`cited`)
+ * and what was typed under that. Only a message that begins with a skill runs one, so it cites nothing. */
+export function yours(message: string): Yours {
+  const [, name, path, body, text = ''] = SKILL.exec(message) ?? [];
+  if (name) return { skill: { name, path, body }, cites: [], text: text.trim() };
+  const [, given, words = ''] = TYPED.exec(message) ?? [];
+  return given ? { skill: { name: given }, cites: [], text: words.trim() } : cited(message);
+}
+/** Your message as it was typed, which is how it is copied, brought back and sent again: `yours`, written back. */
+export const asTyped = ({ skill, cites, text }: Yours) => skill ? `/skill:${skill.name}${text && ` ${text}`}` : citing(cites, text);
 /** Messages that go back into the composer as one: what they cite, then what they say. */
 export function joined(messages: readonly string[]) {
-  const all = messages.map(cited);
-  return citing(all.flatMap(({ cites }) => cites), all.flatMap(({ text }) => text || []).join('\n\n'));
+  const all = messages.map(yours);
+  return citing(all.flatMap(({ cites }) => cites), all.flatMap(said => asTyped({ ...said, cites: [] }) || []).join('\n\n'));
 }

@@ -4,8 +4,8 @@ import { flushSync } from 'react-dom';
 import { working as agentWorks } from '../agent.ts';
 import type { Agent } from '../protocol.ts';
 import { among, doing, named, stood } from './agents.ts';
-import { CiteCard } from './Cite.tsx';
-import { citing, type Place } from './cite.ts';
+import { CiteCard, SkillChip } from './Cite.tsx';
+import { asTyped, type Place } from './cite.ts';
 import { Markdown } from './Markdown.tsx';
 import { act, started, took, worked, type Part, type Step, type Thinking, type Tool } from './transcript.ts';
 import { Button, cn, CopyButton, Picture, Spinner, StatusDot } from './ui.tsx';
@@ -42,12 +42,13 @@ function Clamp({ text, lines, children }: { text: string; lines: number; childre
 
 /** Your message: a bubble on the right, with the images you sent. */
 export const UserRow = memo(function UserRow({ part, profile, onPlace }: { part: Of<'user'>; profile: string; onPlace?: (at: Place) => void }) {
-  // The message as it was sent: copied, it is pasted into the box as it was, with what it cites.
-  const sent = citing(part.cites, part.text);
+  // The message as it was sent: copied, it is pasted into the box as it was, with what it cites and the skill as it was typed.
+  const sent = asTyped(part);
   return (
     <div className="group flex flex-col items-end gap-1 pt-2 pb-1">
       <div className="relative min-w-0 max-w-[80%] rounded-2xl bg-message p-3 text-message-foreground">
         {part.images.length > 0 && <div className="mb-2 flex flex-wrap gap-2">{part.images.map((image, at) => <Picture key={at} src={image.startsWith('data:') ? image : `/images/${profile}/${image}`} className="max-h-48 rounded-lg" />)}</div>}
+        {part.skill && <SkillChip skill={part.skill} className={cn((part.text || part.cites.length > 0) && 'mb-1')} />}
         {part.cites.length > 0 && <div className={cn('flex flex-col gap-1.5', part.text && 'mb-2')}>{part.cites.map((cite, at) => <CiteCard key={at} cite={cite} onOpen={onPlace} />)}</div>}
         {part.text && <Clamp text={part.text} lines={12}><p data-cite={part.key} className="whitespace-pre-wrap text-sm leading-relaxed [overflow-wrap:anywhere]">{part.text}</p></Clamp>}
       </div>

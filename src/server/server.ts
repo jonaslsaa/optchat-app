@@ -105,6 +105,9 @@ export async function startServer({ port = 0, origins = [], ui = join(import.met
     // An agent is reached through the Pi that has its profile open, and a message to one is worth starting that Pi for.
     tellAgent: async params => { await windows.owned(params.profile); return agents.tell(params); },
     interruptAgent: params => agents.interrupt(params), stopAgent: params => agents.stop(params),
+    cutOff: async () => ({ profiles: (await Promise.all(profiles.list().profiles.map(async ({ name }) => ({ profile: name, agents: await agents.cutOff(name) })))).filter(cut => cut.agents.length) }),
+    // As a message to an agent is, resuming them is worth starting the Pi that reaches them.
+    resumeAgents: async ({ profile }) => { await windows.owned(profile); await agents.resume(profile); return {}; },
     profiles: () => profiles.list(), createProfile: params => profiles.create(params), history: params => profiles.history(params), view: params => profiles.view(params), zoom: params => profiles.zoom(params), original: params => profiles.original(params), search: params => profiles.search(params),
     windows: () => windows.list(), open: params => windows.open(params), prompt: params => windows.prompt(params), dequeue: params => windows.dequeue(params), abort: params => windows.abort(params),
     complete: params => windows.complete(params), close: params => windows.close(params), records: params => windows.records(params),

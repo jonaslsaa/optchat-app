@@ -240,6 +240,14 @@ export const methods = {
   interruptAgent: method(Type.Object({ profile: Type.String(), id: Type.String() }), none),
   /** Ends an agent and the agents it started. The agent that started it gets a report that says you stopped it. */
   stopAgent: method(Type.Object({ profile: Type.String(), id: Type.String() }), none),
+  /** The main chat's own agents that their Pi's close or crash cut off, in every profile that has some, from the records
+   * alone: those pi-optchat marked `cutOff`, and, in a profile no Pi has open, those saved as running or waiting for their
+   * own agents (pi-optchat marks them once the profile is next opened). `started`: when each last started. */
+  cutOff: method(none, Type.Object({ profiles: Type.Array(Type.Object({ profile: Type.String(), agents: Type.Array(Type.Object({ id: Type.String(), started: Type.Number() })) })) })),
+  /** Resumes a profile's cut-off agents (`cutOff`) as interactive Pi does when it opens a profile, through the Pi that has it
+   * open, which is started first if none has (pi-optchat's `resumeCutOff`). Their agents go on through them, and the main agent
+   * is told once. An RPC Pi resumes none by itself: resuming spends tokens, so the app asks you first. */
+  resumeAgents: method(Type.Object({ profile: Type.String() }), none),
 
   /** The issues and pull requests the profile's main chat named by their address on github.com, with what GitHub says of
    * them: the latest named first, `limit` of them (30 unless said), and `more` for how many that leaves

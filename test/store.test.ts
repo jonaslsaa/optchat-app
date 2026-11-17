@@ -9,7 +9,7 @@ import { startServer } from '../src/server/server.ts';
 import { transcript } from '../src/ui/agents.ts';
 import { building, listed, path, polled } from '../src/ui/memory.ts';
 import { cite, citing } from '../src/ui/cite.ts';
-import { App, title, UNTITLED, type State } from '../src/ui/store.ts';
+import { App, cutOffShown, title, UNTITLED, type State } from '../src/ui/store.ts';
 import { chat } from '../src/ui/transcript.ts';
 // pi-optchat's own lock, which only Pi takes: here it stands for a Pi in a terminal.
 import { describeOwner, lockProfile } from 'pi-optchat/files';
@@ -474,6 +474,39 @@ test('your message is in the chat the moment it is sent: Pi\'s copy takes its pl
   assert.equal(chat([], app.state.live['importing/main']).at(-1)?.text, 'One more');
   if (idle) app.receive({ push: 'window', window: { ...idle, status: 'stopped' } });
   assert.deepEqual([idle?.status, chat([], app.state.live['importing/main'])], ['idle', []]);
+});
+
+test('the profiles whose agents were cut off are offered: Resume resumes the one it is for and opens it, and a dismissed one stays away until an agent of it that started later is cut off', async t => {
+  const home = temporaryHome();
+  writeRun(createProfile(home, 'one'), { id: 'aaaaaaaa', state: 'interrupted', started: 2000, ended: 2500, cutOff: true });
+  const two = createProfile(home, 'two');
+  writeRun(two, { id: 'bbbbbbbb', state: 'running', started: 3000 });
+  writeRun(createProfile(home, 'calm'), { id: 'cccccccc', state: 'completed', started: 1000, ended: 1500 });
+  // A profile may be named as an object's property is: nothing of the kind counts as dismissed.
+  writeRun(createProfile(home, 'constructor'), { id: 'dddddddd', state: 'running', started: 500 });
+  const server = await startServer({ home, cwd: home, pi });
+  t.after(() => server.close());
+  const opened = async (saved?: Map<string, string>) => {
+    const store = page(t, undefined, undefined, saved);
+    void store.app.start(server.url);
+    await store.until(state => state.connection === 'open' && state.cutOff.length > 0);
+    return store;
+  };
+  const shown = (state: State) => cutOffShown(state).map(({ profile, agents }) => [profile, agents.length]);
+
+  const { app, saved } = await opened();
+  assert.deepEqual([shown(app.state), app.state.tabs], [[['constructor', 1], ['one', 1], ['two', 1]], ['calm']]);
+  await app.resumeAgents('one');
+  assert.deepEqual([shown(app.state), app.state.tabs, app.state.profile], [[['constructor', 1], ['two', 1]], ['calm', 'one'], 'one']);
+  app.dismissCutOff('two');
+  app.dismissCutOff('constructor');
+  assert.deepEqual(shown(app.state), []);
+  // The page opened again: the line stays away, while the agent is still cut off and in its list.
+  const again = await opened(saved);
+  assert.deepEqual([shown(again.app.state), again.app.state.cutOff.map(cut => cut.profile)], [[], ['constructor', 'two']]);
+  // Until an agent that started after it was dismissed is cut off too.
+  writeRun(two, { id: 'bbbbbbbc', state: 'running', started: 4000 });
+  assert.deepEqual(shown((await opened(saved)).app.state), [['two', 2]]);
 });
 
 test('a connected window is called by what its first message says, and by what that cites when it says nothing else', t => {

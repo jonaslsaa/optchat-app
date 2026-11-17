@@ -1,4 +1,4 @@
-import { appendFileSync, chmodSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { appendFileSync, chmodSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { chromium, type Browser, type Page } from 'playwright-core';
 import { build } from 'vite';
@@ -94,7 +94,7 @@ writeFileSync(pi.command, `#!/bin/sh\nexec "${process.execPath}" "${fake}" "$@"\
 chmodSync(pi.command, 0o755);
 process.env.FAKE_PI_HOME = join(home, 'pi');
 mkdirSync(join(home, 'pi', 'pi-optchat'), { recursive: true });
-writeFileSync(join(home, 'pi', 'pi-optchat', 'package.json'), JSON.stringify({ name: 'pi-optchat', version: '0.11.13' }));
+writeFileSync(join(home, 'pi', 'pi-optchat', 'package.json'), JSON.stringify({ name: 'pi-optchat', version: '0.12.2' }));
 writeFileSync(join(home, 'pi', 'state.json'), JSON.stringify({ version: '1.5.2', providers: ['anthropic', 'openai', 'openai-codex', 'github-copilot', 'lab'], packages: { 'npm:pi-optchat': join(home, 'pi', 'pi-optchat') } }));
 
 await build({ logLevel: 'warn' });
@@ -118,9 +118,12 @@ try {
 
 async function pictures(browser: Browser, control: Client) {
   /** A page that opens with these profile tabs, the first one in front. */
-  async function open(tabs: string[], { width = 1280, height = 800, dark = allDark, at = server.page, ready = 'Message' } = {}) {
+  async function open(tabs: string[], { width = 1280, height = 800, dark = allDark, at = server.page, ready = 'Message', cutOff = false } = {}) {
     const context = await browser.newContext({ viewport: { width, height }, deviceScaleFactor: 2, colorScheme: dark ? 'dark' : 'light', reducedMotion: 'reduce', timezoneId: 'UTC', locale: 'en-GB' });
     await context.addInitScript(saved => localStorage.setItem('optchat-app', saved), JSON.stringify({ tabs, profile: tabs[0], selected: {} }));
+    // The seeded chats have agents saved as working, which with no Pi on the profile were cut off: the bar that offers to resume
+    // them is dismissed, except in its own pictures (`cutOff`).
+    if (!cutOff) await context.addInitScript(dismissed => localStorage.setItem('optchat-app-cut-off', dismissed), JSON.stringify(Object.fromEntries(readdirSync(join(home, 'profiles')).map(name => [name, Number.MAX_SAFE_INTEGER]))));
     const page = await context.newPage();
     await page.clock.setFixedTime(NOW + 42_000);
     await page.goto(at);
@@ -677,6 +680,34 @@ async function pictures(browser: Browser, control: Client) {
   await pocketed.keyboard.press('Enter');
   await pocketed.getByRole('dialog').getByRole('alert').waitFor();
   await shot(pocketed, '144-new-profile-refused-dark-narrow');
+
+  // The app started again after its Pis closed with agents at work, in two profiles: `work`'s Pi crashed (its agents are still
+  // saved as working) and `notes`'s closed (pi-optchat marked its agent cut off). One bar offers to resume them, a line a
+  // profile, open as a tab or not. Before: the same page without it, the agents panel saying how they ended.
+  const again = join(home, 'restarted');
+  const crashed = createProfile(again, 'work');
+  seed(crashed, TEAM.length, NOW, TEAM);
+  agents(crashed, NOW + 42_000);
+  const closed = createProfile(again, 'notes');
+  seed(closed, 2, NOW);
+  writeRun(closed, { id: '9e1f2a3b', title: 'Tidy the release checklist', task: 'Tidy docs/release.md.', state: 'interrupted', started: NOW - 30_000, ended: NOW, cutOff: true, model: 'anthropic/claude-sonnet-5', report: 'Cut off when Pi closed.' });
+  const restarted = await startServer({ home: again, app: join(again, 'app'), cwd: home, pi, now: () => NOW + 42_000 });
+  try {
+    const before = await open(['work'], { at: restarted.page });
+    await before.getByRole('button', { name: 'Agents and GitHub' }).click();
+    await before.getByText('Cut off when its Pi closed').first().waitFor();
+    await shot(before, '162-cut-off-before');
+    const bar = await open(['work'], { at: restarted.page, cutOff: true });
+    await bar.getByRole('button', { name: 'Resume the agents of notes' }).waitFor();
+    await shot(bar, '163-cut-off-bar');
+    const dark = await open(['work'], { at: restarted.page, cutOff: true, dark: true, width: 420 });
+    await dark.getByRole('button', { name: 'Resume the agents of notes' }).waitFor();
+    await shot(dark, '164-cut-off-bar-dark-narrow');
+    await bar.getByRole('button', { name: 'Resume the agents of notes' }).click();
+    await bar.getByRole('tab', { name: 'notes', selected: true }).waitFor();
+    await bar.getByRole('button', { name: 'Resume the agents of notes' }).waitFor({ state: 'detached' });
+    await shot(bar, '165-cut-off-resumed');
+  } finally { await restarted.close(); }
 
   // The desktop app's update button, at the sidebar's foot, in each thing its updater does. Last: from here on the server has
   // an updater, so every page has the button.

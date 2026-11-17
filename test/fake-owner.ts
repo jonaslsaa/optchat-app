@@ -8,7 +8,7 @@ import { checkPatch, patchConfigFile } from '../node_modules/pi-optchat/dist/pro
 import { working } from '../src/agent.ts';
 
 /** A Pi that owns a profile, as far as the app asks it things: pi-optchat's socket in the profile's folder, answering `attach`,
- * `say`, `interrupt`, `stop` and `resume` as pi-optchat does (its window-bridge.ts), by changing the agent's record on disk and
+ * `say`, `interrupt`, `stop` and `resume`, and `resume-cut-off`, as pi-optchat does (its window-bridge.ts), by changing the agent's record on disk and
  * refusing in pi-optchat's words, and `configure` by changing the profile's settings. No agent runs. It is the fake Pi's (`fake-pi.ts`), and lasts as long as its process. */
 export async function fakeOwner(directory: string, clock: () => number) {
   const path = profileSocket(directory, 'windows');
@@ -39,6 +39,8 @@ export async function fakeOwner(directory: string, clock: () => number) {
       try {
         // A change of settings from the app: its Pi has the profile, so it is that Pi's to check and to write.
         if (action === 'configure') { const patch: unknown = JSON.parse(text); checkPatch(patch); patchConfigFile(directory, patch); }
+        // What pi-optchat's resumeCutOff does to the records: the main agent's own cut-off agents start again.
+        else if (action === 'resume-cut-off') { for (const { cutOff: _, ...agent } of readRuns(directory).filter(run => run.cutOff && !run.parentId)) save({ ...agent, state: 'running', started: clock() }); }
         else if (action === 'attach') { if (!run(id = text)) throw new Error(`No subagent ${text} in this profile`); }
         else if (id && acts[action]) { const agent = run(id); if (!agent) throw new Error(`No subagent ${id} in this profile`); save(acts[action](agent, text)); }
         else throw new Error(`The fake owner knows no ${action}.`);

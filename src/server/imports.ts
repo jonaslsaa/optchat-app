@@ -4,9 +4,6 @@ import { controlImport, historyRoots, previewImport, readImport, scanChatGPT, sc
 import type { Found, Params, Result } from '../protocol.ts';
 import { profileDirectory } from './profiles.ts';
 
-/** How much of a ChatGPT export one `importUpload` carries at most, in bytes of base64. */
-const PIECE = 8 << 20;
-
 /** Importing another tool's history into a profile, as pi-optchat does it (`pi-optchat/files`): the scan and the preview here,
  * from files and with no model; the import itself in the Pi that has the profile open, which pi-optchat's `startImport` asks
  * through the profile's socket. The page names conversations by their source and id in the scan, so no file it names is read. */
@@ -67,7 +64,6 @@ export class Imports {
   /** A ChatGPT export, a piece at a time. It is kept where the app keeps its own files, under one name, and the scan of the one
    * before it is forgotten. */
   receive({ name, offset, data }: Params<'importUpload'>): Result<'importUpload'> {
-    if (data.length > PIECE) throw new Error('A piece of the export is too large.');
     const bytes = Buffer.from(data, 'base64');
     // pi-optchat reads a ZIP by its name, and anything else as conversations.json.
     const path = join(this.upload, name.toLowerCase().endsWith('.zip') ? 'export.zip' : 'conversations.json');

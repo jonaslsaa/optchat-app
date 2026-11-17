@@ -32,7 +32,11 @@ const NOTHING = idle();
 const SHOWS = [['Chat', false], ['Memory', true]] as const;
 
 /** What the desktop app's menu bar asks of a profile's page, which its own shortcuts run too. */
-type InProfile = Record<Exclude<MenuAction, 'settings' | 'usage' | 'newProfile' | 'import'>, () => void>;
+type InProfile = Record<Exclude<MenuAction, Page | 'newProfile'>, () => void>;
+/** The pages that stand in the chat's place, each one a thing the menu bar asks for. */
+const PAGES = ['settings', 'usage', 'import'] as const satisfies readonly MenuAction[];
+type Page = typeof PAGES[number];
+const isPage = (action: MenuAction): action is Page => PAGES.some(page => page === action);
 /** One profile: its windows on the left, the selected window's chat, and beside the main chat its agents or what it named on
  * GitHub, when they are opened. */
 function Profile({ state, profile, onSettings, onUsage, onNewProfile, onImport, ref }: { state: State; profile: string; onSettings: () => void; onUsage: () => void; onNewProfile: () => void; onImport: () => void; ref: Ref<InProfile> }) {
@@ -150,7 +154,7 @@ function Profile({ state, profile, onSettings, onUsage, onNewProfile, onImport, 
 }
 export function App() {
   // The page in the chat's place, if one is: the settings, or what the profile in front used.
-  const state = useApp(), [page, setPage] = useState<'settings' | 'usage' | 'import'>(), settings = page === 'settings', needs = missing(state);
+  const state = useApp(), [page, setPage] = useState<Page>(), settings = page === 'settings', needs = missing(state);
   // The New Profile dialog, over whatever page is there.
   const [naming, setNaming] = useState(false), name = () => setNaming(true);
   const toSettings = () => setPage(page => page === 'settings' ? undefined : 'settings'), chat = useRef<InProfile>(null);
@@ -167,9 +171,9 @@ export function App() {
     // A profile after the first is named in a dialog. The first is named on the first page, as below.
     if (action === 'newProfile' && state.profile) return name();
     if (opening) return false;
-    if ((action === 'usage' || action === 'import') && state.profile) return setPage(action);
+    if (isPage(action) && state.profile) return setPage(action);
     flushSync(() => setPage(undefined));
-    if (action !== 'usage' && action !== 'newProfile' && action !== 'import' && chat.current) chat.current[action](); else document.querySelector<HTMLElement>('[aria-label="Profile name"]')?.focus();
+    if (!isPage(action) && action !== 'newProfile' && chat.current) chat.current[action](); else document.querySelector<HTMLElement>('[aria-label="Profile name"]')?.focus();
   }, [connecting, opening, state.profile]);
   return (
     <div className="flex h-dvh flex-col">

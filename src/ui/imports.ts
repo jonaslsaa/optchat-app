@@ -1,4 +1,4 @@
-import { SOURCES, type Found, type Importing, type Params, type Preview } from '../protocol.ts';
+import { SOURCES, type Found, type ImportPreview, type ImportStatus, type Params, type Result } from '../protocol.ts';
 import { short } from './usage.ts';
 
 /** The Import page as data, with no DOM: which conversations a pick is, how projects are listed and filtered, and what the
@@ -22,7 +22,7 @@ const within = (range: Range, now: number) => {
 };
 
 /** What each source's scan found, once it has: `undefined` while it is read. */
-export type Scans = Partial<Record<Source, { found: Found[]; warnings: string[]; note?: string } | { error: string }>>;
+export type Scans = Partial<Record<Source, Result<'importScan'> | { error: string }>>;
 export const foundIn = (scans: Scans, source: Source) => { const scan = scans[source]; return scan && 'found' in scan ? scan.found : []; };
 /** A conversation's name in a pick: its source and its id, which is unique only within the source. */
 export const key = (source: Source, id: string) => `${source}\n${id}`;
@@ -35,7 +35,11 @@ export function projects(scans: Scans, sources: readonly Source[], range: Range,
   const shown = within(range, now), needle = filter.trim().toLowerCase(), rows: Project[] = [];
   for (const source of sources) {
     const by = new Map<string, Found[]>();
-    for (const found of foundIn(scans, source)) if (shown(found)) by.set(found.project, [...by.get(found.project) ?? [], found]);
+    for (const found of foundIn(scans, source)) {
+      if (!shown(found)) continue;
+      const all = by.get(found.project);
+      if (all) all.push(found); else by.set(found.project, [found]);
+    }
     for (const [project, all] of by) {
       const conversations = !needle || project.toLowerCase().includes(needle) ? all : all.filter(found => found.title.toLowerCase().includes(needle));
       if (conversations.length) rows.push({ key: key(source, project), source, project, conversations, latest: conversations.reduce((a, b) => a > b.date ? a : b.date, ''), size: conversations.reduce((sum, found) => sum + found.size, 0) });
@@ -63,7 +67,7 @@ export function chosen(scans: Scans, sources: readonly Source[], range: Range, n
 const count = (n: number) => n.toLocaleString('en-US');
 /** The footer's line: what is picked and what it brings, by pi-optchat's preview, and what the compactor would read for it.
  * pi-optchat says a summary reads about three times the text it summarizes (its docs/import.md, "Cost"). */
-export function summary(picks: number, preview: Preview | undefined, mode: Mode, compactor: string) {
+export function summary(picks: number, preview: ImportPreview | undefined, mode: Mode, compactor: string) {
   if (!picks) return ['Nothing picked yet'];
   if (!preview) return [`${count(picks)} picked`, 'Counting…'];
   return [
@@ -75,7 +79,7 @@ export function summary(picks: number, preview: Preview | undefined, mode: Mode,
 }
 /** The two ways history joins a memory that has messages, each in one line with what it costs, from pi-optchat's estimate
  * for each. */
-export function modes(preview: Preview): { mode: Mode; name: string; line: string }[] {
+export function modes(preview: ImportPreview): { mode: Mode; name: string; line: string }[] {
   const { summaries } = preview.memory;
   return [
     { mode: 'append', name: 'Append', line: `${summaries ? `Keeps its ${count(summaries)} ${summaries === 1 ? 'summary' : 'summaries'}` : 'Keeps the memory as it is'} and summarizes only what is new · about ${short(3 * preview.append.tokens)} tokens` },
@@ -83,11 +87,11 @@ export function modes(preview: Preview): { mode: Mode; name: string; line: strin
   ];
 }
 /** Whether to ask how the history joins the memory: only a profile that has messages has a choice. */
-export const asks = (preview: Preview | undefined) => (preview?.memory.messages ?? 0) > 0;
+export const asks = (preview: ImportPreview | undefined): preview is ImportPreview => (preview?.memory.messages ?? 0) > 0;
 
-export type Underway = Exclude<Importing, { state: 'idle' }>;
+export type Underway = Exclude<ImportStatus, { state: 'idle' }>;
 /** An import that is under way, paused or failed: what takes the profile's chat. */
-export const underway = (status: Importing | undefined): Underway | undefined => status?.state === 'idle' ? undefined : status;
+export const underway = (status: ImportStatus | undefined): Underway | undefined => status?.state === 'idle' ? undefined : status;
 /** How far an import is: the messages indexed of all the memory will have, as a share and in words. */
 export function progress(status: Underway) {
   const share = status.total ? Math.min(1, status.messages / status.total) : 0;

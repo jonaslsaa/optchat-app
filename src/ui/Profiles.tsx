@@ -72,13 +72,13 @@ export function ProfilePicker({ state, label, className, children, onNew, onImpo
             </li>
           ))}
           {/* Always in sight, under however many profiles the list scrolls through. The focus goes back to the button first,
-              which is where it is again once the dialog is closed. */}
+              which is where it is again once the dialog or the Import page is closed. */}
           <li role="presentation" className="sticky -bottom-1 mt-1 border-t bg-popover py-1">
             <button type="button" onClick={() => { setOpen(false); opener.current?.focus(); onNew(); }} className="flex h-8 w-full items-center gap-2 rounded-md px-2 text-left text-muted-foreground text-sm hover:bg-accent hover:text-foreground focus-visible:bg-accent focus-visible:text-foreground focus-visible:outline-none">
               <PlusIcon className="size-3.5" />New profile…
             </button>
             {state.profile && (
-              <button type="button" title={`Import another tool's history into ${state.profile}`} onClick={() => { setOpen(false); onImport(); }} className="flex h-8 w-full items-center gap-2 rounded-md px-2 text-left text-muted-foreground text-sm hover:bg-accent hover:text-foreground focus-visible:bg-accent focus-visible:text-foreground focus-visible:outline-none">
+              <button type="button" title={`Import another tool's history into ${state.profile}`} onClick={() => { setOpen(false); opener.current?.focus(); onImport(); }} className="flex h-8 w-full items-center gap-2 rounded-md px-2 text-left text-muted-foreground text-sm hover:bg-accent hover:text-foreground focus-visible:bg-accent focus-visible:text-foreground focus-visible:outline-none">
                 <HistoryIcon className="size-3.5" /><span className="min-w-0 truncate">Import history…</span>
               </button>
             )}

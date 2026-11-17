@@ -1,5 +1,5 @@
 import type { Entry } from 'pi-optchat/core';
-import type { ImportPreview, ImportStatus, RunState, Source } from 'pi-optchat/files';
+import type { controlImport, Conversation, ImportMode, ImportPreview, ImportStatus, RunState, Source } from 'pi-optchat/files';
 import { Type, type Static, type TSchema } from 'typebox';
 import { THINKING } from './models.ts';
 
@@ -176,19 +176,22 @@ export type Usage = Static<typeof Usage>;
  * Codex, Pi and OMP, and a ChatGPT export. */
 export const SOURCES = ['claude', 'claude-memory', 'codex', 'pi', 'chatgpt'] as const satisfies readonly Source[];
 const From = Type.Enum([...SOURCES]);
+/** How an import joins the memory (pi-optchat's `ImportMode`), and what can be done to one under way. */
+export const MODES = ['append', 'rebuild'] as const satisfies readonly ImportMode[];
+export const ACTIONS = ['pause', 'resume', 'discard'] as const satisfies readonly Parameters<typeof controlImport>[1][];
 /** A conversation another tool kept, as the server's scan found it (pi-optchat's `Conversation`, without its file, which only
  * the server knows): its `title`, its `project` (the folder it ran in, with your home folder as `~`), when it began (`date`)
  * and its `size` in bytes. A memory of Claude Code's is one too. */
-export const Found = Type.Object({ id: Type.String(), title: Type.String(), project: Type.String(), date: Type.String(), size: Type.Integer({ minimum: 0 }) });
-export type Found = Static<typeof Found>;
+export type Found = Omit<Conversation, 'source' | 'file' | 'exported'>;
+const Found = Type.Unsafe<Found>(Type.Object({}));
 /** Conversations picked for an import, by their source and id in the scan: the page never names a file. */
 const Picked = Type.Array(Type.Object({ source: From, id: Type.String() }));
 /** How an import of a profile stands, as pi-optchat says it (its `ImportStatus`): `idle` (none, or the last one finished),
  * `running`, `paused` (also when the Pi that ran it is gone) or `failed`, with its numbers. */
-export const Importing = Type.Unsafe<ImportStatus>(Type.Object({ state: Type.String() }));
-export type Importing = ImportStatus;
-/** What an import of the picked conversations would bring, by pi-optchat's own count (its `ImportPreview`). */
-export type Preview = ImportPreview;
+const Status = Type.Unsafe<ImportStatus>(Type.Object({}));
+export type { ImportPreview, ImportStatus };
+/** How much of a ChatGPT export one `importUpload` carries at most, in characters of base64: 6 MiB of the file, in whole 4-character groups. */
+export const PIECE = 8 << 20;
 
 const Image = Type.Object({ type: Type.Literal('image'), data: Type.String(), mimeType: Type.String() });
 const target = Type.Object({ window: Type.String() });
@@ -354,18 +357,18 @@ export const methods = {
   importScan: method(Type.Object({ source: From, fresh: Type.Optional(Type.Boolean()) }), Type.Object({ found: Type.Array(Found), warnings: Type.Array(Type.String()), note: Type.Optional(Type.String()) })),
   /** A ChatGPT export, sent a piece at a time (`data` in base64, at `offset`): one at `offset` 0 begins a new one in place of the
    * last. `name` says whether it is a ZIP or a JSON file. */
-  importUpload: method(Type.Object({ name: Type.String({ pattern: '\\.(zip|json)$' }), offset: Type.Integer({ minimum: 0 }), data: Type.String() }), Type.Object({ received: Type.Integer({ minimum: 0 }) })),
+  importUpload: method(Type.Object({ name: Type.String({ pattern: '\\.(zip|json)$' }), offset: Type.Integer({ minimum: 0 }), data: Type.String({ maxLength: PIECE }) }), Type.Object({ received: Type.Integer({ minimum: 0 }) })),
   /** What importing the picked conversations into a profile would bring (pi-optchat's `previewImport`): how many are new and how many the
    * memory has already, its warnings, and what it would cost appended or rebuilt. Reads, writes nothing. A newer preview
    * for the same profile cuts this one short. */
   importPreview: method(Type.Object({ profile: Type.String(), picked: Picked }), Type.Unsafe<ImportPreview>(Type.Object({}))),
   /** Starts an import of the picked conversations in the Pi that has the profile open, which is started first if none has
    * (pi-optchat's `startImport`). Answers once it runs. Refused in pi-optchat's words. */
-  importStart: method(Type.Object({ profile: Type.String(), picked: Picked, mode: Type.Enum(['append', 'rebuild']) }), Importing),
+  importStart: method(Type.Object({ profile: Type.String(), picked: Picked, mode: Type.Enum([...MODES]) }), Status),
   /** Pauses, resumes or discards a profile's import (pi-optchat's `controlImport`). Resuming starts the profile's Pi if none has it. */
-  importControl: method(Type.Object({ profile: Type.String(), action: Type.Enum(['pause', 'resume', 'discard']) }), Importing),
+  importControl: method(Type.Object({ profile: Type.String(), action: Type.Enum([...ACTIONS]) }), Status),
   /** How a profile's import stands, from its files (pi-optchat's `readImport`): no Pi is needed. */
-  importStatus: method(Type.Object({ profile: Type.String() }), Importing),
+  importStatus: method(Type.Object({ profile: Type.String() }), Status),
 
   /** The app's settings. */
   settings: method(none, Settings),

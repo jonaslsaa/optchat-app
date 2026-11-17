@@ -1,6 +1,6 @@
 import { CheckIcon, ChevronRightIcon, FileArchiveIcon, PauseIcon, PlayIcon, RefreshCwIcon, SearchIcon, Trash2Icon, TriangleAlertIcon, XIcon } from 'lucide-react';
 import { useDeferredValue, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import type { Found, Preview } from '../protocol.ts';
+import type { Found, ImportPreview } from '../protocol.ts';
 import { asks, chosen, modes, underway, foundIn, key, LOCAL, NAMES, picked, progress, projects, RANGES, summary, toggled, unit, type Mode, type Project, type Range, type Scans, type Source, type Underway } from './imports.ts';
 import { Mark } from './Mark.tsx';
 import { app, mainOf, useApp, type State } from './store.ts';
@@ -131,15 +131,14 @@ function Projects({ scans, sources, range, picks, now, onRange, onPicks }: { sca
   );
 }
 
-function Footer({ count, preview, mode, compactor, starting, refused, onMode, onStart }: { count: number; preview?: Preview | string; mode: Mode; compactor: string; starting: boolean; refused?: string; onMode: (mode: Mode) => void; onStart: () => void }) {
-  const [warned, setWarned] = useState(false), known = typeof preview === 'object' ? preview : undefined, failed = typeof preview === 'string' ? preview : undefined;
-  const warnings = known?.warnings ?? [], words = summary(count, known, mode, compactor);
+function Footer({ count, preview, unread, mode, compactor, starting, refused, onMode, onStart }: { count: number; preview?: ImportPreview; unread?: string; mode: Mode; compactor: string; starting: boolean; refused?: string; onMode: (mode: Mode) => void; onStart: () => void }) {
+  const [warned, setWarned] = useState(false), warnings = preview?.warnings ?? [], words = summary(count, preview, mode, compactor);
   return (
     <footer className="shrink-0 border-t bg-background/95 px-5 py-3 backdrop-blur">
       {/* Only a profile with messages has something to join them to: a new one is never asked. Append unless you say. */}
-      {asks(known) && known && (
+      {asks(preview) && (
         <div role="radiogroup" aria-label="How the history joins the memory" className="mx-auto mb-3 grid max-w-5xl gap-2 sm:grid-cols-2">
-          {modes(known).map(option => (
+          {modes(preview).map(option => (
             <label key={option.mode} className={cn('flex cursor-pointer items-start gap-2.5 rounded-lg border px-3 py-2 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring', mode === option.mode ? 'border-foreground/25 bg-accent' : 'hover:bg-accent/50')}>
               <input type="radio" name="import-mode" checked={mode === option.mode} onChange={() => onMode(option.mode)} className="mt-0.5 shrink-0 accent-foreground" />
               <span className="min-w-0 text-sm"><span className="font-medium">{option.name}</span><span className="block text-muted-foreground text-xs">{option.line}</span></span>
@@ -150,7 +149,7 @@ function Footer({ count, preview, mode, compactor, starting, refused, onMode, on
       <div className="mx-auto flex max-w-5xl flex-wrap items-center gap-x-4 gap-y-2">
         <div className="min-w-0 basis-full md:basis-0 md:flex-1">
           <p aria-live="polite" className="flex flex-wrap text-sm">{words.map((word, at) => <span key={word} className={cn('whitespace-nowrap', at > 0 && 'text-muted-foreground', at > 0 && "before:mx-1.5 before:text-muted-foreground/50 before:content-['·']")}>{word}</span>)}</p>
-          {failed && <p role="alert" className="text-error-foreground text-xs">{failed}</p>}
+          {unread && <p role="alert" className="text-error-foreground text-xs">{unread}</p>}
           {refused && <p role="alert" className="text-error-foreground text-xs">{refused}</p>}
           {warnings.length > 0 && (
             <button type="button" aria-expanded={warned} onClick={() => setWarned(!warned)} className="mt-0.5 flex items-center gap-1 rounded-sm text-warning-foreground text-xs focus-visible:ring-2 focus-visible:ring-ring">
@@ -159,7 +158,7 @@ function Footer({ count, preview, mode, compactor, starting, refused, onMode, on
           )}
           {warned && <ul className="enter mt-1 max-h-28 overflow-y-auto text-muted-foreground text-xs">{warnings.map((warning, at) => <li key={at} className="break-words">{warning}</li>)}</ul>}
         </div>
-        <Button className="ms-auto" disabled={!known || known.added === 0 || starting} onClick={onStart}>{starting ? <Spinner /> : <PlayIcon />}Start import</Button>
+        <Button className="ms-auto" disabled={!preview?.added || starting} onClick={onStart}>{starting ? <Spinner /> : <PlayIcon />}Start import</Button>
       </div>
     </footer>
   );
@@ -218,7 +217,7 @@ function Done({ profile, added, onMemory, onAsk, onMore }: { profile: string; ad
 
 export function ImportPage({ state, profile, from = [], onClose, onMemory, onChat }: { state: State; profile: string; from?: Source[]; onClose: () => void; onMemory: () => void; onChat: () => void }) {
   const [sources, setSources] = useState<Source[]>(from), [range, setRange] = useState<Range>('All'), [picks, setPicks] = useState(() => new Set<string>());
-  const [mode, setMode] = useState<Mode>('append'), [preview, setPreview] = useState<Preview | string>(), [starting, setStarting] = useState(false), [refused, setRefused] = useState<string>();
+  const [mode, setMode] = useState<Mode>('append'), [preview, setPreview] = useState<ImportPreview>(), [unread, setUnread] = useState<string>(), [starting, setStarting] = useState(false), [refused, setRefused] = useState<string>();
   const [now] = useState(() => Date.now()), status = state.imports[profile], done = state.imported[profile], config = state.config[profile];
   // Each source is looked for once a run of the server, and again with the button: the server keeps what it found.
   useEffect(() => { for (const source of LOCAL) if (!(source in state.scans)) void app.scan(source); void app.readConfig(profile); void app.readModels(mainOf(profile)); }, [profile]);
@@ -228,15 +227,16 @@ export function ImportPage({ state, profile, from = [], onClose, onMemory, onCha
   // What the pick brings is asked a moment after it last changed: the server reads every conversation in it.
   useEffect(() => {
     setPreview(undefined);
+    setUnread(undefined);
     if (!picking.length) return;
     let current = true;
-    const timer = setTimeout(() => void app.preview(profile, picking).then(answer => { if (current) setPreview(answer); }), 250);
+    const timer = setTimeout(() => void app.preview(profile, picking).then(answer => { if (current) { setPreview(answer.preview); setUnread(answer.error); } }), 250);
     return () => { current = false; clearTimeout(timer); };
   }, [profile, asked]);
   const compactor = config ? state.models[mainOf(profile)]?.models.find(model => model.provider === config.compactor.provider && model.id === config.compactor.model)?.name ?? config.compactor.model : 'the compactor';
   const start = async () => {
     setStarting(true);
-    const why = await app.startImport(profile, picking, asks(typeof preview === 'object' ? preview : undefined) ? mode : 'append');
+    const why = await app.startImport(profile, picking, asks(preview) ? mode : 'append');
     setStarting(false);
     setRefused(why);
     if (!why) setPicks(new Set());
@@ -260,7 +260,7 @@ export function ImportPage({ state, profile, from = [], onClose, onMemory, onCha
             </div>
             <Projects scans={state.scans} sources={sources} range={range} picks={picks} now={now} onRange={setRange} onPicks={setPicks} />
           </div>
-          <Footer count={picking.length} preview={preview} mode={mode} compactor={compactor} starting={starting} refused={refused} onMode={setMode} onStart={() => void start()} />
+          <Footer count={picking.length} preview={preview} unread={unread} mode={mode} compactor={compactor} starting={starting} refused={refused} onMode={setMode} onStart={() => void start()} />
         </>}
     </main>
   );

@@ -138,7 +138,10 @@ export function Composer({ state, window, live, chat, onSend, ref }: { state: St
   // Esc, which stops the run, and on ⌥↑, which lets it go on.
   const takeBack = async (method: 'abort' | 'dequeue') => {
     const waiting = await app.takeBack(window.id, method);
-    if (waiting.length) keep(joined([...waiting, app.draft(window.id)]));
+    if (!waiting.length) return;
+    keep(joined([...waiting, app.draft(window.id)]));
+    // The caret is at the end, once the box holds it: also where only its citations changed, which leave the text as it was.
+    requestAnimationFrame(() => area.current?.setSelectionRange(area.current.value.length, area.current.value.length));
   };
   const stop = () => {
     // The button that stops is gone once it has: the focus is where the next message is typed.
@@ -197,7 +200,7 @@ export function Composer({ state, window, live, chat, onSend, ref }: { state: St
                 // Backspace in an empty box takes the last citation off, as it would the letter before the caret.
                 if (event.key === 'Backspace' && !text && cites.length) { event.preventDefault(); keep(citing(cites.slice(0, -1), '')); return; }
                 // ⌥↑ takes the messages still waiting back into the box, to be edited and sent again; the run goes on.
-                if (queued.length && matches(event, 'alt+arrowup')) { event.preventDefault(); void takeBack('dequeue'); return; }
+                if (queued.length && matches(event, 'alt+arrowup') && !event.nativeEvent.isComposing) { event.preventDefault(); void takeBack('dequeue'); return; }
                 if (event.shiftKey || event.altKey || event.nativeEvent.isComposing) return;
                 if (event.key === 'Enter') { event.preventDefault(); void send(event.metaKey || event.ctrlKey); }
                 // ↑ on the first line and ↓ on the last go through what you said; on a line between, they move in the text.

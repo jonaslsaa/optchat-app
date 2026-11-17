@@ -70,7 +70,7 @@ function Choices({ settings }: { settings: Kept }) {
     </>
   );
 }
-const Needs = ({ state }: { state: State }) => <Section title="Setup" hint="What a chat needs. Pi and pi-optchat do all the work; the app only shows it."><Setup state={state} /></Section>;
+const Needs = ({ state, onMade }: { state: State; onMade?: (profile: string) => void }) => <Section title="Setup" hint="What a chat needs. Pi and pi-optchat do all the work; the app only shows it."><Setup state={state} onMade={onMade} /></Section>;
 
 /** The page's tabs, each with its icon as in T3 Code's settings: what is the app's, and what is the profile's in front. */
 const TABS = { general: ['General', Settings2Icon], profile: ['Profile', UserRoundIcon], instructions: ['Instructions', FileTextIcon] } as const;
@@ -132,10 +132,11 @@ export function Settings({ state, onClose }: { state: State; onClose: () => void
   );
 }
 /** The first thing you see, before there is a profile. */
-export function Welcome({ state }: { state: State }) {
+/** The first page, until there is a profile. `onMade`: the first one is there, and is asked next what history it brings. */
+export function Welcome({ state, onMade }: { state: State; onMade: (profile: string) => void }) {
   return (
     <Page title="Welcome to OptChat">
-      <Needs state={state} />
+      <Needs state={state} onMade={onMade} />
       {state.settings && <Choices settings={state.settings} />}
     </Page>
   );

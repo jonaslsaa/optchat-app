@@ -1584,12 +1584,17 @@ test('New Profile…: the menu and the list of profiles open a dialog that makes
     assert.equal(await focused(page), 'Profile name', 'the button that was pressed went off while it asked, and the focus is in the name again');
     assert.deepEqual([await profiles(), await page.getByRole('alert').count()], [['alone'], 1]);
 
-    // A name that will do: the profile is made, opened in a tab beside the first and put in front, with the keys in its chat.
-    // The spaces around it are not part of it.
+    // A name that will do: the profile is made, and opened in a tab beside the first and put in front, behind the dialog's
+    // second step, which asks what history it brings with the keys on the way to the Import page. The spaces around the name
+    // are not part of it. Esc there starts it empty, with the keys in its chat, and does nothing else.
+    const bring = page.getByRole('dialog', { name: 'Bring your history' }), brought = async (how: string) => { await page.locator('dialog[aria-label="Bring your history"]').waitFor({ state: 'detached', timeout: 3000 }).catch(() => assert.fail(`${how} did not close the dialog.`)); };
     await field.fill(' second ');
     await page.keyboard.press('Enter');
-    await closed('Making the profile');
+    await bring.waitFor();
     await page.getByRole('tab', { name: 'second' }).and(page.locator('[aria-selected=true]')).waitFor();
+    assert.equal(await focused(page), 'Choose what to import…');
+    await page.keyboard.press('Escape');
+    await brought('Esc on its second step');
     await page.getByRole('textbox', { name: 'Message' }).waitFor();
     assert.deepEqual([await profiles(), await focused(page)], [['alone', 'second'], 'Message']);
     // It is as a first profile is: pi-optchat's own settings and instructions, and nothing else.
@@ -1606,9 +1611,15 @@ test('New Profile…: the menu and the list of profiles open a dialog that makes
     await ask(page, 'newProfile');
     await field.fill('third');
     await create.click();
-    await closed('Making the profile');
+    await bring.waitFor();
     await page.getByRole('tab', { name: 'third' }).and(page.locator('[aria-selected=true]')).waitFor();
     assert.equal(await page.getByRole('radiogroup', { name: 'Theme' }).count(), 0);
+    // "Choose what to import…" opens the Import page on the new profile; Esc there is the page's, and closes it.
+    await page.keyboard.press('Enter');
+    await brought('Choosing what to import');
+    await page.getByRole('heading', { name: 'Import into third' }).waitFor();
+    await page.keyboard.press('Escape');
+    await page.getByRole('textbox', { name: 'Message' }).waitFor();
     await page.context().close();
 
     // With no profile yet the first page is where one is named: no dialog over it, and the keys in its name.
@@ -1618,6 +1629,24 @@ test('New Profile…: the menu and the list of profiles open a dialog that makes
     await first.waitForTimeout(300);
     assert.deepEqual([await first.getByRole('dialog').count(), await focused(first)], [0, 'Profile name']);
     await first.context().close();
+    // Named there, the first profile is asked what history it brings, in the dialog's second step alone; starting empty puts
+    // the keys in its chat.
+    const none = join(at, 'none');
+    mkdirSync(none);
+    const bare = await startServer({ home: none, app: join(none, 'app'), cwd: home, pi });
+    try {
+      const welcome = await (await browser.newContext({ viewport: WIDE, reducedMotion: 'reduce' })).newPage();
+      await welcome.goto(bare.page);
+      await welcome.getByRole('textbox', { name: 'Profile name' }).fill('first');
+      await welcome.keyboard.press('Enter');
+      await welcome.getByRole('dialog', { name: 'Bring your history' }).waitFor();
+      assert.equal(await focused(welcome), 'Choose what to import…');
+      await welcome.getByRole('button', { name: 'Start empty' }).click();
+      await welcome.locator('dialog').waitFor({ state: 'detached' });
+      await welcome.getByRole('textbox', { name: 'Message' }).waitFor();
+      assert.equal(await focused(welcome), 'Message');
+      await welcome.context().close();
+    } finally { await bare.close(); }
   } finally { client.close(); await own.close(); }
 });
 

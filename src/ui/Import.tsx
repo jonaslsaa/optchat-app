@@ -218,6 +218,42 @@ function Done({ profile, added, onMemory, onAsk, onMore }: { profile: string; ad
   );
 }
 
+/** A new profile's second step: what of your history there is, by source, for you to pick before the Import page opens on
+ * it. Nothing is picked until you pick it, and starting empty is as near as Esc. */
+export function BringHistory({ state, onEmpty, onChoose }: { state: State; onEmpty: () => void; onChoose: (from: Source[]) => void }) {
+  const [from, setFrom] = useState<Source[]>([]);
+  useEffect(() => { for (const source of LOCAL) if (!(source in state.scans)) void app.scan(source); }, []);
+  return (
+    <form onSubmit={event => { event.preventDefault(); onChoose(from); }}>
+      <ul aria-label="Sources" className="mt-3 grid gap-2 min-[30rem]:grid-cols-2">
+        {LOCAL.map(source => {
+          const scan = state.scans[source], found = foundIn(state.scans, source), on = from.includes(source);
+          const projects = new Set(found.map(f => f.project)).size;
+          return (
+            <li key={source}>
+              <button type="button" role="checkbox" aria-checked={on} disabled={scan !== undefined && !found.length}
+                onClick={() => setFrom(on ? from.filter(s => s !== source) : [...from, source])}
+                className={cn('flex h-full w-full items-start gap-2.5 rounded-lg border px-3 py-2.5 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50', on ? 'border-foreground/30 bg-accent' : 'enabled:hover:bg-accent/50')}>
+                <Mark provider={PROVIDER[source]} className="mt-0.5 size-4 shrink-0" />
+                <span className="min-w-0 flex-1">
+                  <span className="block font-medium text-sm">{NAMES[source]}</span>
+                  <span className="block text-muted-foreground text-xs">{!scan ? 'Looking…' : 'error' in scan ? 'Could not be read' : !found.length ? 'None on this Mac' : <>{unit(source, found.length)}<br />in {projects} {projects === 1 ? 'project' : 'projects'}</>}</span>
+                </span>
+                <CheckIcon className={cn('mt-0.5 size-3.5 shrink-0', !on && 'invisible')} />
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+      <p className="mt-2 text-muted-foreground text-xs">A ChatGPT export can be given on the next page. You pick the projects or single conversations there, and see what it costs before anything starts.</p>
+      <div className="mt-4 flex justify-end gap-2">
+        <Button variant="ghost-muted" onClick={onEmpty}>Start empty</Button>
+        <Button type="submit" autoFocus>Choose what to import…</Button>
+      </div>
+    </form>
+  );
+}
+
 export function ImportPage({ state, profile, from = [], onClose, onMemory, onChat }: { state: State; profile: string; from?: Source[]; onClose: () => void; onMemory: () => void; onChat: () => void }) {
   const [sources, setSources] = useState<Source[]>(from), [range, setRange] = useState<Range>('All'), [picks, setPicks] = useState(() => new Set<string>());
   const [mode, setMode] = useState<Mode>('append'), [preview, setPreview] = useState<ImportPreview>(), [unread, setUnread] = useState<string>(), [starting, setStarting] = useState(false), [refused, setRefused] = useState<string>();

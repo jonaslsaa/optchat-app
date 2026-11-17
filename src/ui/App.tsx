@@ -25,7 +25,7 @@ import { chat, idle, logged, spoken } from './transcript.ts';
 import { Button, Choice, cn, useMedia } from './ui.tsx';
 import { UsagePage } from './Usage.tsx';
 import { ImportLine, ImportPage, useImport } from './Import.tsx';
-import { underway } from './imports.ts';
+import { underway, type Source } from './imports.ts';
 
 /** A window that has not run yet. */
 const NOTHING = idle();
@@ -156,7 +156,9 @@ export function App() {
   // The page in the chat's place, if one is: the settings, or what the profile in front used.
   const state = useApp(), [page, setPage] = useState<Page>(), settings = page === 'settings', needs = missing(state);
   // The New Profile dialog, over whatever page is there.
-  const [naming, setNaming] = useState(false), name = () => setNaming(true);
+  // The New Profile dialog, and the sources its second step picked for the Import page.
+  const [naming, setNaming] = useState<{ made?: string }>(), name = () => setNaming({}), [from, setFrom] = useState<Source[]>([]);
+  const toImport = (sources: Source[] = []) => { setFrom(sources); setPage('import'); };
   const toSettings = () => setPage(page => page === 'settings' ? undefined : 'settings'), chat = useRef<InProfile>(null);
   // Such a page is in place of the chat, so Esc there closes it: a run is stopped from the chat, where it can be seen.
   useShortcuts(() => ({ 'mod+,': toSettings, ...page && { escape: () => setPage(undefined) } }), [page]);
@@ -171,15 +173,17 @@ export function App() {
     // A profile after the first is named in a dialog. The first is named on the first page, as below.
     if (action === 'newProfile' && state.profile) return name();
     if (opening) return false;
+    if (action === 'import' && state.profile) return toImport();
     if (isPage(action) && state.profile) return setPage(action);
     flushSync(() => setPage(undefined));
     if (!isPage(action) && action !== 'newProfile' && chat.current) chat.current[action](); else document.querySelector<HTMLElement>('[aria-label="Profile name"]')?.focus();
   }, [connecting, opening, state.profile]);
   return (
     <div className="flex h-dvh flex-col">
-      {state.tabs.length > 1 && <Tabs state={state} onNew={name} onImport={() => setPage('import')} />}
-      {/* The new profile is opened in the chat's place: a page that stood there gives way to it. */}
-      {naming && <NewProfileDialog onClose={() => setNaming(false)} onMade={() => setPage(undefined)} />}
+      {state.tabs.length > 1 && <Tabs state={state} onNew={name} onImport={() => toImport()} />}
+      {/* The new profile is opened in the chat's place: a page that stood there gives way to it. Started empty, the keys go to the new profile's chat, which was opened behind the dialog. */}
+      {naming && <NewProfileDialog state={state} made={naming.made} onMade={() => setPage(undefined)} onImport={toImport}
+        onClose={made => { setNaming(undefined); if (made) document.querySelector<HTMLElement>('[aria-label="Message"]')?.focus(); }} />}
       {/* What the app has to tell you (`notice`). The desktop app has them at the foot: its window's buttons are in the top row. */}
       {state.connection === 'lost' && <p role="status" className="notice enter shrink-0 bg-warning-surface px-4 py-1.5 text-center text-warning-foreground text-xs">The server is not answering. Trying again…</p>}
       {state.connection === 'refused' && <p role="status" className="notice enter shrink-0 bg-warning-surface px-4 py-1.5 text-center text-warning-foreground text-xs">This page's address has no token, or one from before the server started again. Open the address the server printed.</p>}
@@ -195,12 +199,12 @@ export function App() {
         </p>
       )}
       {settings ? <Settings state={state} onClose={() => setPage(undefined)} />
-        : page === 'import' && state.profile ? <ImportPage key={state.profile} state={state} profile={state.profile} onClose={() => setPage(undefined)} onChat={() => setPage(undefined)}
+        : page === 'import' && state.profile ? <ImportPage key={state.profile} state={state} profile={state.profile} from={from} onClose={() => setPage(undefined)} onChat={() => setPage(undefined)}
           onMemory={() => { flushSync(() => setPage(undefined)); chat.current?.memory(); }} />
         : page && state.profile ? <UsagePage key={state.profile} state={state} profile={state.profile} onClose={() => setPage(undefined)} />
-        : state.profile ? <Profile ref={chat} key={state.profile} state={state} profile={state.profile} onSettings={() => setPage('settings')} onUsage={() => setPage('usage')} onNewProfile={name} onImport={() => setPage('import')} />
+        : state.profile ? <Profile ref={chat} key={state.profile} state={state} profile={state.profile} onSettings={() => setPage('settings')} onUsage={() => setPage('usage')} onNewProfile={name} onImport={() => toImport()} />
         : state.connection === 'connecting' ? <p className="m-auto text-muted-foreground text-sm">Connecting…</p>
-        : <Welcome state={state} />}
+        : <Welcome state={state} onMade={made => setNaming({ made })} />}
     </div>
   );
 }

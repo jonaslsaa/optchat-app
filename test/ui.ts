@@ -1557,9 +1557,10 @@ test('New Profile…: the menu and the list of profiles open a dialog that makes
 
 test('after a restart one bar offers to resume the agents Pi\'s close cut off, a line a profile, open or not: Resume opens the profile and resumes them, and a dismissed line stays away', async t => {
   const cut = join(home, 'restarted');
-  writeRun(createProfile(cut, 'alpha'), { id: 'a0000001', state: 'interrupted', started: 2000, ended: 2500, cutOff: true });
+  // alpha's Pi crashed (its agent is still saved as working), beta's closed (pi-optchat marked its agents).
+  writeRun(createProfile(cut, 'alpha'), { id: 'a0000001', state: 'running', started: 2000 });
   const beta = createProfile(cut, 'beta');
-  for (const id of ['b0000001', 'b0000002']) writeRun(beta, { id, state: 'running', started: 3000 });
+  for (const id of ['b0000001', 'b0000002']) writeRun(beta, { id, state: 'interrupted', started: 3000, ended: 3500, cutOff: true });
   const restarted = await startServer({ home: cut, app: join(cut, 'app'), cwd: home, pi });
   const context = await browser.newContext({ viewport: WIDE, reducedMotion: 'reduce' });
   t.after(async () => { await context.close(); await restarted.close(); });
@@ -1574,6 +1575,7 @@ test('after a restart one bar offers to resume the agents Pi\'s close cut off, a
   await page.getByRole('tab', { name: 'beta', selected: true }).waitFor();
   await lines.nth(1).waitFor({ state: 'detached' });
   assert.deepEqual(await lines.allTextContents(), ['alpha · An agent was cut off when Pi closed.Resume']);
+  assert.deepEqual(['b0000001', 'b0000002'].map(id => JSON.parse(readFileSync(join(beta, 'runs', `${id}.optchat.json`), 'utf8'))).map(({ state, cutOff }) => [state, cutOff]), [['running', undefined], ['running', undefined]]);
   await page.getByRole('button', { name: 'Dismiss: alpha' }).click();
   assert.equal(await lines.count(), 0);
   await page.reload();

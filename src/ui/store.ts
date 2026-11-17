@@ -64,7 +64,7 @@ const ordered = (windows: WindowState[]) => windows.toSorted((a, b) => a.profile
 export const UNTITLED = 'Untitled window';
 /** The profiles the bar over the page offers to resume: cut off, and not dismissed since. */
 export const cutOffShown = ({ cutOff, dismissed }: Pick<State, 'cutOff' | 'dismissed'>) =>
-  cutOff.filter(({ profile, agents }) => agents.some(({ started }) => started > (dismissed[profile] ?? -Infinity)));
+  cutOff.filter(({ profile, agents }) => agents.some(({ started }) => started > (Object.hasOwn(dismissed, profile) ? dismissed[profile] : -Infinity)));
 /** What a window is called: the main chat, or a connected window by the first message of the conversation it is in, once it has one. */
 export function title(window: WindowState, state: State) {
   if (window.role === 'main') return 'Main chat';

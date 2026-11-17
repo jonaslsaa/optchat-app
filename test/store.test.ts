@@ -482,6 +482,8 @@ test('the profiles whose agents were cut off are offered: Resume resumes the one
   const two = createProfile(home, 'two');
   writeRun(two, { id: 'bbbbbbbb', state: 'running', started: 3000 });
   writeRun(createProfile(home, 'calm'), { id: 'cccccccc', state: 'completed', started: 1000, ended: 1500 });
+  // A profile may be named as an object's property is: nothing of the kind counts as dismissed.
+  writeRun(createProfile(home, 'constructor'), { id: 'dddddddd', state: 'running', started: 500 });
   const server = await startServer({ home, cwd: home, pi });
   t.after(() => server.close());
   const opened = async (saved?: Map<string, string>) => {
@@ -493,14 +495,15 @@ test('the profiles whose agents were cut off are offered: Resume resumes the one
   const shown = (state: State) => cutOffShown(state).map(({ profile, agents }) => [profile, agents.length]);
 
   const { app, saved } = await opened();
-  assert.deepEqual([shown(app.state), app.state.tabs], [[['one', 1], ['two', 1]], ['calm']]);
+  assert.deepEqual([shown(app.state), app.state.tabs], [[['constructor', 1], ['one', 1], ['two', 1]], ['calm']]);
   await app.resumeAgents('one');
-  assert.deepEqual([shown(app.state), app.state.tabs, app.state.profile], [[['two', 1]], ['calm', 'one'], 'one']);
+  assert.deepEqual([shown(app.state), app.state.tabs, app.state.profile], [[['constructor', 1], ['two', 1]], ['calm', 'one'], 'one']);
   app.dismissCutOff('two');
+  app.dismissCutOff('constructor');
   assert.deepEqual(shown(app.state), []);
   // The page opened again: the line stays away, while the agent is still cut off and in its list.
   const again = await opened(saved);
-  assert.deepEqual([shown(again.app.state), again.app.state.cutOff.map(cut => cut.profile)], [[], ['two']]);
+  assert.deepEqual([shown(again.app.state), again.app.state.cutOff.map(cut => cut.profile)], [[], ['constructor', 'two']]);
   // Until an agent that started after it was dismissed is cut off too.
   writeRun(two, { id: 'bbbbbbbc', state: 'running', started: 4000 });
   assert.deepEqual(shown((await opened(saved)).app.state), [['two', 2]]);

@@ -24,16 +24,18 @@ import { Timeline } from './Timeline.tsx';
 import { chat, idle, logged, spoken } from './transcript.ts';
 import { Button, Choice, cn, useMedia } from './ui.tsx';
 import { UsagePage } from './Usage.tsx';
+import { ImportLine, ImportPage, useImport } from './Import.tsx';
+import { underway } from './imports.ts';
 
 /** A window that has not run yet. */
 const NOTHING = idle();
 const SHOWS = [['Chat', false], ['Memory', true]] as const;
 
 /** What the desktop app's menu bar asks of a profile's page, which its own shortcuts run too. */
-type InProfile = Record<Exclude<MenuAction, 'settings' | 'usage' | 'newProfile'>, () => void>;
+type InProfile = Record<Exclude<MenuAction, 'settings' | 'usage' | 'newProfile' | 'import'>, () => void>;
 /** One profile: its windows on the left, the selected window's chat, and beside the main chat its agents or what it named on
  * GitHub, when they are opened. */
-function Profile({ state, profile, onSettings, onUsage, onNewProfile, ref }: { state: State; profile: string; onSettings: () => void; onUsage: () => void; onNewProfile: () => void; ref: Ref<InProfile> }) {
+function Profile({ state, profile, onSettings, onUsage, onNewProfile, onImport, ref }: { state: State; profile: string; onSettings: () => void; onUsage: () => void; onNewProfile: () => void; onImport: () => void; ref: Ref<InProfile> }) {
   // The sidebar stands beside the chat in a wide window. In a narrow one it lies over the chat and is opened for one pick: a
   // window picked, a new one, Esc and a press beside it close it (`useOverlay`), and it is closed again whenever the window
   // is narrow anew. Its top row is then not what the desktop app's window is dragged by: Electron goes by the order in the
@@ -86,6 +88,9 @@ function Profile({ state, profile, onSettings, onUsage, onNewProfile, ref }: { s
   const turn = [window?.status, log?.total, state.connection].join(' ');
   // A Pi that has stopped counts nothing: its last status line still stands, and is about agents that went with it.
   const agents = state.agents[profile]?.agents, agentsWork = busy(window?.status === 'stopped' ? undefined : live.status.optchat, panel && agents);
+  // An import takes the profile's chat: pi-optchat takes no message until it is over. A new session after it is a new log.
+  useImport(profile, turn);
+  const importing = underway(state.imports[profile]);
   useAgents(profile, { closed: !panel && !own, pulse, busy: agentsWork || polled(agents ?? [], window?.outside !== undefined), connected: state.connection === 'open' });
   if (!window) return <p className="m-auto text-muted-foreground text-sm">Opening {profile}…</p>;
   const more = !own && log && log.entries.length > 0 && log.entries[0].i > 0;
@@ -104,7 +109,7 @@ function Profile({ state, profile, onSettings, onUsage, onNewProfile, ref }: { s
           {/* The update button is at the sidebar's foot. With the sidebar closed it is here, while it has something to say; on a
               narrow page, where the row is full, only while that is for you to act on, and not while the app looks or downloads. */}
           {!sidebar && state.update && state.update.state !== 'idle' && <UpdateButton update={state.update} className={cn('-ms-1', (state.update.state === 'looking' || state.update.state === 'downloading') && 'max-md:hidden')} />}
-          {state.tabs.length === 1 && <><ProfileName state={state} profile={profile} onNew={onNewProfile} /><span aria-hidden="true" className="-ms-1.5 text-muted-foreground/50 text-sm">/</span></>}
+          {state.tabs.length === 1 && <><ProfileName state={state} profile={profile} onNew={onNewProfile} onImport={onImport} /><span aria-hidden="true" className="-ms-1.5 text-muted-foreground/50 text-sm">/</span></>}
           <h1 className={cn('min-w-0 truncate font-medium text-sm', name === UNTITLED && 'text-muted-foreground')}>{name}</h1>
           {own && <span className="shrink-0 rounded-full border px-2 py-0.5 text-2xs text-muted-foreground">{window.completed ? 'Completed' : 'Connected window'}</span>}
           <span className="flex-1" />
@@ -123,11 +128,11 @@ function Profile({ state, profile, onSettings, onUsage, onNewProfile, ref }: { s
         </header>
         <Fragment key={window.id}>
           {/* An empty window says what it is, with the composer under it in the middle of the page, as T3 Code's new thread does. */}
-          {memory ? <MemoryView tree={state.memory[profile] ?? NO_TREE} profile={profile} window={window} pulse={turn} box={box} onCite={cite} /> : fresh ? (
+          {memory ? <MemoryView tree={state.memory[profile] ?? NO_TREE} profile={profile} window={window} pulse={turn} box={box} onCite={cite} onImport={onImport} /> : fresh ? (
             <div className="flex min-h-0 flex-1 flex-col items-center justify-end gap-2 px-6 pb-7 text-center">
               <h2 className="max-w-full truncate font-normal text-2xl tracking-tight sm:text-3xl">{!own ? profile : window.completed ? 'Completed' : 'New connected window'}</h2>
               <p className="max-w-xl text-balance text-muted-foreground text-sm">
-                {!own ? 'One chat that remembers everything.' : window.completed ? 'The main chat has this conversation. Your next message starts a new one.' : 'Its own conversation, with this profile\'s memory. Complete hands it to the main chat.'}
+                {!own ? <>One chat that remembers everything. <button type="button" onClick={onImport} className="rounded-sm underline underline-offset-2 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring">Import your history</button> from Claude Code, Codex, Pi or ChatGPT.</> : window.completed ? 'The main chat has this conversation. Your next message starts a new one.' : 'Its own conversation, with this profile\'s memory. Complete hands it to the main chat.'}
               </p>
             </div>
           ) : <Timeline ref={timeline} items={items} live={live} running={window.status === 'running'} starting={window.status === 'starting'} profile={profile} loading={log?.loading} older={more ? () => void app.older(profile) : undefined} onAgent={own ? undefined : openAgent} onCite={cite} logged={own ? undefined : log?.entries.at(-1)?.i} onPlace={recall} onMemory={search} agents={own ? undefined : agents} />}
@@ -135,7 +140,7 @@ function Profile({ state, profile, onSettings, onUsage, onNewProfile, ref }: { s
             // The line goes when the panel opens: the focus goes first to the panel's button, where closing the panel brings it back.
             <AtWork agents={agents} onOpen={() => { panelButton.current?.focus(); setPanel({}); }} />
           )}
-          {window.outside ? <Outside window={window} outside={window.outside} models={state.models[window.id]} /> : <Composer ref={composer} state={state} window={window} live={live} chat={items} onSend={toChat} />}
+          {importing && !own ? <ImportLine status={importing} onShow={onImport} /> : window.outside ? <Outside window={window} outside={window.outside} models={state.models[window.id]} /> : <Composer ref={composer} state={state} window={window} live={live} chat={items} onSend={toChat} />}
           {fresh && !memory && <div className="flex-[1.6]" />}
         </Fragment>
       </main>
@@ -145,7 +150,7 @@ function Profile({ state, profile, onSettings, onUsage, onNewProfile, ref }: { s
 }
 export function App() {
   // The page in the chat's place, if one is: the settings, or what the profile in front used.
-  const state = useApp(), [page, setPage] = useState<'settings' | 'usage'>(), settings = page === 'settings', needs = missing(state);
+  const state = useApp(), [page, setPage] = useState<'settings' | 'usage' | 'import'>(), settings = page === 'settings', needs = missing(state);
   // The New Profile dialog, over whatever page is there.
   const [naming, setNaming] = useState(false), name = () => setNaming(true);
   const toSettings = () => setPage(page => page === 'settings' ? undefined : 'settings'), chat = useRef<InProfile>(null);
@@ -162,13 +167,13 @@ export function App() {
     // A profile after the first is named in a dialog. The first is named on the first page, as below.
     if (action === 'newProfile' && state.profile) return name();
     if (opening) return false;
-    if (action === 'usage' && state.profile) return setPage('usage');
+    if ((action === 'usage' || action === 'import') && state.profile) return setPage(action);
     flushSync(() => setPage(undefined));
-    if (action !== 'usage' && action !== 'newProfile' && chat.current) chat.current[action](); else document.querySelector<HTMLElement>('[aria-label="Profile name"]')?.focus();
+    if (action !== 'usage' && action !== 'newProfile' && action !== 'import' && chat.current) chat.current[action](); else document.querySelector<HTMLElement>('[aria-label="Profile name"]')?.focus();
   }, [connecting, opening, state.profile]);
   return (
     <div className="flex h-dvh flex-col">
-      {state.tabs.length > 1 && <Tabs state={state} onNew={name} />}
+      {state.tabs.length > 1 && <Tabs state={state} onNew={name} onImport={() => setPage('import')} />}
       {/* The new profile is opened in the chat's place: a page that stood there gives way to it. */}
       {naming && <NewProfileDialog onClose={() => setNaming(false)} onMade={() => setPage(undefined)} />}
       {/* What the app has to tell you (`notice`). The desktop app has them at the foot: its window's buttons are in the top row. */}
@@ -186,8 +191,10 @@ export function App() {
         </p>
       )}
       {settings ? <Settings state={state} onClose={() => setPage(undefined)} />
+        : page === 'import' && state.profile ? <ImportPage key={state.profile} state={state} profile={state.profile} onClose={() => setPage(undefined)} onChat={() => setPage(undefined)}
+          onMemory={() => { flushSync(() => setPage(undefined)); chat.current?.memory(); }} />
         : page && state.profile ? <UsagePage key={state.profile} state={state} profile={state.profile} onClose={() => setPage(undefined)} />
-        : state.profile ? <Profile ref={chat} key={state.profile} state={state} profile={state.profile} onSettings={() => setPage('settings')} onUsage={() => setPage('usage')} onNewProfile={name} />
+        : state.profile ? <Profile ref={chat} key={state.profile} state={state} profile={state.profile} onSettings={() => setPage('settings')} onUsage={() => setPage('usage')} onNewProfile={name} onImport={() => setPage('import')} />
         : state.connection === 'connecting' ? <p className="m-auto text-muted-foreground text-sm">Connecting…</p>
         : <Welcome state={state} />}
     </div>

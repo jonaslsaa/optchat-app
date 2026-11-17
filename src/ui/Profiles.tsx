@@ -1,4 +1,4 @@
-import { CheckIcon, ChevronsUpDownIcon, PlusIcon, XIcon } from 'lucide-react';
+import { CheckIcon, ChevronsUpDownIcon, HistoryIcon, PlusIcon, XIcon } from 'lucide-react';
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { badge } from './badge.ts';
 import { useOverlay, walk } from './keys.ts';
@@ -56,7 +56,7 @@ export function NewProfileDialog({ onClose, onMade }: { onClose: () => void; onM
 /** A button that opens the list of profiles. Picking one opens it, in a tab of its own beside those already open, and under
  * them is where a new one is made (`onNew`). The arrows walk the list, round its ends; Esc closes it and nothing else
  * (`useOverlay`). */
-export function ProfilePicker({ state, label, className, children, onNew }: { state: State; label: string; className?: string; children: ReactNode; onNew: () => void }) {
+export function ProfilePicker({ state, label, className, children, onNew, onImport }: { state: State; label: string; className?: string; children: ReactNode; onNew: () => void; onImport: () => void }) {
   const [open, setOpen] = useState(false), menu = useRef<HTMLDivElement>(null), opener = useRef<HTMLButtonElement>(null);
   useOverlay(open, () => setOpen(false), menu, opener);
   return (
@@ -77,6 +77,11 @@ export function ProfilePicker({ state, label, className, children, onNew }: { st
             <button type="button" onClick={() => { setOpen(false); opener.current?.focus(); onNew(); }} className="flex h-8 w-full items-center gap-2 rounded-md px-2 text-left text-muted-foreground text-sm hover:bg-accent hover:text-foreground focus-visible:bg-accent focus-visible:text-foreground focus-visible:outline-none">
               <PlusIcon className="size-3.5" />New profile…
             </button>
+            {state.profile && (
+              <button type="button" title={`Import another tool's history into ${state.profile}`} onClick={() => { setOpen(false); onImport(); }} className="flex h-8 w-full items-center gap-2 rounded-md px-2 text-left text-muted-foreground text-sm hover:bg-accent hover:text-foreground focus-visible:bg-accent focus-visible:text-foreground focus-visible:outline-none">
+                <HistoryIcon className="size-3.5" /><span className="min-w-0 truncate">Import history…</span>
+              </button>
+            )}
           </li>
         </ul>
       )}
@@ -97,9 +102,9 @@ function ProfileBadge({ profile }: { profile: string }) {
   );
 }
 /** The one open profile, named in the title bar: with a single profile there is no tab bar, and this is where a second one is opened. */
-export function ProfileName({ state, profile, onNew }: { state: State; profile: string; onNew: () => void }) {
+export function ProfileName({ state, profile, onNew, onImport }: { state: State; profile: string; onNew: () => void; onImport: () => void }) {
   return (
-    <ProfilePicker state={state} label="Open a profile" onNew={onNew} className="flex h-7 max-w-40 items-center gap-1.5 rounded-md px-1.5 text-muted-foreground text-sm hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring">
+    <ProfilePicker state={state} label="Open a profile" onNew={onNew} onImport={onImport} className="flex h-7 max-w-40 items-center gap-1.5 rounded-md px-1.5 text-muted-foreground text-sm hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring">
       <ProfileBadge profile={profile} /><span className="min-w-0 truncate">{profile}</span><ChevronsUpDownIcon className="size-3 shrink-0" />
     </ProfilePicker>
   );
@@ -107,7 +112,7 @@ export function ProfileName({ state, profile, onNew }: { state: State; profile: 
 /** The open profiles, as tabs, and a button to open another. They are shown only once there are two: a profile is something
  * you pick once. The tab in front looks like part of the page under it, and a tab says when a window of its profile is working
  * or has failed, since its windows are out of sight. */
-export function Tabs({ state, onNew }: { state: State; onNew: () => void }) {
+export function Tabs({ state, onNew, onImport }: { state: State; onNew: () => void; onImport: () => void }) {
   return (
     <div className="window-bar window-start flex h-10 shrink-0 items-center gap-1 border-b bg-sidebar px-2 in-data-shell:h-(--topbar-height)">
       <div role="tablist" aria-label="Profiles" className="flex min-w-0 items-center gap-1">
@@ -120,7 +125,7 @@ export function Tabs({ state, onNew }: { state: State; onNew: () => void }) {
           </div>
         ))}
       </div>
-      <ProfilePicker state={state} label="Open a profile" onNew={onNew} className="flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring">
+      <ProfilePicker state={state} label="Open a profile" onNew={onNew} onImport={onImport} className="flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring">
         <PlusIcon className="size-4" />
       </ProfilePicker>
     </div>

@@ -21,7 +21,7 @@ process.env.FAKE_PI_HOME = join(home, 'pi');
 mkdirSync(join(home, 'pi', 'pi-optchat'), { recursive: true });
 writeFileSync(join(home, 'pi', 'pi-optchat', 'package.json'), JSON.stringify({ name: 'pi-optchat', version: '0.12.2' }));
 writeFileSync(join(home, 'pi', 'state.json'), JSON.stringify({ version: '1.5.2', providers: ['anthropic', 'openai'], packages: { 'npm:pi-optchat': join(home, 'pi', 'pi-optchat') } }));
-for (const name of ['bar', 'cold', 'colder', 'chat', 'beside', 'sheet', 'memory', 'rows', 'menus', 'fields', 'asks', 'windows', 'importing', 'keys', 'spend', 'commands', 'arrows', 'mute', 'said', 'images', 'tabs', 'slow', 'inline', 'held', 'unread']) {
+for (const name of ['bar', 'cold', 'colder', 'chat', 'beside', 'sheet', 'memory', 'rows', 'menus', 'fields', 'asks', 'windows', 'importing', 'into', 'keys', 'spend', 'commands', 'arrows', 'mute', 'said', 'images', 'tabs', 'slow', 'inline', 'held', 'unread']) {
   const profile = createProfile(home, name);
   if (['bar', 'cold', 'colder', 'memory', 'windows', 'keys', 'spend', 'arrows', 'unread'].includes(name)) { writeMemory(profile, 16); continue; }
   seed(profile, TEAM.length, Date.now(), TEAM);
@@ -196,6 +196,20 @@ test('the usage page closes on Esc and the run goes on, and it reads the ledger 
   await client.request('abort', { window: 'spend/main' });
   client.close();
   await page.getByText('$3.50').first().waitFor({ timeout: 5000 });
+});
+
+test('the Import page opens from the memory view and closes on Esc, and the run goes on', async () => {
+  const page = await open('into');
+  await run(page);
+  await page.getByRole('radiogroup', { name: 'What the page shows' }).getByText('Memory').click();
+  await page.getByRole('button', { name: 'Import…' }).click();
+  await page.getByRole('heading', { name: 'Import into into' }).waitFor();
+  // Esc in its filter is the page's too: a box with nothing to clear has nothing else to do with it.
+  await page.getByRole('textbox', { name: 'Filter projects and conversations' }).click();
+  await page.keyboard.press('Escape');
+  await page.getByRole('heading', { name: 'Import into into' }).waitFor({ state: 'detached', timeout: 2000 });
+  await page.waitForTimeout(400);
+  assert.ok(await stop(page).isVisible(), 'Esc on the Import page stopped the run.');
 });
 
 test('Esc in a question Pi asks answers no, and the run goes on with that', async () => {

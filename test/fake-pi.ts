@@ -253,7 +253,7 @@ const commands: Record<string, (command: Record<string, unknown>) => unknown> = 
       if (running) { release?.({ aborted: true }); void settled.then(hand); } else hand();
       return { disposition: 'handled' };
     }
-    if (profile === 'importing') {
+    if (profile === 'importing' || existsSync(join(process.env.OPTCHAT_HOME ?? '.', 'profiles', profile, 'imports', 'pending.json'))) {
       if (!text.startsWith('/')) write({ type: 'extension_ui_request', id: `notice-${++noticed}`, method: 'notify', message: 'This profile has an import in progress. Use /optchat import to resume or discard it, or switch profiles.', notifyType: 'info' });
       return { disposition: 'handled' };
     }

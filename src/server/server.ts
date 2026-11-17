@@ -11,6 +11,7 @@ import { Envelope, methods, REFUSED, type Method, type Params, type Push, type R
 import { Agents } from './agents.ts';
 import { inside, installed, opening, preferred, EDITORS, type Installed, type Launch as Opened } from './files.ts';
 import { GitHub } from './github.ts';
+import { Imports } from './imports.ts';
 import { reason } from './pi.ts';
 import { profileDirectory, Profiles } from './profiles.ts';
 import { appHome, isDirectory, readSettings, writeSettings } from './settings.ts';
@@ -43,6 +44,9 @@ export interface ServerOptions extends Partial<Pick<WindowsOptions, 'home' | 'gr
   launcher?: (launch: Opened) => void;
   /** The editors on this machine (`installed` in `files.ts`, unless said): a test names its own, so it does not depend on yours. */
   editors?: () => Installed;
+  /** The home folder whose other tools' histories may be imported (`.claude`, `.codex`, `.pi`, `.omp` in it): yours in the app,
+   * `npm start` and `npm run dev`. Without it no history is read but a ChatGPT export that was uploaded, so no test reads yours. */
+  histories?: string;
   /** The built UI's directory (`npm run build`), served as the page at `/`. */
   ui?: string;
   /** Origins that may connect besides the server's own page: the scheme a desktop shell loads the UI from, as T3 Code's
@@ -61,7 +65,7 @@ const loopback = (url: string) => { try { return LOOPBACK.includes(new URL(url).
 
 /** Starts the app's server on this machine only: the protocol of `protocol.ts` on a WebSocket at `/ws`, a profile's images at
  * `/images/<profile>/<name>`, and the UI's page everywhere else. `close` stops every Pi it started and waits for them. */
-export async function startServer({ port = 0, origins = [], ui = join(import.meta.dirname, '../../dist/ui'), home = dataHome(), app = appHome(), cwd, pi, flags = [], npm, gh, opener, launcher, editors = () => installed(), update, grace = 15_000, now = Date.now, token = randomBytes(32).toString('base64url') }: ServerOptions) {
+export async function startServer({ port = 0, origins = [], ui = join(import.meta.dirname, '../../dist/ui'), home = dataHome(), app = appHome(), cwd, pi, flags = [], npm, gh, opener, launcher, editors = () => installed(), update, histories, grace = 15_000, now = Date.now, token = randomBytes(32).toString('base64url') }: ServerOptions) {
   ui = resolve(ui);
   home = resolve(home); // Pi runs in each window's directory, and has to find the same profiles from there.
   app = resolve(app); // And npm runs in the app's folder, where a path that is not whole would be another folder.
@@ -73,6 +77,7 @@ export async function startServer({ port = 0, origins = [], ui = join(import.met
   const setup = new Setup({ app, cwd, pi, npm, opener, push: setup => push({ push: 'setup', setup }) });
   // A window runs in the folder the settings name, unless that folder is gone since it was kept.
   const windows = new Windows({ home, grace, push, cwd: () => settings.cwd && isDirectory(settings.cwd) ? settings.cwd : cwd, pi: async () => { const { command, args } = await setup.launch(); return { command, args: [...args, ...flags] }; }, catalog: () => setup.catalog() });
+  const imports = new Imports({ home, histories, app, owned: profile => windows.owned(profile) });
   // The folder the files a window's chat names are read from: where its Pi runs, which for a main chat a Pi outside the app
   // holds is that Pi's, and none when that Pi is on another machine or does not say.
   const folder = (id: string) => {
@@ -112,6 +117,8 @@ export async function startServer({ port = 0, origins = [], ui = join(import.met
     windows: () => windows.list(), open: params => windows.open(params), prompt: params => windows.prompt(params), dequeue: params => windows.dequeue(params), abort: params => windows.abort(params),
     complete: params => windows.complete(params), close: params => windows.close(params), records: params => windows.records(params),
     command: params => windows.command(params), answer: params => windows.answer(params), commands: params => windows.commands(params), models: params => windows.models(params), setModel: params => windows.setModel(params),
+    importScan: params => imports.found(params), importUpload: params => imports.receive(params), importPreview: params => imports.preview(params),
+    importStart: params => imports.start(params), importControl: params => imports.control(params), importStatus: params => imports.status(params),
     usage: ({ profile, range }) => usage(profileDirectory(home, profile), range, now()),
     update: () => ({ ...updating && { update: updating } }),
     updateNow: () => { if (!update || !updating) throw new Error('This app does not update itself.'); update(); return {}; },

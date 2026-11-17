@@ -1,9 +1,10 @@
 import { useSyncExternalStore } from 'react';
 import { connect, type Client } from '../client.ts';
-import type { Command, Config, Line, Message, Method, ModelChoice, Params, Push, Result, Settings, Setup, Updating, Usage, WindowState } from '../protocol.ts';
+import type { Command, Config, Importing, Line, Message, Method, ModelChoice, Params, Preview, Push, Result, Settings, Setup, Updating, Usage, WindowState } from '../protocol.ts';
 import { current } from '../window.ts';
 import type { Image } from './images.ts';
 import { asTyped, yours } from './cite.ts';
+import type { Scans, Source } from './imports.ts';
 import { calling, key, NO_TREE, path, read, toggled, type Tree } from './memory.ts';
 import { apply, idle, isMessage, isObject, merged, quiet, replay, stopped, without, words, type Live, type PiMessage } from './transcript.ts';
 
@@ -41,6 +42,13 @@ export interface State {
   config: Record<string, Config>;
   /** What each profile used, as last read: in the range that was last asked for. */
   usage: Record<string, Usage>;
+  /** What a scan of this machine found of each source's history, once it was asked for (`undefined` while it reads), and the
+   * ChatGPT export on its way to the server. */
+  scans: Scans;
+  uploading?: { name: string; sent: number; size: number };
+  /** How each open profile's import stands, as last read, and the import it last finished while the page looked. */
+  imports: Record<string, Importing>;
+  imported: Record<string, { added: number }>;
   /** The images that go with what is typed in each window, kept while you look at another one; not when the page is opened again. */
   attached: Record<string, Image[]>;
   /** Why the last thing you asked for failed. */
@@ -75,7 +83,7 @@ export function title(window: WindowState, state: State) {
 }
 
 export class App {
-  state: State = { connection: 'connecting', profiles: [], tabs: [], windows: [], selected: {}, logs: {}, live: {}, sessions: {}, agents: {}, github: {}, models: {}, commands: {}, chats: {}, memory: {}, config: {}, usage: {}, attached: {}, cutOff: [], dismissed: {} };
+  state: State = { connection: 'connecting', profiles: [], tabs: [], windows: [], selected: {}, logs: {}, live: {}, sessions: {}, agents: {}, github: {}, models: {}, commands: {}, chats: {}, memory: {}, config: {}, usage: {}, attached: {}, cutOff: [], dismissed: {}, scans: {}, imports: {}, imported: {} };
   private client?: Client;
   private retrying?: ReturnType<typeof setTimeout>;
   private closed = false;
@@ -372,6 +380,59 @@ export class App {
     const usage = await this.ask('usage', { profile, range });
     if (usage && JSON.stringify(usage) !== JSON.stringify(this.state.usage[profile])) this.set({ usage: { ...this.state.usage, [profile]: usage } });
   }
+  /** What a source's scan finds: the server keeps it, and `fresh` has it look again. */
+  async scan(source: Source, fresh = false) {
+    this.set({ scans: { ...this.state.scans, [source]: undefined } });
+    try {
+      const scan = await this.request('importScan', { source, fresh });
+      this.set({ scans: { ...this.state.scans, [source]: scan } });
+    } catch (error) { this.set({ scans: { ...this.state.scans, [source]: { error: error instanceof Error ? error.message : String(error) } } }); }
+  }
+  /** Sends a ChatGPT export to the server a piece at a time, and has it read. Why not, when it was refused. */
+  async upload(file: File) {
+    const piece = 6 << 20;
+    this.set({ uploading: { name: file.name, sent: 0, size: file.size } });
+    try {
+      for (let offset = 0; offset === 0 || offset < file.size; offset += piece) {
+        const bytes = new Uint8Array(await file.slice(offset, offset + piece).arrayBuffer());
+        let data = '';
+        for (let at = 0; at < bytes.length; at += 0x8000) data += String.fromCharCode(...bytes.subarray(at, at + 0x8000));
+        await this.request('importUpload', { name: file.name, offset, data: btoa(data) });
+        this.set({ uploading: { name: file.name, sent: Math.min(file.size, offset + piece), size: file.size } });
+      }
+    } catch (error) { return error instanceof Error ? error.message : String(error); }
+    finally { this.set({ uploading: undefined }); }
+    await this.scan('chatgpt', true);
+  }
+  /** What importing the picked conversations would bring, or why it cannot be said. */
+  async preview(profile: string, picked: Params<'importPreview'>['picked']): Promise<Preview | string> {
+    try { return await this.request('importPreview', { profile, picked }); } catch (error) { return error instanceof Error ? error.message : String(error); }
+  }
+  /** Keeps how a profile's import stands. One the page saw running that is now over finished, unless it was discarded: then the
+   * profile has another memory, which the chat and the memory view read again. */
+  private importing(profile: string, status: Importing, discarded = false) {
+    const before = this.state.imports[profile], over = before && before.state !== 'idle' && status.state === 'idle';
+    const imported = over && !discarded ? { ...this.state.imported, [profile]: { added: status.state === 'idle' && status.last ? status.last.added : before.added } } : this.state.imported;
+    this.set({ imports: { ...this.state.imports, [profile]: status }, imported });
+    if (over && !discarded) { void this.read(profile); if (this.state.memory[profile]) void this.readMemory(profile); }
+  }
+  async readImport(profile: string) {
+    const status = await this.client?.request('importStatus', { profile }).catch(() => undefined);
+    if (status && JSON.stringify(status) !== JSON.stringify(this.state.imports[profile])) this.importing(profile, status);
+  }
+  /** Starts, pauses, resumes or discards a profile's import, or says why not, in pi-optchat's words. */
+  async startImport(profile: string, picked: Params<'importStart'>['picked'], mode: Params<'importStart'>['mode']) {
+    try {
+      const { [profile]: _, ...imported } = this.state.imported;
+      this.set({ imported });
+      this.importing(profile, await this.request('importStart', { profile, picked, mode }));
+    } catch (error) { return error instanceof Error ? error.message : String(error); }
+  }
+  async controlImport(profile: string, action: Params<'importControl'>['action']) {
+    try { this.importing(profile, await this.request('importControl', { profile, action }), action === 'discard'); } catch (error) { return error instanceof Error ? error.message : String(error); }
+  }
+  /** Forgets that an import finished, once its page has said so. */
+  seenImport(profile: string) { const { [profile]: _, ...imported } = this.state.imported; this.set({ imported }); }
   /** Reads the commands a window's Pi knows, which starts that Pi: they are its extensions', its prompt templates and its skills. */
   async readCommands(window: string) {
     const answer = await this.client?.request('commands', { window }).catch(() => ({ commands: [] }));

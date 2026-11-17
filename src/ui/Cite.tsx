@@ -34,11 +34,12 @@ export function CiteSelection({ content, logged = -1, onCite }: { content: RefOb
   // what is cited: it goes away with the button in any case.
   const words = (range: Range) => { const selection = getSelection(); selection?.removeAllRanges(); selection?.addRange(range); return selection?.toString() ?? ''; };
   return (
-    // The press does not take the selection away, and the click that follows it cites it. Esc on the button takes both away,
-    // and is then not the chat's key.
+    // The press does not take the selection away, and the click that follows it cites it. The selection is dropped before it
+    // is cited, never after: citing puts the keys in the message's box, and a selection taken away then takes the box's caret
+    // with it, so it looks as if it has no keys. Esc on the button takes both away, and is then not the chat's key.
     <span className="enter enter-grow absolute z-20 mt-1 flex" style={{ left: found.left, top: found.top }}>
       <Button size="xs" variant="glass" onPointerDown={event => event.preventDefault()} onKeyDown={event => escapes(event, drop)}
-        onClick={() => { onCite(cite(words(found.range), found.at && found.at.id + found.at.n - 1 <= logged ? found.at : undefined)); drop(); }}>
+        onClick={() => { const cited = cite(words(found.range), found.at && found.at.id + found.at.n - 1 <= logged ? found.at : undefined); drop(); onCite(cited); }}>
         <QuoteIcon className="size-3.5" />Cite
       </Button>
     </span>

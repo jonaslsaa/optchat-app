@@ -33,11 +33,11 @@ export async function fakeOwner(directory: string, clock: () => number) {
     },
   };
   // An import, as pi-optchat keeps one while it runs: its job in `imports/pending.json` and how far it is in `imports/status.json`,
-  // which pi-optchat's `readImport` reads. Nothing is summarized: it stands where it began, a third of the way, until the file
+  // which pi-optchat's `readImport` reads (the job's numbers from the one, how far it is from the other). Nothing is summarized: it stands where it began, a third of the way, until the file
   // `import-done` is in the profile's folder, when it finishes as pi-optchat's does (`imports/<id>.json`).
   const imports = join(directory, 'imports'), pending = join(imports, 'pending.json'), progress = join(imports, 'status.json');
   const job = () => JSON.parse(readFileSync(pending, 'utf8'));
-  const stand = (state: 'running' | 'paused') => { const { id, total, added } = job(), messages = total - added + Math.round(added / 3); writeFileSync(progress, JSON.stringify({ id, state, pid: process.pid, messages, total, summaries: Math.floor(messages * 0.9) })); };
+  const stand = (state: 'running' | 'paused') => { const { id, total, added } = job(), messages = total - added + Math.round(added / 3); writeFileSync(progress, JSON.stringify({ id, state, pid: process.pid, messages, summaries: Math.floor(messages * 0.9) })); };
   const importing: Record<string, (text: string) => Promise<void> | void> = {
     'import-start': async text => {
       if (existsSync(pending)) throw new Error('An import is already pending: resume or discard it first.');
@@ -50,7 +50,10 @@ export async function fakeOwner(directory: string, clock: () => number) {
       writeFileSync(pending, JSON.stringify({ id, mode: selection.mode, previous: '.', target: `memories/${id}`, created: new Date(clock()).toISOString(), added: preview.added, skipped: preview.skipped, total: preview.memory.messages + preview.added, inputBytes: 4 * preview[selection.mode].tokens }));
       stand('running');
     },
-    'import-pause': () => stand('paused'),
+    'import-pause': () => {
+      if (!existsSync(progress) || JSON.parse(readFileSync(progress, 'utf8')).state !== 'running') throw new Error('No import is running.');
+      stand('paused');
+    },
     'import-resume': () => stand('running'),
     'import-discard': () => { const { id } = job(); rmSync(pending); rmSync(progress, { force: true }); rmSync(join(directory, 'memories', id), { recursive: true, force: true }); },
   };

@@ -10,7 +10,7 @@ npm start                 # builds the UI, then prints the page's address: http:
 npm run server            # the same without building the UI first
 ```
 
-It needs Node 22.19 or newer, and Pi with pi-optchat 0.11.13 or newer in it (`pi install npm:pi-optchat`): the `pi` on your PATH, or else the one the app installs for you ([setup.md](setup.md)). Options: `--port` and `--cwd <dir>` (where windows run unless a window names its own; your home directory by default). `OPTCHAT_HOME` picks the profiles' root, as in pi-optchat. Ctrl+C stops every Pi in order, connected windows before the main one they hand off to, so each saves its memory and frees its profile.
+It needs Node 22.19 or newer, and Pi with pi-optchat 0.12.2 or newer in it (`pi install npm:pi-optchat`): the `pi` on your PATH, or else the one the app installs for you ([setup.md](setup.md)). Options: `--port` and `--cwd <dir>` (where windows run unless a window names its own; your home directory by default). `OPTCHAT_HOME` picks the profiles' root, as in pi-optchat. Ctrl+C stops every Pi in order, connected windows before the main one they hand off to, so each saves its memory and frees its profile.
 
 ```bash
 npm run check             # types
@@ -43,7 +43,7 @@ The client sends `{ id, method, params }` and gets `{ id, result }` or `{ id, er
 | `interruptAgent { profile, id }` | Cuts the agent's current step: it goes on at once with your messages it has not read, or else waits for the next one. It ends nothing. |
 | `stopAgent { profile, id }` | Ends the agent and the agents it started. The agent that started it gets a report that says you stopped it. |
 | `cutOff {}` | The profiles whose main chat's own agents their Pi's close or crash cut off, from the records alone: those pi-optchat marked `cutOff`, and, in a profile no Pi has open, those saved as running or waiting. Each with `{ id, started }`. Starts no Pi. |
-| `resumeAgents { profile }` | Resumes them through the Pi that has the profile, which is started first if none has (pi-optchat's `resumeCutOff`, pi-optchat 0.12.2 or newer). |
+| `resumeAgents { profile }` | Resumes them through the Pi that has the profile, which is started first if none has (pi-optchat's `resumeCutOff`). |
 | `github { profile, limit?, fresh? }` | The issues and pull requests the profile's main chat named by their address on github.com, found in the log each time: the latest named first, `limit` (30) of them, with `more` for how many that leaves out. Each has its `repo`, `number`, `url` and `kind`, and from GitHub its `title`, `state` (`open`, `draft`, `merged`, `closed`), and for an open pull request its `checks` and `review`. GitHub is asked through the GitHub CLI after the answer, so `pending` says how many items are being asked about, and `gh` how the last asking went (`ok`, `missing`, `signed_out`, `failed` with a `message`). See [GitHub](#github). |
 | `isFile { window, path }`, `openFile { window, path, line? }` | Whether `path` is a file in the folder the window runs in, and opening it there in your editor ([Files the chat names](#files-the-chat-names)). |
 | `windows` | Every window and its state. |

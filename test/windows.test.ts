@@ -196,7 +196,7 @@ test('a Pi that could not open the profile is stopped, and the prompt fails with
 
   // A Pi without pi-optchat opens no profile either, and nor does one whose pi-optchat shows its status line but names no role.
   // Another extension's failure is not pi-optchat's.
-  for (const profile of ['bare', 'old']) await assert.rejects(request('prompt', { window: (await request('open', { profile })).window.id, text: 'hello' }), /pi-optchat did not open the profile. Is pi-optchat 0.11.13 or newer installed/);
+  for (const profile of ['bare', 'old']) await assert.rejects(request('prompt', { window: (await request('open', { profile })).window.id, text: 'hello' }), /pi-optchat did not open the profile. Is pi-optchat 0.12.2 or newer installed/);
   assert.deepEqual(await request('prompt', { window: (await request('open', { profile: 'noisy' })).window.id, text: 'hello' }), { disposition: 'started' });
 });
 

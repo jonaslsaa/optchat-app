@@ -97,7 +97,7 @@ test('the app installs pi-optchat with Pi\'s own installer, and says how it went
   const { pushed, ended, request } = await setup(t, {}, { version: '1.5.2', providers: ['anthropic'], packages: {} });
   await request('install', { what: 'optchat' });
   const done = await ended();
-  assert.partialDeepStrictEqual(done, { optchat: { state: 'ok', version: '0.11.13' }, job: { what: 'optchat', state: 'done' } });
+  assert.partialDeepStrictEqual(done, { optchat: { state: 'ok', version: '0.12.2' }, job: { what: 'optchat', state: 'done' } });
   assert.match(pushed[0].job?.line ?? '', /^Running: .* install npm:pi-optchat$/);
   await assert.rejects(request('install', { what: 'optchat' }), /installed already/);
 });

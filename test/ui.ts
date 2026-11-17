@@ -19,7 +19,7 @@ const home = temporaryHome(), pi = { command: process.execPath, args: [join(impo
 // A machine that is set up: Pi with pi-optchat in it and two providers logged in, so there are models to pick.
 process.env.FAKE_PI_HOME = join(home, 'pi');
 mkdirSync(join(home, 'pi', 'pi-optchat'), { recursive: true });
-writeFileSync(join(home, 'pi', 'pi-optchat', 'package.json'), JSON.stringify({ name: 'pi-optchat', version: '0.11.13' }));
+writeFileSync(join(home, 'pi', 'pi-optchat', 'package.json'), JSON.stringify({ name: 'pi-optchat', version: '0.12.2' }));
 writeFileSync(join(home, 'pi', 'state.json'), JSON.stringify({ version: '1.5.2', providers: ['anthropic', 'openai'], packages: { 'npm:pi-optchat': join(home, 'pi', 'pi-optchat') } }));
 for (const name of ['bar', 'cold', 'colder', 'chat', 'beside', 'sheet', 'memory', 'rows', 'menus', 'fields', 'asks', 'windows', 'importing', 'keys', 'spend', 'commands', 'arrows', 'mute', 'said', 'images', 'tabs', 'slow', 'inline', 'held', 'unread']) {
   const profile = createProfile(home, name);
@@ -1008,7 +1008,7 @@ test('the settings are in tabs: the arrows go from one to the next, the page ope
   await page.getByRole('button', { name: 'Close the settings' }).click();
   await settings.click();
   await page.getByRole('tab', { name: 'General', selected: true }).waitFor();
-  writeFileSync(optchat, JSON.stringify({ name: 'pi-optchat', version: '0.11.13' }));
+  writeFileSync(optchat, JSON.stringify({ name: 'pi-optchat', version: '0.12.2' }));
   await again.click();
   await old.waitFor({ state: 'detached' });
 });

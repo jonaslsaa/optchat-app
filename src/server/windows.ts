@@ -103,8 +103,8 @@ export class Windows {
     return answered('clear_queue', methods.dequeue.result, await this.running(window).request({ type: 'clear_queue' }));
   }
   async abort({ window }: Params<'abort'>): Promise<Result<'abort'>> {
-    const queued = await this.dequeue({ window });
-    await this.running(window).request({ type: 'abort' });
+    const pi = this.running(window), queued = await this.dequeue({ window });
+    await pi.request({ type: 'abort' });
     return queued;
   }
   async complete({ window }: Params<'complete'>): Promise<Result<'complete'>> {

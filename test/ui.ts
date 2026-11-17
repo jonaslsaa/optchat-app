@@ -153,6 +153,21 @@ test('⌥↑ takes the messages still waiting back into the box, in front of wha
   assert.deepEqual([await focused(page), await box.evaluate((area: HTMLTextAreaElement) => area.selectionStart === area.value.length)], ['Message', true]);
   await page.waitForTimeout(300);
   assert.ok(await page.getByRole('button', { name: 'Steer the agent' }).isVisible(), '⌥↑ stopped the run.');
+  // With nothing waiting the key is the text's, as it was.
+  await page.evaluate(() => addEventListener('keydown', event => { document.body.dataset.kept = String(event.defaultPrevented); }));
+  await page.keyboard.press('Alt+ArrowUp');
+  assert.deepEqual([await page.evaluate(() => document.body.dataset.kept), await box.inputValue()], ['false', 'Check the tests first\n\nThen open the pull request\n\nand say why']);
+  // A message that only cites comes back as its chip, and the caret goes to the end of what is typed, which did not change.
+  await box.fill('<cite>the line</cite>\n');
+  await page.keyboard.press('Enter');
+  await waiting.waitFor();
+  await box.fill('abc');
+  await box.evaluate((area: HTMLTextAreaElement) => area.setSelectionRange(1, 1));
+  await page.keyboard.press('Alt+ArrowUp');
+  await waiting.waitFor({ state: 'detached' });
+  await page.getByLabel('Cited in the message').getByText('the line').waitFor();
+  await page.waitForFunction(() => document.querySelector<HTMLTextAreaElement>('textarea[aria-label=Message]')?.selectionStart === 3, null, { timeout: 2000 }).catch(() => assert.fail('The caret stayed where it was.'));
+  assert.equal(await box.inputValue(), 'abc');
 });
 
 test('the usage page closes on Esc and the run goes on, and it reads the ledger again when the main chat changes', async () => {

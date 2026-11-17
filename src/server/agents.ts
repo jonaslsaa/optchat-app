@@ -1,5 +1,5 @@
 import { readFileSync, statSync } from 'node:fs';
-import { attachAgent, profileOwner, readRuns, type AttachedAgent, type RunInfo } from 'pi-optchat/files';
+import { attachAgent, profileOwner, readRuns, resumeCutOff, type AttachedAgent, type RunInfo } from 'pi-optchat/files';
 import { working } from '../agent.ts';
 import type { Agent, Params, Result } from '../protocol.ts';
 import { profileDirectory } from './profiles.ts';
@@ -77,6 +77,17 @@ export class Agents {
     const queued = run?.guidance.flatMap(({ state, from, text }) => state === 'queued' && from === 'user' ? [text] : []) ?? [];
     return { total: messages.length, messages: messages.slice(after), ...run?.report !== undefined && { report: run.report }, ...run?.ended !== undefined && { ended: run.ended }, ...queued.length && { queued } };
   }
+
+  /** The main chat's own agents that their Pi's close or crash cut off: pi-optchat marks them `cutOff`, but only once the
+   * profile is opened again, so before that they are the ones saved as running or waiting, in a profile no Pi has open. Paused
+   * and stopping ones were not working, and pi-optchat does not resume them. The agents of a cut-off agent go on through it. */
+  async cutOff(profile: string): Promise<Result<'cutOff'>['profiles'][number]['agents']> {
+    const own = this.runs(profile).filter(run => run.parentId === undefined), left = (run: RunInfo) => run.state === 'running' || run.state === 'waiting';
+    const owned = !own.some(left) || await this.owned(profile);
+    return own.filter(run => run.cutOff || !owned && left(run)).map(({ id, started }) => ({ id, started }));
+  }
+  /** Has the Pi that has the profile open resume its cut-off agents. */
+  async resume(profile: string) { await resumeCutOff(profileDirectory(this.home, profile)); }
 
   /** One of the profile's agents, in the Pi that has the profile open: only that Pi reaches its agents, and pi-optchat's
    * `attachAgent` asks it. The app's own Pi or one in a terminal alike, and nothing is kept open: an agent is read from its files. */

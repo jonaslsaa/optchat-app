@@ -96,3 +96,37 @@ test('an agent is told, interrupted, stopped and resumed through the Pi that has
   assert.equal(await server.working(), 0, 'an agent that is paused is not at work');
   assert.equal((await client.request('agent', agent('bbbbbbbb'))).report, 'Stopped by the user.');
 });
+
+test('the agents a close or crash of their Pi cut off are found in every profile, and resumed in one through its Pi when asked', { timeout: 30_000 }, async t => {
+  const home = temporaryHome();
+  // Pi crashed: its records still say working, and no Pi has the profile. Its paused agent and an agent's own agent are not counted.
+  const crashed = createProfile(home, 'crashed');
+  writeRun(crashed, { id: 'aaaaaaaa', state: 'running', started: 3000 });
+  writeRun(crashed, { id: 'aaaaaaab', state: 'waiting', started: 3100 });
+  writeRun(crashed, { id: 'aaaaaaac', state: 'running', started: 3200, parentId: 'aaaaaaaa', depth: 2 });
+  writeRun(crashed, { id: 'aaaaaaad', state: 'paused', started: 3300 });
+  // Pi closed, or opened the profile again since: pi-optchat marked them.
+  const quit = createProfile(home, 'quit');
+  writeRun(quit, { id: 'bbbbbbbb', state: 'interrupted', started: 2000, ended: 2500, cutOff: true });
+  writeRun(quit, { id: 'bbbbbbbc', state: 'interrupted', started: 1000, ended: 1500 });
+  writeRun(createProfile(home, 'calm'), { id: 'cccccccc', state: 'completed', started: 1000, ended: 1500 });
+  const server = await startServer({ home, cwd: home, pi }), client = await connect(server.url);
+  t.after(async () => { client.close(); await server.close(); });
+
+  assert.deepEqual(await client.request('cutOff', {}), { profiles: [
+    { profile: 'crashed', agents: [{ id: 'aaaaaaaa', started: 3000 }, { id: 'aaaaaaab', started: 3100 }] },
+    { profile: 'quit', agents: [{ id: 'bbbbbbbb', started: 2000 }] },
+  ] });
+  assert.deepEqual((await client.request('windows', {})).windows, [], 'finding them starts no Pi');
+
+  // Resuming them is worth a Pi: the profile's is started, and the agent goes on. The other profile is left as it was.
+  assert.deepEqual(await client.request('resumeAgents', { profile: 'quit' }), {});
+  assert.partialDeepStrictEqual((await client.request('windows', {})).windows, [{ id: 'quit/main', status: 'idle' }]);
+  assert.deepEqual((await client.request('agents', { profile: 'quit' })).agents.map(({ id, state }) => [id, state]), [['bbbbbbbb', 'running'], ['bbbbbbbc', 'interrupted']]);
+  assert.deepEqual((await client.request('cutOff', {})).profiles.map(cut => cut.profile), ['crashed']);
+
+  // With a Pi on the profile, one saved as working is at work: nothing was cut off.
+  const unlock = await lockProfile(crashed, describeOwner({ profile: 'crashed', pid: 4242, host: 'a-terminal', cwd: '/somewhere' }));
+  t.after(() => unlock().catch(() => {}));
+  assert.deepEqual(await client.request('cutOff', {}), { profiles: [] });
+});

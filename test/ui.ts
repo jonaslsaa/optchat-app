@@ -65,6 +65,9 @@ const WIDE = { width: 1280, height: 800 }, NARROW = { width: 420, height: 800 };
 async function open(profile?: string, viewport = WIDE, reducedMotion: 'reduce' | 'no-preference' = 'reduce') {
   const context = await browser.newContext({ viewport, reducedMotion });
   if (profile) await context.addInitScript(saved => localStorage.setItem('optchat-app', saved), JSON.stringify({ tabs: [profile], profile, selected: {} }));
+  // The seeded chats have agents saved as working, which with no Pi on the profile were cut off: their lines over the page are
+  // dismissed here, and have a test of their own.
+  await context.addInitScript(dismissed => localStorage.setItem('optchat-app-cut-off', dismissed), JSON.stringify(Object.fromEntries(readdirSync(join(home, 'profiles')).map(name => [name, Number.MAX_SAFE_INTEGER]))));
   const page = await context.newPage();
   await page.goto(profile ? server.page : fresh.page);
   if (profile) await page.getByRole('textbox', { name: 'Message' }).waitFor();
@@ -1550,4 +1553,31 @@ test('New Profile…: the menu and the list of profiles open a dialog that makes
     assert.deepEqual([await first.getByRole('dialog').count(), await focused(first)], [0, 'Profile name']);
     await first.context().close();
   } finally { client.close(); await own.close(); }
+});
+
+test('after a restart one bar offers to resume the agents Pi\'s close cut off, a line a profile, open or not: Resume opens the profile and resumes them, and a dismissed line stays away', async t => {
+  const cut = join(home, 'restarted');
+  writeRun(createProfile(cut, 'alpha'), { id: 'a0000001', state: 'interrupted', started: 2000, ended: 2500, cutOff: true });
+  const beta = createProfile(cut, 'beta');
+  for (const id of ['b0000001', 'b0000002']) writeRun(beta, { id, state: 'running', started: 3000 });
+  const restarted = await startServer({ home: cut, app: join(cut, 'app'), cwd: home, pi });
+  const context = await browser.newContext({ viewport: WIDE, reducedMotion: 'reduce' });
+  t.after(async () => { await context.close(); await restarted.close(); });
+  await context.addInitScript(() => { if (!localStorage.getItem('optchat-app')) localStorage.setItem('optchat-app', JSON.stringify({ tabs: ['alpha'], profile: 'alpha', selected: {} })); });
+  const page = await context.newPage();
+  await page.goto(restarted.page);
+  const lines = page.getByRole('status').filter({ hasText: 'cut off when Pi closed' });
+  await lines.nth(1).waitFor();
+  assert.deepEqual(await lines.allTextContents(), ['alpha · An agent was cut off when Pi closed.Resume', 'beta · 2 agents were cut off when Pi closed.Resume']);
+  // beta is not open: Resume opens it in front, and resumes its agents through its Pi.
+  await page.getByRole('button', { name: 'Resume the agents of beta' }).click();
+  await page.getByRole('tab', { name: 'beta', selected: true }).waitFor();
+  await lines.nth(1).waitFor({ state: 'detached' });
+  assert.deepEqual(await lines.allTextContents(), ['alpha · An agent was cut off when Pi closed.Resume']);
+  await page.getByRole('button', { name: 'Dismiss: alpha' }).click();
+  assert.equal(await lines.count(), 0);
+  await page.reload();
+  await page.getByRole('textbox', { name: 'Message' }).waitFor();
+  await page.waitForTimeout(300);
+  assert.equal(await lines.count(), 0, 'a dismissed line stays away when the app opens again');
 });

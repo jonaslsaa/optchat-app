@@ -52,12 +52,19 @@ export interface State {
   update?: Updating;
   /** The provider you are signing in to in a terminal, while the page waits for Pi to say it is done. */
   signingIn?: Provider;
+  /** The profiles whose agents a close or crash of their Pi cut off, as the server last found them, and for each profile the
+   * latest start among those you dismissed: only an agent started after it brings the profile's line back. */
+  cutOff: Result<'cutOff'>['profiles'];
+  dismissed: Record<string, number>;
 }
 type Provider = Params<'signIn'>['provider'];
-const PAGE = 200, SAVED = 'optchat-app', DRAFTS = 'optchat-app-drafts', SIGN_IN_ASKS = 100;
+const PAGE = 200, SAVED = 'optchat-app', DRAFTS = 'optchat-app-drafts', DISMISSED = 'optchat-app-cut-off', SIGN_IN_ASKS = 100;
 export const mainOf = (profile: string) => `${profile}/main`;
 const ordered = (windows: WindowState[]) => windows.toSorted((a, b) => a.profile.localeCompare(b.profile) || Number(b.role === 'main') - Number(a.role === 'main') || a.id.localeCompare(b.id, undefined, { numeric: true }));
 export const UNTITLED = 'Untitled window';
+/** The profiles the bar over the page offers to resume: cut off, and not dismissed since. */
+export const cutOffShown = ({ cutOff, dismissed }: Pick<State, 'cutOff' | 'dismissed'>) =>
+  cutOff.filter(({ profile, agents }) => agents.some(({ started }) => started > (dismissed[profile] ?? -Infinity)));
 /** What a window is called: the main chat, or a connected window by the first message of the conversation it is in, once it has one. */
 export function title(window: WindowState, state: State) {
   if (window.role === 'main') return 'Main chat';
@@ -68,7 +75,7 @@ export function title(window: WindowState, state: State) {
 }
 
 export class App {
-  state: State = { connection: 'connecting', profiles: [], tabs: [], windows: [], selected: {}, logs: {}, live: {}, sessions: {}, agents: {}, github: {}, models: {}, commands: {}, chats: {}, memory: {}, config: {}, usage: {}, attached: {} };
+  state: State = { connection: 'connecting', profiles: [], tabs: [], windows: [], selected: {}, logs: {}, live: {}, sessions: {}, agents: {}, github: {}, models: {}, commands: {}, chats: {}, memory: {}, config: {}, usage: {}, attached: {}, cutOff: [], dismissed: {} };
   private client?: Client;
   private retrying?: ReturnType<typeof setTimeout>;
   private closed = false;
@@ -151,6 +158,7 @@ export class App {
     void this.ask('settings', {}).then(settings => settings && this.set({ settings }));
     void this.ask('update', {}).then(said => said && this.set({ update: said.update }));
     void this.checkSetup();
+    void this.findCutOff();
     await Promise.all([...tabs.map(tab => this.opened(tab)), ...windows.windows.map(async window => { await this.replayed(window.id); await this.session(window.id); })]);
   }
   /** A profile's tab needs its main window to exist, and the end of its log. */
@@ -223,6 +231,24 @@ export class App {
     if (!names) return;
     this.set({ profiles: names });
     if (names.length && !this.state.profile) await this.openProfile(names[0]);
+  }
+  /** Which profiles' agents were cut off, and which of those you dismissed, which the browser keeps. */
+  private async findCutOff() {
+    const found = await this.ask('cutOff', {}), saved: unknown = JSON.parse(this.storage().getItem(DISMISSED) ?? '{}');
+    const dismissed = isObject(saved) ? Object.fromEntries(Object.entries(saved).filter((entry): entry is [string, number] => typeof entry[1] === 'number')) : {};
+    if (found) this.set({ cutOff: found.profiles, dismissed });
+  }
+  /** Opens the profile and resumes its cut-off agents, through its Pi, which is started for it. */
+  async resumeAgents(profile: string) {
+    await Promise.all([this.openProfile(profile), this.ask('resumeAgents', { profile })]);
+    await this.findCutOff();
+  }
+  /** Takes a profile's line off the bar until an agent of it that started later is cut off. Its agents are still in its list. */
+  dismissCutOff(profile: string) {
+    const latest = Math.max(...this.state.cutOff.find(cut => cut.profile === profile)?.agents.map(agent => agent.started) ?? []);
+    const dismissed = { ...this.state.dismissed, [profile]: latest };
+    try { this.storage().setItem(DISMISSED, JSON.stringify(dismissed)); } catch {}
+    this.set({ dismissed });
   }
   /** Has the server open a terminal where Pi signs you in, then asks whether Pi can use the provider until it can: a hundred
    * times at most (five minutes, and what the answers take), and no more once you cancel, the answer fails, or the page is gone. The page learns that the
@@ -378,6 +404,8 @@ export class App {
     try {
       if (!this.client) throw new Error('Not connected to the server.');
       await this.client.request(method, params);
+      // An agent resumed from its chat is no longer cut off.
+      if (method === 'tellAgent') void this.findCutOff();
     } catch (error) { return error instanceof Error ? error.message : String(error); }
   }
   private tree(profile: string, change: (tree: Tree) => Tree) { this.set({ memory: { ...this.state.memory, [profile]: change(this.state.memory[profile] ?? NO_TREE) } }); }

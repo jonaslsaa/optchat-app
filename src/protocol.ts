@@ -174,6 +174,8 @@ export type Usage = Static<typeof Usage>;
 
 const Image = Type.Object({ type: Type.Literal('image'), data: Type.String(), mimeType: Type.String() });
 const target = Type.Object({ window: Type.String() });
+/** A run's messages that wait for the agent: those that steer it, and those for after it. */
+const Queue = Type.Object({ steering: Type.Array(Type.String()), followUp: Type.Array(Type.String()) });
 const none = Type.Object({});
 const method = <P extends TSchema, R extends TSchema>(params: P, result: R) => ({ params, result });
 
@@ -264,9 +266,12 @@ export const methods = {
    * (a command took it and no run started). */
   prompt: method(Type.Object({ window: Type.String(), text: Type.String(), images: Type.Optional(Type.Array(Image)), whenBusy: Type.Optional(Type.Enum(['steer', 'followUp'])) }),
     Type.Object({ disposition: Type.Enum(['started', 'queued', 'handled']) })),
+  /** Takes back your messages the agent has not read yet, as Alt+Up does in the terminal, and the run goes on: what Pi's
+   * `clear_queue` emptied, which is all of them that were still waiting by then. */
+  dequeue: method(target, Queue),
   /** Stops the run, as Esc does in the terminal: answers once the agent is idle, with the messages that were still queued
-   * (Pi's `clear_queue`), which would otherwise start the next run. */
-  abort: method(target, Type.Object({ steering: Type.Array(Type.String()), followUp: Type.Array(Type.String()) })),
+   * (`dequeue`), which would otherwise start the next run. */
+  abort: method(target, Queue),
   /** Ends a connected window's conversation and hands it to the main chat (pi-optchat's `/complete`). Answers once the handoff
    * is written, which takes a turn of the window's agent; until then the window takes no prompt. */
   complete: method(target, none),

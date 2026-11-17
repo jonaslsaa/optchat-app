@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { cite, cited, citing, joined, place, whole, type Cite } from '../src/ui/cite.ts';
+import { cite, cited, citing, joined, place, skilled, typed, whole, type Cite } from '../src/ui/cite.ts';
 
 test('a message is written with what it cites first, each with its place in the memory, and is read back as it was', () => {
   const cites: Cite[] = [cite('  the two lines\nthat were selected ', { id: 11953, n: 1 }), whole({ id: 11904, n: 4 }, 'How the snapshot is taken'), whole({ id: 64, n: 2 }), cite('said in a run')];
@@ -38,4 +38,16 @@ test('messages that go back into the composer are one message: what they cite, t
   const first = citing([cite('one', { id: 1, n: 1 })], 'first'), second = citing([cite('two')], 'second');
   assert.equal(joined([first, 'plain', '', second]), citing([cite('one', { id: 1, n: 1 }), cite('two')], 'first\n\nplain\n\nsecond'));
   assert.equal(joined(['only', '']), 'only');
+});
+
+test('a message that runs a skill is its name and what was typed after it, as Pi sent it and as it was typed', () => {
+  const path = '/home/.agents/skills/sol-loop/SKILL.md', body = 'References are relative to /home/.agents/skills/sol-loop.\n\n# Sol loop\n\nReview it.';
+  const sent = `<skill name="sol-loop" location="${path}">\n${body}\n</skill>`;
+  assert.deepEqual(skilled(`${sent}\n\nthe last commit\n\nand the one before`), { skill: { name: 'sol-loop', path, body }, text: 'the last commit\n\nand the one before' });
+  assert.deepEqual(skilled(sent), { skill: { name: 'sol-loop', path, body }, text: '' });
+  assert.deepEqual(skilled('/skill:sol-loop the last commit'), { skill: { name: 'sol-loop' }, text: 'the last commit' });
+  assert.equal(typed(skilled(`${sent}\n\nthe last commit`).skill, 'the last commit'), '/skill:sol-loop the last commit');
+  assert.equal(typed(skilled(sent).skill, ''), '/skill:sol-loop');
+  // Only a message that begins with a skill runs one, as Pi reads it.
+  for (const message of [`Look at this:\n\n${sent}`, '/skill:', '/skill:sol-loop\nthe last commit', ' /skill:sol-loop']) assert.deepEqual(skilled(message), { text: message }, message);
 });

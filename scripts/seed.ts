@@ -123,6 +123,12 @@ export const FORMULAS: Said[][] = [[
   ['user', 'How much does the cache save us, roughly?'],
   ['talk', 'A cached read costs a tenth of new input, so with a cache share $c$ the input bill is\n\n$$\n\\text{cost} = (1 - c) + \\frac{c}{10}\n$$\n\nof what it was. At $c = 0.92$ that is about $0.17$ of it: last week\'s $57.89 would have been about $340 without it.\n\n| Role | Cost | Cache read |\n| --- | ---: | ---: |\n| Main chat | $36.41 | 92% |\n| Subagents | $19.45 | 88% |\n| Compactor | $2.02 | 71% |'],
 ]];
+/** A message that runs a skill, as Pi sends `/skill:sol-loop …`: the skill's file, and what was typed under it. */
+const LOOP = '# Sol loop\n\nReview the change with a GPT Sol subagent, fix what it finds, and review again until it finds nothing.\n\n## Steps\n\n1. Diff the branch against `main`.\n2. Spawn the reviewer with the diff and the repository\'s AGENTS.md.\n3. Fix every finding that is real; say why for the rest.\n4. Repeat until the reviewer passes it.';
+export const SKILLED: Said[][] = [[
+  ['user', `<skill name="sol-loop" location="/home/.agents/skills/sol-loop/SKILL.md">\nReferences are relative to /home/.agents/skills/sol-loop.\n\n${LOOP}\n</skill>\n\nthe last commit, before I open the PR`],
+  ['talk', 'Round 1 found two things: `stop()` never clears its timer, and the test reads the log before it is flushed. Both are fixed in `a1b2c3d`. Round 2 passed with nothing to add.'],
+]];
 /** A reply that names files: two that are in the window's folder (`FILES`), and one that is not. */
 export const FILES = ['src/server/pi.ts', 'test/pi.test.ts'];
 export const NAMED: Said[][] = [[

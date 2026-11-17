@@ -16,6 +16,7 @@ import { clamp, levels, type Thinking } from '../src/models.ts';
  * - A prompt holding "wait" stays mid-reply until a `release` command or an abort, and one holding "think" thinks before it answers; "ask" asks a dialog first and replies with its
  *   answer; "crash" kills it without an answer. A message sent during a run waits in the queue it was sent to: one that steers
  *   is answered next, one for later after those.
+ * - `/skill:name …` of a skill it lists (`get_commands`) is sent as Pi sends it: the skill's file, with what was typed under it.
  * - FAKE_PI_SCRIPT names a JSON file of longer replies (`Script`), for the screenshots: a prompt holding one of its words gets
  *   that word's turns and answer.
  * - Profile `busy` fails as a profile another Pi owns, `stuck` ignores the request to shut down, `mute` never answers a command,
@@ -139,6 +140,15 @@ function ended(message: Said) {
   messages.push(message);
   if (!joins) log(message);
 }
+const SKILLS: Record<string, string> = { 'sol-loop': 'Review a code change in a loop with an OpenAI GPT Sol subagent and fix what it finds, before (or after) opening a PR. Use when the user says "sol loop".', 'use-codex': 'Run the Codex CLI (a separate OpenAI coding agent) headlessly as an independent second opinion.', 'write-a-skill': 'Create new agent skills with proper structure, progressive disclosure, and bundled resources.' };
+const skillFile = (name: string) => `/home/.agents/skills/${name}/SKILL.md`;
+/** As Pi sends `/skill:name what was typed` for a skill it knows: the skill's file, and what was typed under it. */
+function expanded(text: string) {
+  const [, name = '', typed] = /^\/skill:(\S+)(?: ([\s\S]*))?$/.exec(text) ?? [];
+  if (!Object.hasOwn(SKILLS, name)) return text;
+  const skill = `<skill name="${name}" location="${skillFile(name)}">\nReferences are relative to /home/.agents/skills/${name}.\n\n# ${name}\n\n${SKILLS[name]}\n</skill>`;
+  return typed?.trim() ? `${skill}\n\n${typed.trim()}` : skill;
+}
 const user = (text: string, images: Image[] = []) => { const message: Said = { role: 'user', content: [{ type: 'text', text }, ...images], timestamp: now() }; write({ type: 'message_start', message }); ended(message); };
 
 const THOUGHT = 'The user wants the shutdown path checked.\n\nFirst `stop()` closes stdin, then waits for the grace period.\nThe timer is never cleared, so a clean exit still waits the whole grace period.\nI should read src/server/pi.ts before saying so.';
@@ -181,7 +191,7 @@ function tool(call: Extract<Content, { type: 'toolCall' }>, output: string) {
 async function run(text: string, images?: Image[]) {
   running = true;
   write({ type: 'agent_start' });
-  user(text, images);
+  user(expanded(text), images);
   // Asked for a picture, it shows the ones it was sent, as the profile keeps them.
   let aborted = false, answer = text.includes('picture') && images?.length ? images.map(image => `![yours](/images/${profile}/${named(image)})`).join(' ') : 'reply';
   if (text.includes('ask')) {
@@ -224,8 +234,7 @@ const commands: Record<string, (command: Record<string, unknown>) => unknown> = 
     ...profile === 'bare' ? [] : [['complete', 'End this connected conversation and hand off to the main agent'], ['tell-main', 'Send a message to the main agent from this connected window'], ['optchat', 'OptChat profiles, settings, models, agents, instructions, memory browser, and imports']].map(([name, description]) => ({ name, description, source: 'extension', sourceInfo: { path: '/pi/pi-optchat/src/index.ts', source: 'npm:pi-optchat', scope: 'user', origin: 'package', baseDir: '/pi/pi-optchat' } })),
     { name: 'mcp', description: 'Manage MCP servers: sign in, reconnect, enable or disable, and change exposure', source: 'extension', sourceInfo: { path: 'builtin:mcp', source: 'builtin', scope: 'temporary', origin: 'top-level' } },
     { name: 'fix-tests', description: 'Fix failing tests', source: 'prompt', sourceInfo: { path: '/home/.pi/agent/prompts/fix-tests.md', source: 'local', scope: 'user', origin: 'top-level' } },
-    ...[['sol-loop', 'Review a code change in a loop with an OpenAI GPT Sol subagent and fix what it finds, before (or after) opening a PR. Use when the user says "sol loop".'], ['use-codex', 'Run the Codex CLI (a separate OpenAI coding agent) headlessly as an independent second opinion.'], ['write-a-skill', 'Create new agent skills with proper structure, progressive disclosure, and bundled resources.']]
-      .map(([name, description]) => ({ name: `skill:${name}`, description, source: 'skill', sourceInfo: { path: `/home/.agents/skills/${name}/SKILL.md`, source: 'auto', scope: 'user', origin: 'top-level', baseDir: '/home/.agents' } })),
+    ...Object.entries(SKILLS).map(([name, description]) => ({ name: `skill:${name}`, description, source: 'skill', sourceInfo: { path: skillFile(name), source: 'auto', scope: 'user', origin: 'top-level', baseDir: '/home/.agents' } })),
   ] }),
   // Pi answers with the model, and gives it a level it can think at; one it does not list is an error (below).
   set_model: ({ provider, modelId }) => {

@@ -42,6 +42,20 @@ export function cited(message: string): { cites: Cite[]; text: string } {
   const cites = [...head.matchAll(TAG)].map(([, name, text = '']): Cite => { const at = place(name); return { text: plain(text), ...at && { at } }; });
   return { cites, text: message.slice(head.length).replace(/^\n/, '') };
 }
+/** The skill a message runs: `/skill:name what was typed`, which Pi sends as the skill's file (`body`, from `path`) with what
+ * was typed under it. A message as typed has only the name. */
+export interface Skill { name: string; path?: string; body?: string }
+// Pi's own format (its `parseSkillBlock`), and its rule for a name: up to the first space.
+const SKILL = /^<skill name="([^"]+)" location="([^"]+)">\n([\s\S]*?)\n<\/skill>(?:\n\n([\s\S]+))?$/, TYPED = /^\/skill:(\S+)(?: ([\s\S]*))?$/;
+/** The skill a message runs and what was typed after its name, as Pi sent it or as it was typed; and the message as it was
+ * typed. Only a message that begins with a skill runs one. */
+export function skilled(message: string): { skill?: Skill; text: string } {
+  const [, name, path, body, text = ''] = SKILL.exec(message) ?? [];
+  if (name) return { skill: { name, path, body }, text: text.trim() };
+  const [, given, words = ''] = TYPED.exec(message) ?? [];
+  return given ? { skill: { name: given }, text: words.trim() } : { text: message };
+}
+export const typed = (skill: Skill | undefined, text: string) => skill ? `/skill:${skill.name}${text && ` ${text}`}` : text;
 /** Messages that go back into the composer as one: what they cite, then what they say. */
 export function joined(messages: readonly string[]) {
   const all = messages.map(cited);

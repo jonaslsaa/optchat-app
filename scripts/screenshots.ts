@@ -7,7 +7,7 @@ import { startServer } from '../src/server/server.ts';
 // pi-optchat's own lock, which only Pi takes: here it stands for a Pi in a terminal.
 import { defaults, describeOwner, lockProfile } from 'pi-optchat/files';
 import { createProfile, give, png, writeRun } from '../test/support.ts';
-import { agents, CHANGES, demo, FILES, FORMULAS, limited, NAMED, remember, seed, SHIPPED, SHIPPING, spend, TEAM } from './seed.ts';
+import { agents, CHANGES, demo, FILES, FORMULAS, limited, NAMED, remember, seed, SHIPPED, SHIPPING, SKILLED, spend, TEAM } from './seed.ts';
 
 /** `npm run screenshots [directory] [--dark]`: a PNG of every main state of the UI, in /tmp/optchat-app-shots unless a directory
  * is named, and all of them in dark mode with `--dark`. It builds the UI, serves it against throwaway profiles under /tmp with
@@ -71,6 +71,7 @@ seed(ship, SHIPPING.length, NOW, SHIPPING);
 agents(ship, NOW + 42_000);
 seed(createProfile(home, 'links'), SHIPPING.length, NOW, SHIPPING);
 seed(createProfile(home, 'formulas'), 1, NOW, FORMULAS);
+seed(createProfile(home, 'skills'), 1, NOW, SKILLED);
 // The subscription's limits as they were with the latest answer: well within them, past the five hours and on extra usage,
 // a request refused a moment ago, and a count from before the five hours began again. `empty` has none.
 limited(long, NOW, { five: 0.62, week: 0.18 });
@@ -546,6 +547,14 @@ async function pictures(browser: Browser, control: Client) {
     await page.keyboard.type(text);
     await page.getByRole('search', { name: 'Find in chat' }).locator('[aria-live]').waitFor();
     await shot(page, name);
+  }
+  // A message that runs a skill: the skill by its name over what was typed, and its file once the name is clicked.
+  for (const [name, options] of [['162-skill-message', {}], ['163-skill-message-dark', { dark: true }]] as const) {
+    const page = await open(['skills'], options);
+    await shot(page, name);
+    if (name !== '162-skill-message') continue;
+    await page.getByRole('button', { name: 'sol-loop' }).click();
+    await shot(page, '164-skill-opened');
   }
   // Formulas in a reply, a price beside them as written, and a table with its copy buttons.
   for (const [name, options] of [['91-formulas-and-table', {}], ['92-formulas-and-table-dark', { dark: true }], ['93-formulas-and-table-narrow', { width: 420 }]] as const) {

@@ -23,7 +23,7 @@ test('a reply cannot make the page fetch anything: only the profile\'s own image
   assert.match(html('![chart](</tmp/a chart.png>)'), /<img src="\/file\?path=%2Ftmp%2Fa\+chart\.png&amp;token=" alt="chart"\/>/);
   // An escaped # is part of the file's name.
   assert.match(html('![chart](/tmp/chart%231.png)'), /path=%2Ftmp%2Fchart%231\.png&amp;/);
-  for (const address of ['tmp/chart.png', '/tmp/notes.svg', '/tmp/chart.png?x=1', 'file:///tmp/chart.png'])
+  for (const address of ['tmp/chart.png', '/tmp/notes.svg', '/tmp/chart.png?x=1', '/tmp/a?b.png', 'file:///tmp/chart.png'])
     assert.doesNotMatch(html(`![x](${address})`), /<img/, address);
 
   assert.equal(html('[docs](https://example.com/a)'), '<p><a href="https://example.com/a" target="_blank" rel="noreferrer noopener">docs</a></p>');

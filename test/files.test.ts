@@ -122,7 +122,7 @@ test('a picture a reply names by its absolute path is served to the page alone, 
   const fetched = (path: string, given = token) => fetch(`http://127.0.0.1:${server.port}/file?${new URLSearchParams({ path, token: given })}`);
   const served = await fetched(shot);
   assert.deepEqual([served.status, served.headers.get('content-type'), Buffer.from(await served.arrayBuffer())], [200, 'image/png', data]);
-  // Not without the token, nor by a relative path, nor a file of another kind, nor one that only its name says is a picture.
-  for (const [path, given] of [[shot, 'wrong'], ['shot.png', token], [join(home, 'secret.txt'), token], [join(home, 'secret.png'), token], [join(home, 'gone.png'), token]])
+  // Not without the token, nor by a relative or a network path, nor a file of another kind, nor one only its name says is a picture.
+  for (const [path, given] of [[shot, 'wrong'], ['shot.png', token], [join(home, 'secret.txt'), token], [join(home, 'secret.png'), token], [join(home, 'gone.png'), token], [`/${shot}`, token], ['\\\\host\\share\\shot.png', token]])
     assert.equal((await fetched(path, given)).status, 404, `${path} ${given}`);
 });

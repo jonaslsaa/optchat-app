@@ -19,7 +19,8 @@ const PICTURES: Record<string, string> = { '.png': 'image/png', '.jpg': 'image/j
  * the agent can read any file anyway: this only lets you see it, and nothing leaves the machine. */
 export function picture(path: string) {
   try {
-    if (!isAbsolute(path)) return undefined;
+    // Not `//host/share` nor `\\host\share`: on Windows that is a network path, which signs in to its host to be looked up.
+    if (!isAbsolute(path) || /^[\\/]{2}/.test(path)) return undefined;
     const file = realpathSync(path), type = PICTURES[extname(file).toLowerCase()], stat = statSync(file);
     return type && stat.isFile() && stat.size <= 10 * 1024 * 1024 ? { type, data: readFileSync(file) } : undefined;
   } catch { return undefined; }

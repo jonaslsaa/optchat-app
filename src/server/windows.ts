@@ -49,7 +49,7 @@ interface Opened {
  * reaches the agent of a window the app started, not the agents those start, and not a chat that runs in a terminal.
  * The GitHub list finds an issue or pull request by its address, and an agent left to itself writes "#12". A reply draws a picture
  * on this machine by its path (`safe.ts`), and an agent that is not told so describes it instead. */
-export const PROMPT = 'When you first mention a GitHub pull request or issue, give its full link. To show the user an image file (PNG, JPEG, GIF or WebP), write it as a Markdown image with its absolute path, like ![chart](/tmp/chart.png). Images from the web show only as links.';
+export const PROMPT = 'When you first mention a GitHub pull request or issue, give its full link. To show the user an image file (PNG, JPEG, GIF or WebP), write it as a Markdown image with its absolute path, like ![chart](/tmp/chart.png). If the path has spaces, wrap it in angle brackets: ![shot](</Users/me/Desktop/Screen Shot.png>). Images from the web show only as links.';
 /** What pi-optchat says a Pi in RPC mode is to its profile: JSON in a `setStatus` with this key (its docs/connected-windows.md),
  * sent as the session starts, so before Pi's first answer; a Pi that has not sent it by then has no profile open. This is the
  * one place that reads it, and it reads only these fields. */

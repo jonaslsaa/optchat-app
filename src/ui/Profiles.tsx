@@ -1,7 +1,10 @@
 import { CheckIcon, ChevronsUpDownIcon, HistoryIcon, PlusIcon, XIcon } from 'lucide-react';
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { badge } from './badge.ts';
+import { BringHistory } from './Import.tsx';
+import type { Source } from './imports.ts';
 import { useOverlay, walk } from './keys.ts';
+import { missing } from './Setup.tsx';
 import { app, type State } from './store.ts';
 import { Button, cn, Spinner, WindowDot } from './ui.tsx';
 
@@ -9,7 +12,7 @@ import { Button, cn, Spinner, WindowDot } from './ui.tsx';
  * already), which is said under the name. Once made it is opened, beside those that are open. The first profile is named
  * with it, in the setup, and every later one in the New Profile dialog, which has a way out (`onCancel`). `onMade`: the
  * profile is there, and is opened next. */
-export function NewProfile({ onMade, onCancel }: { onMade?: () => void; onCancel?: () => void }) {
+export function NewProfile({ onMade, onCancel }: { onMade?: (profile: string) => void; onCancel?: () => void }) {
   const [name, setName] = useState(''), [making, setMaking] = useState(false), [refused, setRefused] = useState<string>(), field = useRef<HTMLInputElement>(null);
   const make = (event: FormEvent) => {
     event.preventDefault();
@@ -20,7 +23,7 @@ export function NewProfile({ onMade, onCancel }: { onMade?: () => void; onCancel
       setRefused(why);
       // The button is off while it is asked, and loses the focus with that: a name that was refused is put right in its field.
       if (why !== undefined) return field.current?.focus();
-      onMade?.();
+      onMade?.(made);
       void app.openProfile(made);
     });
   };
@@ -34,20 +37,31 @@ export function NewProfile({ onMade, onCancel }: { onMade?: () => void; onCancel
     </form>
   );
 }
-/** New Profile…: another profile's name, in a dialog over the page. Esc, Cancel or a press beside it puts it away with
- * nothing made, and Esc does nothing else (`useOverlay`): a run in the chat behind it goes on, as it does while the profile
- * is made and opened beside it. It is closed before the new profile is opened, so the keys are in that profile's chat. */
-export function NewProfileDialog({ onClose, onMade }: { onClose: () => void; onMade: () => void }) {
-  const box = useRef<HTMLDialogElement>(null), inside = useRef<HTMLDivElement>(null), close = () => box.current?.close();
-  useEffect(() => box.current?.showModal(), []);
+/** New Profile…: another profile's name, in a dialog over the page, and then what history it brings (`BringHistory`): "Start
+ * empty", or the Import page on the sources picked (`onImport`); not while the setup lacks something (`missing`), which
+ * nothing could be imported with: the dialog closes on the new chat. The first profile is named on the first page, and the dialog
+ * opens on its second step (`made`). Esc, Cancel or a press beside it puts it away, and Esc does nothing else (`useOverlay`):
+ * on the first step nothing is made, and on the second it starts empty. A run in the chat behind it goes on, as it does while
+ * the profile is made and opened behind it. */
+export function NewProfileDialog({ state, made: named, onClose, onMade, onImport }: { state: State; made?: string; onClose: (made?: string) => void; onMade: () => void; onImport: (from: Source[]) => void }) {
+  const box = useRef<HTMLDialogElement>(null), inside = useRef<HTMLDivElement>(null), close = () => box.current?.close(), [made, setMade] = useState(named);
+  // Opened on its second step, the keys are on the way to the Import page, as they are when the first step leads there.
+  useEffect(() => { box.current?.showModal(); if (named) box.current?.querySelector<HTMLElement>('[type=submit]')?.focus(); }, []);
   // Closed as a dialog is, which is what gives the focus back to where it was: there is no button of its own to give it to.
   useOverlay(true, close, inside, useRef(null));
   return (
-    <dialog ref={box} aria-label="New profile" onClose={onClose} className="enter enter-grow m-auto w-80 max-w-[calc(100vw-2rem)] rounded-xl border bg-popover p-0 text-popover-foreground shadow-xl outline-none backdrop:enter backdrop:bg-black/20 dark:backdrop:bg-black/60">
+    <dialog ref={box} aria-label={made ? 'Bring your history' : 'New profile'} onClose={() => onClose(made)}
+      className={cn('enter enter-grow m-auto max-w-[calc(100vw-2rem)] rounded-xl border bg-popover p-0 text-popover-foreground shadow-xl outline-none backdrop:enter backdrop:bg-black/20 dark:backdrop:bg-black/60', made ? 'w-[32rem]' : 'w-80')}>
       <div ref={inside} className="p-4">
-        <h2 className="font-medium text-sm">New profile</h2>
-        <p className="mt-1 text-muted-foreground text-xs">A profile is one chat that never ends, with a memory of its own. Its name: lowercase letters, digits, hyphens and underscores.</p>
-        <NewProfile onMade={() => { close(); onMade(); }} onCancel={close} />
+        {named === undefined && <p aria-hidden="true" className="mb-2 flex gap-1">{[0, 1].map(step => <span key={step} className={cn('h-1 w-5 rounded-full', (made ? 1 : 0) >= step ? 'bg-foreground/60' : 'bg-foreground/15')} />)}</p>}
+        {made === undefined ? <>
+          <h2 className="font-medium text-sm">New profile</h2>
+          <p className="mt-1 text-muted-foreground text-xs">A profile is one chat that never ends, with a memory of its own. Its name: lowercase letters, digits, hyphens and underscores.</p>
+          <NewProfile onMade={profile => { onMade(); if (missing(state)) onClose(profile); else setMade(profile); }} onCancel={close} />
+        </> : <div key="bring" className="enter">
+          <h2 className="font-medium text-sm">Bring your history?</h2>
+          <BringHistory state={state} profile={made} onEmpty={close} onChoose={from => { onImport(from); close(); }} />
+        </div>}
       </div>
     </dialog>
   );

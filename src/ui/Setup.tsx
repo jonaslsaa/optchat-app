@@ -71,7 +71,7 @@ function SignIn({ signingIn }: { signingIn?: Provider }) {
   );
 }
 
-export function Setup({ state }: { state: State }) {
+export function Setup({ state, onMade }: { state: State; onMade?: (profile: string) => void }) {
   const { setup } = state, job = setup?.job, busy = job?.state === 'running';
   const [checking, setChecking] = useState(false);
   const check = () => { setChecking(true); void Promise.all([app.checkSetup(true), app.findProfiles()]).finally(() => setChecking(false)); };
@@ -99,7 +99,7 @@ export function Setup({ state }: { state: State }) {
         </Step>
         <Step name="A profile" need={state.profiles.length ? { state: 'ok' } : { state: 'missing', message: 'A profile is one chat that never ends. Name your first: lowercase letters, digits, hyphens and underscores.' }}
           found={state.profiles.length ? state.profiles.join(', ') : undefined}>
-          {!state.profiles.length && <NewProfile />}
+          {!state.profiles.length && <NewProfile onMade={onMade} />}
         </Step>
       </ul>
       <Button variant="ghost-muted" className="mt-1" disabled={checking || busy} onClick={check}>{checking ? <Spinner /> : <RefreshCwIcon />}Check again</Button>

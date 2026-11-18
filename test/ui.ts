@@ -1523,7 +1523,8 @@ test('the update button says what the updater is doing in each of its states, a 
 test('New Profile…: the menu and the list of profiles open a dialog that makes another profile and opens it; a name that will not do is said in it, Esc and Cancel make nothing, and a run in the profile behind it goes on', async () => {
   const at = join(home, 'naming');
   createProfile(at, 'alone');
-  const own = await startServer({ home: at, app: join(at, 'app'), cwd: home, pi }), client = await connect(own.url);
+  writeHistories(join(at, 'mac'), Date.now());
+  const own = await startServer({ home: at, app: join(at, 'app'), cwd: home, pi, histories: join(at, 'mac') }), client = await connect(own.url);
   const ask = (page: Page, action: string) => page.evaluate(action => { dispatchEvent(new CustomEvent('optchat-menu', { detail: action })); }, action);
   try {
     const context = await browser.newContext({ viewport: WIDE, reducedMotion: 'reduce' });
@@ -1584,12 +1585,17 @@ test('New Profile…: the menu and the list of profiles open a dialog that makes
     assert.equal(await focused(page), 'Profile name', 'the button that was pressed went off while it asked, and the focus is in the name again');
     assert.deepEqual([await profiles(), await page.getByRole('alert').count()], [['alone'], 1]);
 
-    // A name that will do: the profile is made, opened in a tab beside the first and put in front, with the keys in its chat.
-    // The spaces around it are not part of it.
+    // A name that will do: the profile is made, and opened in a tab beside the first and put in front, behind the dialog's
+    // second step, which asks what history it brings with the keys on the way to the Import page. The spaces around the name
+    // are not part of it. Esc there starts it empty, with the keys in its chat, and does nothing else.
+    const bring = page.getByRole('dialog', { name: 'Bring your history' }), brought = async (how: string) => { await page.locator('dialog[aria-label="Bring your history"]').waitFor({ state: 'detached', timeout: 3000 }).catch(() => assert.fail(`${how} did not close the dialog.`)); };
     await field.fill(' second ');
     await page.keyboard.press('Enter');
-    await closed('Making the profile');
+    await bring.waitFor();
     await page.getByRole('tab', { name: 'second' }).and(page.locator('[aria-selected=true]')).waitFor();
+    assert.equal(await focused(page), 'Choose what to import…');
+    await page.keyboard.press('Escape');
+    await brought('Esc on its second step');
     await page.getByRole('textbox', { name: 'Message' }).waitFor();
     assert.deepEqual([await profiles(), await focused(page)], [['alone', 'second'], 'Message']);
     // It is as a first profile is: pi-optchat's own settings and instructions, and nothing else.
@@ -1606,9 +1612,20 @@ test('New Profile…: the menu and the list of profiles open a dialog that makes
     await ask(page, 'newProfile');
     await field.fill('third');
     await create.click();
-    await closed('Making the profile');
+    await bring.waitFor();
     await page.getByRole('tab', { name: 'third' }).and(page.locator('[aria-selected=true]')).waitFor();
     assert.equal(await page.getByRole('radiogroup', { name: 'Theme' }).count(), 0);
+    // "Choose what to import…" opens the Import page on the new profile, with the sources whose cards were ticked picked
+    // there; Esc there is the page's, and closes it.
+    for (const card of ['Claude Code', 'Codex']) await bring.getByRole('checkbox', { name: new RegExp(`^${card}\\s*\\d`) }).click();
+    await bring.getByRole('button', { name: 'Choose what to import…' }).click();
+    await brought('Choosing what to import');
+    await page.getByRole('heading', { name: 'Import into third' }).waitFor();
+    const picked = page.getByRole('navigation', { name: 'Sources' }).locator('label:has(input:checked) .font-medium');
+    await picked.first().waitFor();
+    assert.deepEqual(await picked.allTextContents(), ['Claude Code', 'Codex']);
+    await page.keyboard.press('Escape');
+    await page.getByRole('textbox', { name: 'Message' }).waitFor();
     await page.context().close();
 
     // With no profile yet the first page is where one is named: no dialog over it, and the keys in its name.
@@ -1618,6 +1635,53 @@ test('New Profile…: the menu and the list of profiles open a dialog that makes
     await first.waitForTimeout(300);
     assert.deepEqual([await first.getByRole('dialog').count(), await focused(first)], [0, 'Profile name']);
     await first.context().close();
+    // The first profile is asked what history it brings, in the dialog's second step alone, wherever it is named (the first
+    // page and the settings share it: here the settings); starting empty puts the keys in its chat. With no history found on the Mac (no `histories`), it says so instead of offering cards, and its
+    // way on is a ChatGPT export.
+    const none = join(at, 'none');
+    mkdirSync(none);
+    const bare = await startServer({ home: none, app: join(none, 'app'), cwd: home, pi });
+    try {
+      const welcome = await (await browser.newContext({ viewport: WIDE, reducedMotion: 'reduce' })).newPage();
+      await welcome.goto(bare.page);
+      // Named in the settings, which have the first page's setup: they give way to the new chat and its second step.
+      const theme = welcome.getByRole('radiogroup', { name: 'Theme' });
+      await welcome.getByRole('textbox', { name: 'Profile name' }).waitFor();
+      await welcome.keyboard.press('ControlOrMeta+Comma');
+      await theme.waitFor();
+      await welcome.getByRole('textbox', { name: 'Profile name' }).fill('first');
+      await welcome.keyboard.press('Enter');
+      const empty = welcome.getByRole('dialog', { name: 'Bring your history' });
+      await empty.getByText('No history from Claude Code, Codex or Pi was found on this Mac.').waitFor();
+      assert.deepEqual([await empty.getByText(/kept what you did/).count(), await empty.getByRole('checkbox').count(), await focused(welcome), await theme.count()], [0, 0, 'Bring a ChatGPT export…', 0]);
+      // ⌘, opens no page under the dialog: started empty, the new chat is what is there.
+      await welcome.keyboard.press('ControlOrMeta+Comma');
+      await welcome.getByRole('button', { name: 'Start empty' }).click();
+      await welcome.locator('dialog').waitFor({ state: 'detached' });
+      await welcome.getByRole('textbox', { name: 'Message' }).waitFor();
+      assert.deepEqual([await focused(welcome), await theme.count()], ['Message', 0]);
+      await welcome.context().close();
+    } finally { await bare.close(); }
+    // While the setup lacks something (here no Pi at all) nothing could be imported: a profile made on the first page, or in the
+    // dialog after it, is not asked what history it brings, and the dialog closes on its chat.
+    const lacking = join(at, 'lacking');
+    mkdirSync(lacking);
+    writeHistories(join(lacking, 'mac'), Date.now());
+    const unready = await startServer({ home: lacking, app: join(lacking, 'app'), cwd: home, pi: { command: join(lacking, 'no-such-pi'), args: [] }, histories: join(lacking, 'mac') });
+    try {
+      const welcome = await (await browser.newContext({ viewport: WIDE, reducedMotion: 'reduce' })).newPage();
+      await welcome.goto(unready.page);
+      await welcome.getByRole('textbox', { name: 'Profile name' }).fill('first');
+      await welcome.keyboard.press('Enter');
+      await welcome.getByRole('button', { name: 'Open a profile' }).waitFor();
+      await ask(welcome, 'newProfile');
+      await welcome.getByRole('textbox', { name: 'Profile name' }).fill('later');
+      await welcome.keyboard.press('Enter');
+      await welcome.locator('dialog').waitFor({ state: 'detached' });
+      await welcome.getByRole('tab', { name: 'later' }).waitFor();
+      assert.equal(await welcome.getByRole('dialog', { name: 'Bring your history' }).count(), 0);
+      await welcome.context().close();
+    } finally { await unready.close(); }
   } finally { client.close(); await own.close(); }
 });
 

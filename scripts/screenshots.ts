@@ -110,7 +110,7 @@ await build({ logLevel: 'warn' });
 const server = await startServer({ home, app: join(home, 'app'), cwd: home, histories: join(home, 'mac'), pi, gh, now: () => NOW + 42_000, editors: () => new Map([['cursor', '/c'], ['vscode', '/v'], ['zed', '/z'], ['finder', '/usr/bin/open']]) });
 // A machine with nothing on it yet: no Pi, no profile.
 mkdirSync(join(home, 'new'));
-const fresh = await startServer({ home: join(home, 'new'), app: join(home, 'new', 'app'), cwd: home, pi: { command: join(home, 'no-such-pi'), args: [] }, npm: { command: process.execPath, args: [join(import.meta.dirname, '../test/fake-npm.ts')] },
+const fresh = await startServer({ home: join(home, 'new'), app: join(home, 'new', 'app'), cwd: home, histories: join(home, 'mac'), pi: { command: join(home, 'no-such-pi'), args: [] }, npm: { command: process.execPath, args: [join(import.meta.dirname, '../test/fake-npm.ts')] },
   opener: { command: process.execPath, args: ['-e', ''] } }); // In place of the terminal a sign-in opens: nothing.
 let control: Client | undefined, browser: Browser | undefined;
 // Whatever happens, nothing is left running: the browser, and the servers with their fake Pis.
@@ -250,6 +250,7 @@ async function pictures(browser: Browser, control: Client) {
   // Later, with a profile: the settings still say where the app's Pi is, and how to put it on your PATH.
   await first.getByRole('textbox', { name: 'Profile name' }).fill('work');
   await first.getByRole('button', { name: 'Create profile' }).click();
+  // pi-optchat is not in this Pi yet, so nothing could be imported: the profile is not asked what history it brings.
   await first.getByRole('button', { name: 'Settings' }).click();
   await first.getByText('The app installed this Pi into its own folder.').waitFor();
   await shot(first, '21-settings-app-pi');
@@ -801,6 +802,57 @@ async function pictures(browser: Browser, control: Client) {
     await into.getByRole('button', { name: 'Open memory' }).click();
     await into.getByRole('button', { name: 'Import…' }).waitFor();
     await shot(into, '187-memory-import-button');
+  }
+
+  // A new profile's second step: what history it brings, by source, none picked; two picked, dark and narrow; and the
+  // Import page they open on.
+  {
+    const made = async (page: Page, name: string) => {
+      await page.getByRole('button', { name: 'Open a profile' }).click();
+      await page.getByRole('button', { name: 'New profile…' }).click();
+      await page.getByRole('textbox', { name: 'Profile name' }).fill(name);
+      await page.keyboard.press('Enter');
+      const step = page.getByRole('dialog', { name: 'Bring your history' });
+      await step.getByText('Looking…').first().waitFor({ state: 'detached' });
+      return step;
+    };
+    const onboarding = await open(['work'], { width: 1280, height: 800 });
+    const second = await made(onboarding, 'garden');
+    await shot(onboarding, '189-new-profile-bring');
+    // Claude Code and Codex, first and third of the cards.
+    for (const at of [0, 2]) await second.getByRole('checkbox').nth(at).click();
+    await shot(onboarding, '190-new-profile-bring-picked');
+    const pocket = await open(['work'], { width: 420, dark: true });
+    await made(pocket, 'tides');
+    await shot(pocket, '191-new-profile-bring-dark-narrow');
+    await second.getByRole('button', { name: 'Choose what to import…' }).click();
+    await onboarding.getByRole('heading', { name: 'Import into garden' }).waitFor();
+    await onboarding.getByText('Looking…').first().waitFor({ state: 'detached' });
+    await shot(onboarding, '192-new-profile-import');
+    // The first profile, named on the first page of a machine with Pi and pi-optchat set up: the dialog is its second step alone.
+    const blank = join(home, 'blank');
+    mkdirSync(blank);
+    const set = await startServer({ home: blank, app: join(blank, 'app'), cwd: home, histories: join(home, 'mac'), pi, now: () => NOW + 42_000 });
+    try {
+      const welcome = await open([], { at: set.page, ready: 'Profile name' });
+      await welcome.getByRole('textbox', { name: 'Profile name' }).fill('work');
+      await welcome.keyboard.press('Enter');
+      await welcome.getByRole('dialog', { name: 'Bring your history' }).getByText('Looking…').first().waitFor({ state: 'detached' });
+      await shot(welcome, '188-first-profile-bring');
+      await welcome.context().close();
+    } finally { await set.close(); }
+    // A Mac where none of the tools kept anything: it says so, and offers a ChatGPT export.
+    const bare = join(home, 'bare');
+    mkdirSync(bare);
+    const nothing = await startServer({ home: bare, app: join(bare, 'app'), cwd: home, pi, now: () => NOW + 42_000 });
+    try {
+      const welcome = await open([], { at: nothing.page, ready: 'Profile name' });
+      await welcome.getByRole('textbox', { name: 'Profile name' }).fill('work');
+      await welcome.keyboard.press('Enter');
+      await welcome.getByRole('dialog', { name: 'Bring your history' }).getByText(/was found on this Mac/).waitFor();
+      await shot(welcome, '193-first-profile-nothing-found');
+      await welcome.context().close();
+    } finally { await nothing.close(); }
   }
 
   // The desktop app's update button, at the sidebar's foot, in each thing its updater does. Last: from here on the server has

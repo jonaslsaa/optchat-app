@@ -1,7 +1,7 @@
 import { CheckIcon, ChevronRightIcon, FileArchiveIcon, PauseIcon, PlayIcon, RefreshCwIcon, SearchIcon, Trash2Icon, TriangleAlertIcon, XIcon } from 'lucide-react';
 import { useDeferredValue, useEffect, useMemo, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from 'react';
 import type { Found, ImportPreview } from '../protocol.ts';
-import { asks, chosen, modes, underway, foundIn, key, LOCAL, NAMES, picked, progress, projects, RANGES, summary, toggled, unit, type Mode, type Project, type Range, type Scans, type Source, type Underway } from './imports.ts';
+import { asks, chosen, modes, underway, foundIn, key, LOCAL, NAMES, picked, progress, projects, RANGES, standing, summary, toggled, unit, type Mode, type Project, type Range, type Scans, type Source, type Underway } from './imports.ts';
 import { Mark } from './Mark.tsx';
 import { app, mainOf, useApp, type State } from './store.ts';
 import { Button, Choice, cn, Spinner } from './ui.tsx';
@@ -36,7 +36,7 @@ function Sources({ state, sources, onSources }: { state: State; sources: Source[
     if (why) setRefused(why); else onSources(now => now.includes('chatgpt') ? now : [...now, 'chatgpt']);
   };
   const row = (source: Source) => {
-    const scan = state.scans[source], n = foundIn(state.scans, source).length, groups = new Set(foundIn(state.scans, source).map(found => found.project)).size;
+    const { scan, found, status, projects } = standing(state.scans, source), n = found.length;
     const failed = scan && 'error' in scan ? scan.error : undefined, none = scan && !failed && n === 0;
     return (
       <li key={source}>
@@ -45,7 +45,7 @@ function Sources({ state, sources, onSources }: { state: State; sources: Source[
           <Mark provider={PROVIDER[source]} className="mt-0.5 size-4 shrink-0" />
           <span className="min-w-0 flex-1">
             <span className="flex items-baseline justify-between gap-2 text-sm"><span className="truncate font-medium">{NAMES[source]}</span>{n > 0 && <span className="text-muted-foreground text-xs tabular-nums">{n.toLocaleString('en-US')}</span>}</span>
-            <span className="block truncate text-muted-foreground text-xs">{!scan ? 'Looking…' : failed ? 'Could not be read' : none ? source === 'chatgpt' ? 'Not given yet' : 'None on this Mac' : source === 'chatgpt' ? unit(source, n) : `${unit(source, n)} · ${groups} ${groups === 1 ? 'project' : 'projects'}`}</span>
+            <span className="block truncate text-muted-foreground text-xs">{status ?? (source === 'chatgpt' ? unit(source, n) : `${unit(source, n)} · ${projects}`)}</span>
           </span>
           {sources.includes(source) && <CheckIcon className="mt-0.5 size-3.5 shrink-0" />}
         </label>
@@ -215,6 +215,55 @@ function Done({ profile, added, onMemory, onAsk, onMore }: { profile: string; ad
       </button>
       <div className="flex justify-end gap-2"><Button variant="ghost-muted" onClick={onMore}>Import more</Button><Button onClick={onMemory}>Open memory</Button></div>
     </Card>
+  );
+}
+
+/** A new profile's second step: what of your history there is, by source, for you to pick before the Import page opens on
+ * it. Nothing is picked until you pick it, and starting empty is as near as Esc. When nothing is found on this Mac it says
+ * so, and the way on is the page's place for a ChatGPT export. */
+export function BringHistory({ state, profile, onEmpty, onChoose }: { state: State; profile: string; onEmpty: () => void; onChoose: (from: Source[]) => void }) {
+  const [from, setFrom] = useState<Source[]>([]);
+  useEffect(() => { for (const source of LOCAL) if (!(source in state.scans)) void app.scan(source); }, []);
+  // A source being looked for has its key with nothing under it yet: nothing is said of it until its scan has come.
+  const none = LOCAL.every(source => state.scans[source] !== undefined && !foundIn(state.scans, source).length);
+  if (none) return (
+    <form onSubmit={event => { event.preventDefault(); onChoose([]); }}>
+      <p className="mt-1 text-muted-foreground text-xs">{profile} starts with an empty memory. No history from Claude Code, Codex or Pi was found on this Mac.</p>
+      <p className="mt-2 text-muted-foreground text-xs">A ChatGPT export can still be brought in: the next page takes the ZIP, and shows what it would cost before anything starts.</p>
+      <div className="mt-4 flex justify-end gap-2">
+        <Button variant="ghost-muted" onClick={onEmpty}>Start empty</Button>
+        <Button type="submit" autoFocus>Bring a ChatGPT export…</Button>
+      </div>
+    </form>
+  );
+  return (
+    <form onSubmit={event => { event.preventDefault(); onChoose(from); }}>
+      <p className="mt-1 text-muted-foreground text-xs">{profile} starts with an empty memory. Claude Code, Codex and Pi kept what you did with them on this Mac: pick some, and {profile} knows it from its first message.</p>
+      <ul aria-label="Sources" className="mt-3 grid gap-2 min-[30rem]:grid-cols-2">
+        {LOCAL.map(source => {
+          const { scan, found, status, projects } = standing(state.scans, source), on = from.includes(source);
+          return (
+            <li key={source}>
+              <button type="button" role="checkbox" aria-checked={on} disabled={scan !== undefined && !found.length}
+                onClick={() => setFrom(on ? from.filter(s => s !== source) : [...from, source])}
+                className={cn('flex h-full w-full items-start gap-2.5 rounded-lg border px-3 py-2.5 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50', on ? 'border-foreground/30 bg-accent' : 'enabled:hover:bg-accent/50')}>
+                <Mark provider={PROVIDER[source]} className="mt-0.5 size-4 shrink-0" />
+                <span className="min-w-0 flex-1">
+                  <span className="block font-medium text-sm">{NAMES[source]}</span>
+                  <span className="block text-muted-foreground text-xs">{status ?? <>{unit(source, found.length)}<br />in {projects}</>}</span>
+                </span>
+                <CheckIcon className={cn('mt-0.5 size-3.5 shrink-0', !on && 'invisible')} />
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+      <p className="mt-2 text-muted-foreground text-xs">A ChatGPT export can be given on the next page. You pick the projects or single conversations there, and see what it costs before anything starts.</p>
+      <div className="mt-4 flex justify-end gap-2">
+        <Button variant="ghost-muted" onClick={onEmpty}>Start empty</Button>
+        <Button type="submit" autoFocus>Choose what to import…</Button>
+      </div>
+    </form>
   );
 }
 

@@ -116,7 +116,7 @@ A thing with a transition of its own (a `Button`) is put in something that enter
 
 **Formulas are drawn by KaTeX, which the page does not load until a reply has one.** KaTeX, its styles and its fonts are a chunk of their own (`Typeset.tsx`); until it is there a formula shows as it was written, and so does one KaTeX cannot read, such as a formula still streaming, so no error ever flashes. `trust: false` keeps it from writing links.
 
-**Nothing in a reply is fetched on its own.** The agent reads web pages and files that may tell it what to write, and a Markdown image is fetched the moment it is drawn, with whatever its address carries. So only the profile's own images (`/images/<profile>/<name>`) are drawn; any other image is shown as a link, and links open in a new tab that knows nothing of this one. The server backs this with `Content-Security-Policy: default-src 'self'`.
+**Nothing in a reply is fetched on its own.** The agent reads web pages and files that may tell it what to write, and a Markdown image is fetched the moment it is drawn, with whatever its address carries. So only two kinds of image are drawn: the profile's own (`/images/<profile>/<name>`), and a PNG, JPEG, GIF or WebP on this machine by its absolute path (`![chart](/tmp/chart.png)`, which the app's prompt tells the agent to write), which the page asks this server for (`/file`, [server.md](server.md)) and which, once it is no longer there, reads "No image at <path>". Any other image is shown as a link, and links open in a new tab that knows nothing of this one. The server backs this with `Content-Security-Policy: default-src 'self'`.
 
 ## Agents
 

@@ -104,8 +104,10 @@ function Zoomable({ picture, ref }: { picture: Shown; ref: Ref<Zoom> }) {
       else if (key === '0') zoomTo(1);
       else {
         const by = MOVES[key];
-        // Left and right step to the next picture where there is nothing to move to sideways.
-        if (!by || !here || zoom <= 1 || (by[0] !== 0 && here.scrollWidth <= here.clientWidth)) return false;
+        if (!by || !here || zoom <= 1) return false;
+        // Left and right step to the next picture once there is nothing more to move to that way.
+        const room = by[0] < 0 ? here.scrollLeft : here.scrollWidth - here.clientWidth - here.scrollLeft;
+        if (by[0] !== 0 && room < 1) return false;
         here.scrollBy(by[0], by[1]);
       }
       return true;

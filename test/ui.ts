@@ -1341,6 +1341,14 @@ test('the pictures of a message are stepped through with the arrows, a zoomed on
   await page.keyboard.press('ArrowLeft');
   await counter('1 / 3');
   assert.equal(await moved(), Math.round(left + 40));
+  // At its right edge, → steps after all.
+  await view.evaluate(here => { here.scrollLeft = here.scrollWidth; });
+  await page.keyboard.press('ArrowRight');
+  await counter('2 / 3');
+  await page.keyboard.press('ArrowLeft');
+  await counter('1 / 3');
+  await page.waitForFunction(() => document.querySelector<HTMLImageElement>('dialog img')?.naturalWidth === 1200);
+  await picture.click();
   await page.keyboard.press('+');
   assert.equal(Math.round((await picture.boundingBox())?.width ?? 0), Math.round(fitted * 3));
   await page.keyboard.press('0');

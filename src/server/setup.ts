@@ -119,7 +119,7 @@ export class Setup {
    * look again, and the page hears of what that finds. */
   async optchatVersion() {
     const { path, version: found } = (await this.look()).state.optchat, version = path === undefined ? undefined : manifest(path)?.version;
-    if (version !== found) void this.look(true).then(() => this.push());
+    if (version !== found) void this.look(true).then(() => this.push()).catch(() => {});
     return version;
   }
   /** What is there, as last checked; `fresh` checks again. */

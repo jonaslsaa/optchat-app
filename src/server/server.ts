@@ -80,7 +80,7 @@ export async function startServer({ port = 0, origins = [], ui = join(import.met
   const windows = new Windows({ home, grace, push, cwd: () => settings.cwd && isDirectory(settings.cwd) ? settings.cwd : cwd, pi: async () => { const { command, args } = await setup.launch(); return { command, args: [...args, ...flags] }; }, optchat: () => setup.optchatVersion(), catalog: () => setup.catalog() });
   const imports = new Imports({ home, histories, app, owned: profile => windows.owned(profile) });
   // A Pi of the app's on a pi-optchat older than the one installed now is started again while nothing is at work in its
-  // profile (`Windows.current`): before what an older one may not know (resuming agents, a change of settings), and once
+  // profile (`Windows.current`): before what an older one may not know (resuming agents), and once
   // pi-optchat may have changed (an install here, the setup's "Check again" after a pull in a checkout).
   const current = (profile: string) => windows.current(profile, async () => !agents.atWork(profile) && (await imports.status({ profile }).catch(() => undefined))?.state !== 'running');
   const everywhere = () => Promise.all(windows.list().windows.filter(window => window.role === 'main').map(({ profile }) => current(profile).catch(() => {})));
@@ -112,7 +112,7 @@ export async function startServer({ port = 0, origins = [], ui = join(import.met
       const found = editors();
       return { editors: [...found.keys()].map(id => ({ id, label: EDITORS[id].label })), current: preferred(found, settings.editor) };
     },
-    config: params => profiles.config(params), configure: async params => { await current(params.profile); return profiles.configure(params); }, instruct: params => profiles.instruct(params),
+    config: params => profiles.config(params), configure: params => profiles.configure(params), instruct: params => profiles.instruct(params),
     // An agent is reached through the Pi that has its profile open, and a message to one is worth starting that Pi for.
     tellAgent: async params => { await windows.owned(params.profile); return agents.tell(params); },
     interruptAgent: params => agents.interrupt(params), stopAgent: params => agents.stop(params),

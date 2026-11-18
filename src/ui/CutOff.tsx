@@ -13,7 +13,7 @@ function StaleLine({ profile, installed }: { profile: string; installed: string 
   return (
     <p role="status" className="notice enter flex shrink-0 items-center justify-center gap-2 bg-warning-surface px-4 py-1.5 text-warning-foreground text-xs">
       <span className="min-w-0 truncate"><span className="font-medium">{profile}</span> · Pi runs an older pi-optchat than the {installed} installed.</span>
-      <button type="button" aria-label={`Restart the Pi of ${profile}`} disabled={restarting} onClick={() => void restart()} className="shrink-0 rounded-sm font-medium underline underline-offset-2 disabled:no-underline disabled:opacity-60">
+      <button type="button" aria-label={`Restart the Pi of ${profile}`} title="Stops what it is doing, and starts it again on the new pi-optchat" disabled={restarting} onClick={() => void restart()} className="shrink-0 rounded-sm font-medium underline underline-offset-2 disabled:no-underline disabled:opacity-60">
         {restarting ? 'Restarting…' : 'Restart'}
       </button>
     </p>

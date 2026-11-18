@@ -78,7 +78,7 @@ const resized = (changed: () => void) => { addEventListener('resize', changed); 
  * with ⌘ or Ctrl, zooms about the pointer, and the wheel then moves it; a click zooms in two times there or back out, a drag
  * moves it. + − 0 zoom in, out and back, and the arrows move a zoomed picture before they step. A new picture starts fitted. */
 function Zoomable({ picture, ref }: { picture: Shown; ref: Ref<Zoom> }) {
-  const view = useRef<HTMLDivElement>(null), drag = useRef<{ pointer: number; x: number; y: number; left: number; top: number }>(null), dragged = useRef(false);
+  const view = useRef<HTMLDivElement>(null), drag = useRef<{ pointer: number; x: number; y: number; left: number; top: number }>(null), dragged = useRef(false), pressed = useRef<{ x: number; y: number }>(null);
   const [natural, setNatural] = useState({ width: 0, height: 0 }), [zoom, setZoom] = useState(1), [dragging, setDragging] = useState(false);
   const width = useSyncExternalStore(resized, () => innerWidth), height = useSyncExternalStore(resized, () => innerHeight);
   const most = { width: width * 0.92 - (width >= 640 ? 96 : 0), height: Math.max(1, Math.min(height * 0.86, height - 160)) };
@@ -134,6 +134,7 @@ function Zoomable({ picture, ref }: { picture: Shown; ref: Ref<Zoom> }) {
       // A drag ends in a click, which leaves the zoom as it is; so does a click's second in a double click.
       onClick={event => { if (!dragged.current && event.detail < 2) zoomTo(zoom > 1 ? 1 : 2, { x: event.clientX, y: event.clientY }); }}
       onPointerDown={event => {
+        pressed.current = { x: event.clientX, y: event.clientY };
         dragged.current = false;
         const here = event.currentTarget, at = here.getBoundingClientRect();
         // Not on a scroll bar, which moves the picture itself.
@@ -143,9 +144,11 @@ function Zoomable({ picture, ref }: { picture: Shown; ref: Ref<Zoom> }) {
         setDragging(true);
       }}
       onPointerMove={event => {
+        // A drag across a fitted picture moves nothing, and is no click either.
+        const start = pressed.current;
+        if (start && event.buttons && Math.hypot(event.clientX - start.x, event.clientY - start.y) > 4) dragged.current = true;
         const from = drag.current;
         if (from?.pointer !== event.pointerId) return;
-        if (Math.hypot(event.clientX - from.x, event.clientY - from.y) > 4) dragged.current = true;
         event.currentTarget.scrollLeft = from.left - (event.clientX - from.x);
         event.currentTarget.scrollTop = from.top - (event.clientY - from.y);
       }}

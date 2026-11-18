@@ -1335,6 +1335,14 @@ test('the pictures of a message are stepped through with the arrows, a zoomed on
   await page.waitForFunction(() => document.querySelector<HTMLImageElement>('dialog img')?.naturalWidth === 1200);
   const fitted = (await picture.boundingBox())?.width ?? 0;
   assert.ok(fitted > 0 && fitted < 1200, `Fitted to the window, not ${fitted} wide.`);
+  // A drag across it while it is fitted is no click: it stays fitted.
+  const over = await picture.boundingBox();
+  assert.ok(over);
+  await page.mouse.move(over.x + over.width / 2, over.y + over.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(over.x + over.width / 2 - 60, over.y + over.height / 2, { steps: 4 });
+  await page.mouse.up();
+  assert.equal(Math.round((await picture.boundingBox())?.width ?? 0), Math.round(fitted), 'A drag zoomed a fitted picture.');
   await picture.click();
   assert.equal(Math.round((await picture.boundingBox())?.width ?? 0), Math.round(fitted * 2));
   const box = await view.boundingBox();

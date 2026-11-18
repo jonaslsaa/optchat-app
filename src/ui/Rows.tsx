@@ -92,12 +92,11 @@ const ICONS: [RegExp, LucideIcon][] = [[/bash|shell|exec/, TerminalIcon], [/read
 const Output = ({ children, className }: { children: ReactNode; className?: string }) => <pre className={cn('max-h-64 cursor-text select-text overflow-auto whitespace-pre-wrap break-words rounded-md border border-border/60 bg-secondary px-2.5 py-2 font-mono text-2xs text-secondary-label leading-relaxed dark:border-transparent dark:bg-input/32', className)}>{children}</pre>;
 /** A line of a diff, or of what an edit was given, in the colour of its change. */
 const CHANGES = { removed: 'bg-destructive/8 text-destructive-foreground dark:bg-destructive/14', added: 'bg-success-foreground/8 text-success-foreground dark:bg-success-foreground/12' };
-/** A picture a tool returned, small (T3 Code's 16rem), and in its place a word that it is gone when the profile no longer has
- * it. The image's error reaches the span, as React passes it up. */
+/** A picture a tool returned, small (T3 Code's 16rem), and in its place a word that it is gone when the profile no longer has it. */
 function ToolImage({ src }: { src: string }) {
   const [gone, setGone] = useState(false);
   if (gone) return <p className="text-2xs text-secondary-label">Image unavailable</p>;
-  return <span onError={() => setGone(true)}><Picture src={src} alt="What the tool returned" className="max-h-64 max-w-full rounded-md border border-border/60" /></span>;
+  return <Picture src={src} alt="What the tool returned" className="max-h-64 max-w-full rounded-md border border-border/60" onError={() => setGone(true)} />;
 }
 /** A tool call as one line saying what it did. Opened, the line is there whole and can be selected, with under it what it does
  * not say of the call (the lines an edit changed, the text of a file), the pictures it returned and what it printed. `live`: the agent is still at work; `running` is the call's output so far, while Pi runs it. */

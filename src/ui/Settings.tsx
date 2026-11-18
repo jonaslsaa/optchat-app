@@ -131,8 +131,8 @@ export function Settings({ state, onClose }: { state: State; onClose: () => void
     </Page>
   );
 }
-/** The first thing you see, before there is a profile. */
-/** The first page, until there is a profile. `onMade`: the first one is there, and is asked next what history it brings. */
+/** The first page, until there is a profile. `onMade`: the first one is there, and is asked next what history it brings
+ * once the setup has what a chat needs. */
 export function Welcome({ state, onMade }: { state: State; onMade: (profile: string) => void }) {
   return (
     <Page title="Welcome to OptChat">

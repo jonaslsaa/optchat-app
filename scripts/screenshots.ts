@@ -250,12 +250,7 @@ async function pictures(browser: Browser, control: Client) {
   // Later, with a profile: the settings still say where the app's Pi is, and how to put it on your PATH.
   await first.getByRole('textbox', { name: 'Profile name' }).fill('work');
   await first.getByRole('button', { name: 'Create profile' }).click();
-  // Made, it is asked what history it brings, what there is on the Mac counted; started empty, the settings are there.
-  const bringing = first.getByRole('dialog', { name: 'Bring your history' });
-  await bringing.getByText('Looking…').first().waitFor({ state: 'detached' });
-  await shot(first, '188-first-profile-bring');
-  await bringing.getByRole('button', { name: 'Start empty' }).click();
-  await bringing.waitFor({ state: 'detached' });
+  // pi-optchat is not in this Pi yet, so nothing could be imported: the profile is not asked what history it brings.
   await first.getByRole('button', { name: 'Settings' }).click();
   await first.getByText('The app installed this Pi into its own folder.').waitFor();
   await shot(first, '21-settings-app-pi');
@@ -834,6 +829,30 @@ async function pictures(browser: Browser, control: Client) {
     await onboarding.getByRole('heading', { name: 'Import into garden' }).waitFor();
     await onboarding.getByText('Looking…').first().waitFor({ state: 'detached' });
     await shot(onboarding, '192-new-profile-import');
+    // The first profile, named on the first page of a machine with Pi and pi-optchat set up: the dialog is its second step alone.
+    const blank = join(home, 'blank');
+    mkdirSync(blank);
+    const set = await startServer({ home: blank, app: join(blank, 'app'), cwd: home, histories: join(home, 'mac'), pi, now: () => NOW + 42_000 });
+    try {
+      const welcome = await open([], { at: set.page, ready: 'Profile name' });
+      await welcome.getByRole('textbox', { name: 'Profile name' }).fill('work');
+      await welcome.keyboard.press('Enter');
+      await welcome.getByRole('dialog', { name: 'Bring your history' }).getByText('Looking…').first().waitFor({ state: 'detached' });
+      await shot(welcome, '188-first-profile-bring');
+      await welcome.context().close();
+    } finally { await set.close(); }
+    // A Mac where none of the tools kept anything: it says so, and offers a ChatGPT export.
+    const bare = join(home, 'bare');
+    mkdirSync(bare);
+    const nothing = await startServer({ home: bare, app: join(bare, 'app'), cwd: home, pi, now: () => NOW + 42_000 });
+    try {
+      const welcome = await open([], { at: nothing.page, ready: 'Profile name' });
+      await welcome.getByRole('textbox', { name: 'Profile name' }).fill('work');
+      await welcome.keyboard.press('Enter');
+      await welcome.getByRole('dialog', { name: 'Bring your history' }).getByText(/was found on this Mac/).waitFor();
+      await shot(welcome, '193-first-profile-nothing-found');
+      await welcome.context().close();
+    } finally { await nothing.close(); }
   }
 
   // The desktop app's update button, at the sidebar's foot, in each thing its updater does. Last: from here on the server has

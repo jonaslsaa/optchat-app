@@ -24,6 +24,13 @@ const within = (range: Range, now: number) => {
 /** What each source's scan found, once it has: `undefined` while it is read. */
 export type Scans = Partial<Record<Source, Result<'importScan'> | { error: string }>>;
 export const foundIn = (scans: Scans, source: Source) => { const scan = scans[source]; return scan && 'found' in scan ? scan.found : []; };
+/** How a source stands, for its row and its card: what it found and in how many projects, and `status` in place of a count
+ * while it is looked for, when it could not be read and when it found nothing. */
+export const standing = (scans: Scans, source: Source) => {
+  const scan = scans[source], found = foundIn(scans, source), groups = new Set(found.map(f => f.project)).size;
+  const status = !scan ? 'Looking…' : 'error' in scan ? 'Could not be read' : !found.length ? source === 'chatgpt' ? 'Not given yet' : 'None on this Mac' : undefined;
+  return { scan, found, status, projects: `${groups} ${groups === 1 ? 'project' : 'projects'}` };
+};
 /** A conversation's name in a pick: its source and its id, which is unique only within the source. */
 export const key = (source: Source, id: string) => `${source}\n${id}`;
 

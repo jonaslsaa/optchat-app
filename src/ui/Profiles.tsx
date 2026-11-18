@@ -4,6 +4,7 @@ import { badge } from './badge.ts';
 import { BringHistory } from './Import.tsx';
 import type { Source } from './imports.ts';
 import { useOverlay, walk } from './keys.ts';
+import { missing } from './Setup.tsx';
 import { app, type State } from './store.ts';
 import { Button, cn, Spinner, WindowDot } from './ui.tsx';
 
@@ -37,7 +38,8 @@ export function NewProfile({ onMade, onCancel }: { onMade?: (profile: string) =>
   );
 }
 /** New Profile…: another profile's name, in a dialog over the page, and then what history it brings (`BringHistory`): "Start
- * empty", or the Import page on the sources picked (`onImport`). The first profile is named on the first page, and the dialog
+ * empty", or the Import page on the sources picked (`onImport`); not while the setup lacks something (`missing`), which
+ * nothing could be imported with: the dialog closes on the new chat. The first profile is named on the first page, and the dialog
  * opens on its second step (`made`). Esc, Cancel or a press beside it puts it away, and Esc does nothing else (`useOverlay`):
  * on the first step nothing is made, and on the second it starts empty. A run in the chat behind it goes on, as it does while
  * the profile is made and opened behind it. */
@@ -55,11 +57,10 @@ export function NewProfileDialog({ state, made: named, onClose, onMade, onImport
         {made === undefined ? <>
           <h2 className="font-medium text-sm">New profile</h2>
           <p className="mt-1 text-muted-foreground text-xs">A profile is one chat that never ends, with a memory of its own. Its name: lowercase letters, digits, hyphens and underscores.</p>
-          <NewProfile onMade={profile => { setMade(profile); onMade(); }} onCancel={close} />
+          <NewProfile onMade={profile => { onMade(); if (missing(state)) onClose(profile); else setMade(profile); }} onCancel={close} />
         </> : <div key="bring" className="enter">
           <h2 className="font-medium text-sm">Bring your history?</h2>
-          <p className="mt-1 text-muted-foreground text-xs">{made} starts with an empty memory. Claude Code, Codex and Pi kept what you did with them on this Mac: pick some, and {made} knows it from its first message.</p>
-          <BringHistory state={state} onEmpty={close} onChoose={from => { onImport(from); close(); }} />
+          <BringHistory state={state} profile={made} onEmpty={close} onChoose={from => { onImport(from); close(); }} />
         </div>}
       </div>
     </dialog>

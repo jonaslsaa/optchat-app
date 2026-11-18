@@ -155,7 +155,6 @@ function Profile({ state, profile, onSettings, onUsage, onNewProfile, onImport, 
 export function App() {
   // The page in the chat's place, if one is: the settings, or what the profile in front used.
   const state = useApp(), [page, setPage] = useState<Page>(), settings = page === 'settings', needs = missing(state);
-  // The New Profile dialog, over whatever page is there.
   // The New Profile dialog, and the sources its second step picked for the Import page.
   const [naming, setNaming] = useState<{ made?: string }>(), name = () => setNaming({}), [from, setFrom] = useState<Source[]>([]);
   const toImport = (sources: Source[] = []) => { setFrom(sources); setPage('import'); };
@@ -204,7 +203,7 @@ export function App() {
         : page && state.profile ? <UsagePage key={state.profile} state={state} profile={state.profile} onClose={() => setPage(undefined)} />
         : state.profile ? <Profile ref={chat} key={state.profile} state={state} profile={state.profile} onSettings={() => setPage('settings')} onUsage={() => setPage('usage')} onNewProfile={name} onImport={() => toImport()} />
         : state.connection === 'connecting' ? <p className="m-auto text-muted-foreground text-sm">Connecting…</p>
-        : <Welcome state={state} onMade={made => setNaming({ made })} />}
+        : <Welcome state={state} onMade={made => { if (!needs) setNaming({ made }); }} />}
     </div>
   );
 }

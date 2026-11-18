@@ -357,7 +357,7 @@ export const methods = {
   importScan: method(Type.Object({ source: From, fresh: Type.Optional(Type.Boolean()) }), Type.Object({ found: Type.Array(Found), warnings: Type.Array(Type.String()), note: Type.Optional(Type.String()) })),
   /** A ChatGPT export, sent a piece at a time (`data` in base64, at `offset`): one at `offset` 0 begins a new one in place of the
    * last. `name` says whether it is a ZIP or a JSON file. */
-  importUpload: method(Type.Object({ name: Type.String({ pattern: '\\.(zip|json)$' }), offset: Type.Integer({ minimum: 0 }), data: Type.String({ maxLength: PIECE }) }), Type.Object({ received: Type.Integer({ minimum: 0 }) })),
+  importUpload: method(Type.Object({ name: Type.String({ pattern: '\\.([zZ][iI][pP]|[jJ][sS][oO][nN])$' }), offset: Type.Integer({ minimum: 0 }), data: Type.String({ maxLength: PIECE }) }), Type.Object({ received: Type.Integer({ minimum: 0 }) })),
   /** What importing the picked conversations into a profile would bring (pi-optchat's `previewImport`): how many are new and how many the
    * memory has already, its warnings, and what it would cost appended or rebuilt. Reads, writes nothing. A newer preview
    * for the same profile cuts this one short. */

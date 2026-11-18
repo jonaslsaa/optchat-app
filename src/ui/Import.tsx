@@ -1,5 +1,5 @@
 import { CheckIcon, ChevronRightIcon, FileArchiveIcon, PauseIcon, PlayIcon, RefreshCwIcon, SearchIcon, Trash2Icon, TriangleAlertIcon, XIcon } from 'lucide-react';
-import { useDeferredValue, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useDeferredValue, useEffect, useMemo, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from 'react';
 import type { Found, ImportPreview } from '../protocol.ts';
 import { asks, chosen, modes, underway, foundIn, key, LOCAL, NAMES, picked, progress, projects, RANGES, summary, toggled, unit, type Mode, type Project, type Range, type Scans, type Source, type Underway } from './imports.ts';
 import { Mark } from './Mark.tsx';
@@ -25,14 +25,15 @@ function Box({ label, state, onChange }: { label: string; state: 'all' | 'some' 
 /** A row of a long list: drawn only once it comes near the screen, so thousands scroll as smoothly as ten. */
 const LONG = '[content-visibility:auto] [contain-intrinsic-size:auto_2rem]';
 
-function Sources({ state, sources, onSources }: { state: State; sources: Source[]; onSources: (sources: Source[]) => void }) {
+function Sources({ state, sources, onSources }: { state: State; sources: Source[]; onSources: Dispatch<SetStateAction<Source[]>> }) {
   const file = useRef<HTMLInputElement>(null), [refused, setRefused] = useState<string>(), [over, setOver] = useState(false);
   const toggle = (source: Source) => onSources(sources.includes(source) ? sources.filter(s => s !== source) : [...sources, source]);
   const give = async (given?: File) => {
     if (!given) return;
     setRefused(undefined);
     const why = await app.upload(given);
-    if (why) setRefused(why); else if (!sources.includes('chatgpt')) onSources([...sources, 'chatgpt']);
+    // The choices as they are when it has come, which may have changed while it was sent.
+    if (why) setRefused(why); else onSources(now => now.includes('chatgpt') ? now : [...now, 'chatgpt']);
   };
   const row = (source: Source) => {
     const scan = state.scans[source], n = foundIn(state.scans, source).length, groups = new Set(foundIn(state.scans, source).map(found => found.project)).size;

@@ -419,9 +419,12 @@ export class App {
   private importing(profile: string, status: ImportStatus) {
     const before = this.state.imports[profile];
     const finished = before && before.state !== 'idle' && status.state === 'idle' && status.last && Date.parse(status.last.completed) >= Date.parse(before.created) ? status.last : undefined;
+    // One that started and ended while the page looked elsewhere changed the memory too, though it is not said as done.
+    const ended = status.state === 'idle' ? status.last?.completed : undefined;
+    const renewed = finished || (before?.state === 'idle' && ended !== undefined && before.last?.completed !== ended);
     this.set({ imports: { ...this.state.imports, [profile]: status }, ...finished && { imported: { ...this.state.imported, [profile]: { added: finished.added } } } });
     // The messages are numbered again in the memory the import made: what was read of the one before goes, not merged in.
-    if (finished) {
+    if (renewed) {
       const { [profile]: _, ...logs } = this.state.logs;
       this.set({ logs });
       void this.read(profile);

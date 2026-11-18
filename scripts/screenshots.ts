@@ -8,7 +8,7 @@ import { startServer } from '../src/server/server.ts';
 import { defaults, describeOwner, lockProfile } from 'pi-optchat/files';
 import { createProfile, give, png, writeRun } from '../test/support.ts';
 import { chatgptExport, writeHistories } from '../test/histories.ts';
-import { agents, CHANGES, demo, FAILED, FILES, FORMULAS, limited, NAMED, PICTURED, remember, seed, SEEN, SEEN_IMAGE, SHIPPED, SHIPPING, SKILLED, spend, TEAM } from './seed.ts';
+import { agents, CHANGES, demo, FAILED, FILES, FORMULAS, limited, NAMED, PICTURED, remember, RESIZED, RESIZED_IMAGE, seed, SEEN, SEEN_IMAGE, SHIPPED, SHIPPING, SKILLED, spend, TEAM } from './seed.ts';
 
 /** `npm run screenshots [directory] [--dark]`: a PNG of every main state of the UI, in /tmp/optchat-app-shots unless a directory
  * is named, and all of them in dark mode with `--dark`. It builds the UI, serves it against throwaway profiles under /tmp with
@@ -75,6 +75,10 @@ seed(createProfile(home, 'formulas'), 1, NOW, FORMULAS);
 writeFileSync(join(home, 'chart.png'), png(240, [38, 99, 235]));
 seed(createProfile(home, 'pictured'), 1, NOW, PICTURED(join(home, 'chart.png')));
 seed(createProfile(home, 'failed'), 1, NOW, FAILED);
+const resized = createProfile(home, 'resized');
+seed(resized, 1, NOW, RESIZED);
+mkdirSync(join(resized, 'images'));
+writeFileSync(join(resized, 'images', `${RESIZED_IMAGE}.png`), png(240, [234, 138, 30]));
 seed(createProfile(home, 'skills'), 1, NOW, SKILLED);
 // The subscription's limits as they were with the latest answer: well within them, past the five hours and on extra usage,
 // a request refused a moment ago, and a count from before the five hours began again. `empty` has none.
@@ -605,6 +609,13 @@ async function pictures(browser: Browser, control: Client) {
     await page.getByRole('button', { name: /^Worked/ }).click();
     await page.getByLabel('Failed').waitFor();
     await shot(page, name);
+  }
+  // A picture Pi made smaller: your message shows it without the note Pi wrote for the model under it.
+  {
+    const page = await open(['resized']);
+    await page.getByText('Why is the gap under the composer so big?').waitFor();
+    await page.waitForFunction(() => [...document.images].every(image => image.complete));
+    await shot(page, '202-resized-picture');
   }
   // A reply that names files: the two in the window's folder are links to your editor, the one that is not stays code.
   // A profile's instructions, with the button that opens them in your editor, and the editors it lists.

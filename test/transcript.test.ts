@@ -347,6 +347,17 @@ test('your message is what you typed with what it cites apart, and what is cited
   assert.equal(recalled(items, '', true), sent);
 });
 
+test('your message is drawn without the note Pi adds for each picture it made smaller, and keeps every other note', () => {
+  const note = (w: number, scale: string) => `[Image: original ${w}x1690, displayed at 2000x1335. Multiply coordinates by ${scale} to map to original image.]`;
+  const omitted = 'Image omitted: could not be resized below the inline image size limit.';
+  const items = logged([
+    entry(0, 'user', 0, `which is wider?\n\n${note(2532, '1.27')}\n${note(4000, '2.00')}\n[image 0123456789abcdef]\n[image fedcba9876543210]`),
+    entry(1, 'user', 1, `see [Image: foo]\n\n${omitted}`),
+  ]);
+  assert.partialDeepStrictEqual(parts(items), [{ type: 'user', text: 'which is wider?' }, { type: 'user', text: `see [Image: foo]\n\n${omitted}` }]);
+  assert.equal(recalled(items, 'see [Image: foo]\n\n' + omitted, true), 'which is wider?');
+});
+
 test('a message says what pi-optchat would log, with your image to draw, and a tool call by its id', () => {
   const picture = { type: 'image', data: 'aGk=', mimeType: 'image/png' };
   // A message of yours that is not in the log yet, or never is (a connected window's), is drawn from Pi: with its pictures,

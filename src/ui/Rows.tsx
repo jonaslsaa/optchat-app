@@ -8,7 +8,8 @@ import { CiteCard, SkillChip } from './Cite.tsx';
 import { asTyped, type Place } from './cite.ts';
 import { Markdown } from './Markdown.tsx';
 import { act, started, took, worked, type Part, type Step, type Thinking, type Tool } from './transcript.ts';
-import { Button, cn, CopyButton, Picture, Spinner, StatusDot } from './ui.tsx';
+import { Button, cn, CopyButton, Spinner, StatusDot } from './ui.tsx';
+import { Picture } from './Picture.tsx';
 import { WorkLogDetails, WorkLogRow } from './WorkLog.tsx';
 
 /** The rows of the chat. They only draw: what a row says is worked out in `parts` (transcript.ts). Each is drawn again only when
@@ -48,7 +49,7 @@ export const UserRow = memo(function UserRow({ part, profile, onPlace }: { part:
   const sent = asTyped(part);
   return (
     <div className="group flex flex-col items-end gap-1 pt-2 pb-1">
-      <div className="relative min-w-0 max-w-[80%] rounded-2xl bg-message p-3 text-message-foreground">
+      <div data-gallery="" className="relative min-w-0 max-w-[80%] rounded-2xl bg-message p-3 text-message-foreground">
         {part.images.length > 0 && <div className="mb-2 flex flex-wrap gap-2">{part.images.map((image, at) => <Picture key={at} src={source(profile, image)} className="max-h-48 rounded-lg" />)}</div>}
         {part.skill && <SkillChip skill={part.skill} className={cn((part.text || part.cites.length > 0) && 'mb-1')} />}
         {part.cites.length > 0 && <div className={cn('flex flex-col gap-1.5', part.text && 'mb-2')}>{part.cites.map((cite, at) => <CiteCard key={at} cite={cite} onOpen={onPlace} />)}</div>}
@@ -207,7 +208,7 @@ export const ReplyRow = memo(function ReplyRow({ part, working, latest, profile 
   // Why a reply failed is said outside the fold too, or a failed turn would look like one that answered nothing.
   const faults = part.stopped ? [] : steps.filter(step => step.type === 'fault'), spawned = steps.flatMap(started);
   return (
-    <div className="group/reply pb-2">
+    <div data-gallery="" className="group/reply pb-2">
       {!working && steps.length > 0 && (
         <div className="border-border/60 border-b pt-1 pb-2">
           <Fold open={open} toggle={() => setOpen(!open)}>

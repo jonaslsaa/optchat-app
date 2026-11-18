@@ -46,16 +46,18 @@ export function writeRun(directory: string, run: Pick<RunInfo, 'id' | 'state' | 
   writeFileSync(sessionFile, [{ type: 'session', version: 3, id: run.id }, ...messages.map(message => ({ type: 'message', message }))].map(line => JSON.stringify(line)).join('\n') + '\n');
   writeFileSync(join(runs, `${run.id}.optchat.json`), JSON.stringify({ task: 'Look into it.', cwd: '/tmp', model: 'anthropic/claude-haiku-5-5', thinking: 'off', parentSession: 'main', depth: 1, guidance: [], sessionFile, ...run } satisfies RunInfo));
 }
-/** A PNG of one colour, `size` pixels a side: a picture to send, small enough to read here. */
-export function png(size: number, [red, green, blue]: [number, number, number]) {
+type RGB = [red: number, green: number, blue: number];
+/** A PNG `size` pixels a side, of one colour or of the colour `paint` gives each pixel: a picture to send, small enough to
+ * read here. */
+export function png(size: number, paint: RGB | ((x: number, y: number) => RGB)) {
   const chunk = (type: string, data: Buffer) => {
     const body = Buffer.concat([Buffer.from(type), data]), framed = Buffer.alloc(body.length + 8);
     framed.writeUInt32BE(data.length); body.copy(framed, 4); framed.writeUInt32BE(crc32(body), body.length + 4);
     return framed;
   };
-  const header = Buffer.alloc(13), row = Buffer.concat([Buffer.from([0]), Buffer.alloc(size * 3, Buffer.from([red, green, blue]))]);
+  const header = Buffer.alloc(13), row = (y: number) => Buffer.from([0, ...Array.from({ length: size }, (_, x) => typeof paint === 'function' ? paint(x, y) : paint).flat()]);
   header.writeUInt32BE(size); header.writeUInt32BE(size, 4); header.set([8, 2, 0, 0, 0], 8); // 8 bits a channel, RGB.
-  return Buffer.concat([Buffer.from('\x89PNG\r\n\x1a\n', 'latin1'), chunk('IHDR', header), chunk('IDAT', deflateSync(Buffer.concat(Array.from({ length: size }, () => row)))), chunk('IEND', Buffer.alloc(0))]);
+  return Buffer.concat([Buffer.from('\x89PNG\r\n\x1a\n', 'latin1'), chunk('IHDR', header), chunk('IDAT', deflateSync(Buffer.concat(Array.from({ length: size }, (_, y) => row(y))))), chunk('IEND', Buffer.alloc(0))]);
 }
 /** Files as a paste or a drop gives them to the composer of a page, with the `text` a clipboard may hold beside them by its
  * kind, and a `key` that is pressed next, before a file can have been read. */

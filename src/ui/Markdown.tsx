@@ -11,7 +11,8 @@ import { link, pathOf, safe, shown } from './safe.ts';
 import { app } from './store.ts';
 import { csv } from './table.ts';
 import { closed, paced } from './transcript.ts';
-import { Button, cn, CopyButton, Picture } from './ui.tsx';
+import { Button, cn, CopyButton } from './ui.tsx';
+import { Picture } from './Picture.tsx';
 
 const Line = memo(function Line({ tokens }: { tokens: Token[] }) {
   return tokens.map(({ text, color }, at) => <span key={at} style={{ color }}>{text}</span>);

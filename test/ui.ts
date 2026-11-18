@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { after, before, test } from 'node:test';
 import { chromium, type Browser, type Locator, type Page } from 'playwright-core';
 import { build } from 'vite';
-import { agents, CHANGES, FILES, FORMULAS, NAMED, remember, seed, TEAM } from '../scripts/seed.ts';
+import { agents, CHANGES, FILES, FORMULAS, GONE, NAMED, PICTURED, remember, seed, TEAM } from '../scripts/seed.ts';
 import type { Launch } from '../src/server/files.ts';
 import { connect } from '../src/client.ts';
 import { startServer } from '../src/server/server.ts';
@@ -37,6 +37,8 @@ seed(lines, TEAM.length, Date.now(), TEAM);
 remember(lines, 4);
 writeMemory(createProfile(home, 'thinks'), 4);
 seed(createProfile(home, 'formulas'), 1, Date.now(), FORMULAS);
+writeFileSync(join(home, 'chart.png'), png(120, [38, 99, 235]));
+seed(createProfile(home, 'pictured'), 1, Date.now(), PICTURED(join(home, 'chart.png')));
 createProfile(home, 'paced');
 createProfile(home, 'skills');
 // A chat to find in: a word in two cases, a line of code longer than the page is wide, and a long message of yours, which is
@@ -1174,6 +1176,19 @@ test('a formula is drawn by KaTeX and a price stays as written, and a table copi
   assert.equal(await clipboard(), 'Role,Cost,Cache read\nMain chat,$36.41,92%\nSubagents,$19.45,88%\nCompactor,$2.02,71%');
   await page.getByRole('button', { name: 'Copy as Markdown' }).click();
   assert.match(await clipboard(), /^\| Role \| Cost \| Cache read \|\n\| --- \| ---: \| ---: \|\n[^]*\| Compactor \| \$2\.02 \| 71% \|$/);
+  await page.context().close();
+});
+
+test('a reply shows a picture on this machine by its path, large on a click; one that is gone says so, and one on the web stays a link', async () => {
+  const page = await open('pictured');
+  const picture = page.getByRole('button', { name: 'Show the image large: Cache share by day' });
+  // Drawn from the file: the server sent the page its bytes.
+  await picture.locator('img').evaluate(img => img instanceof HTMLImageElement && (img.complete || new Promise(done => img.addEventListener('load', done, { once: true }))));
+  assert.equal(await picture.locator('img').evaluate(img => img instanceof HTMLImageElement ? img.naturalWidth : 0), 120);
+  await page.getByText(`No image at ${GONE}`).waitFor();
+  assert.equal(await page.getByRole('link', { name: 'pricing' }).getAttribute('href'), 'https://example.com/pricing.png');
+  await picture.click();
+  await page.getByRole('dialog', { name: 'The image, large' }).waitFor();
   await page.context().close();
 });
 

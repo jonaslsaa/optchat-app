@@ -40,6 +40,8 @@ function Clamp({ text, lines, children }: { text: string; lines: number; childre
   );
 }
 
+/** Where the page finds an image a message or a tool's result has: the address it came with, or its file in the profile. */
+const source = (profile: string, image: string) => image.startsWith('data:') ? image : `/images/${profile}/${image}`;
 /** Your message: a bubble on the right, with the images you sent. */
 export const UserRow = memo(function UserRow({ part, profile, onPlace }: { part: Of<'user'>; profile: string; onPlace?: (at: Place) => void }) {
   // The message as it was sent: copied, it is pasted into the box as it was, with what it cites and the skill as it was typed.
@@ -47,7 +49,7 @@ export const UserRow = memo(function UserRow({ part, profile, onPlace }: { part:
   return (
     <div className="group flex flex-col items-end gap-1 pt-2 pb-1">
       <div className="relative min-w-0 max-w-[80%] rounded-2xl bg-message p-3 text-message-foreground">
-        {part.images.length > 0 && <div className="mb-2 flex flex-wrap gap-2">{part.images.map((image, at) => <Picture key={at} src={image.startsWith('data:') ? image : `/images/${profile}/${image}`} className="max-h-48 rounded-lg" />)}</div>}
+        {part.images.length > 0 && <div className="mb-2 flex flex-wrap gap-2">{part.images.map((image, at) => <Picture key={at} src={source(profile, image)} className="max-h-48 rounded-lg" />)}</div>}
         {part.skill && <SkillChip skill={part.skill} className={cn((part.text || part.cites.length > 0) && 'mb-1')} />}
         {part.cites.length > 0 && <div className={cn('flex flex-col gap-1.5', part.text && 'mb-2')}>{part.cites.map((cite, at) => <CiteCard key={at} cite={cite} onOpen={onPlace} />)}</div>}
         {part.text && <Clamp text={part.text} lines={12}><p data-cite={part.key} className="whitespace-pre-wrap text-sm leading-relaxed [overflow-wrap:anywhere]">{part.text}</p></Clamp>}
@@ -90,9 +92,16 @@ const ICONS: [RegExp, LucideIcon][] = [[/bash|shell|exec/, TerminalIcon], [/read
 const Output = ({ children, className }: { children: ReactNode; className?: string }) => <pre className={cn('max-h-64 cursor-text select-text overflow-auto whitespace-pre-wrap break-words rounded-md border border-border/60 bg-secondary px-2.5 py-2 font-mono text-2xs text-secondary-label leading-relaxed dark:border-transparent dark:bg-input/32', className)}>{children}</pre>;
 /** A line of a diff, or of what an edit was given, in the colour of its change. */
 const CHANGES = { removed: 'bg-destructive/8 text-destructive-foreground dark:bg-destructive/14', added: 'bg-success-foreground/8 text-success-foreground dark:bg-success-foreground/12' };
+/** A picture a tool returned, small (T3 Code's 16rem), and in its place a word that it is gone when the profile no longer has
+ * it. The image's error reaches the span, as React passes it up. */
+function ToolImage({ src }: { src: string }) {
+  const [gone, setGone] = useState(false);
+  if (gone) return <p className="text-2xs text-secondary-label">Image unavailable</p>;
+  return <span onError={() => setGone(true)}><Picture src={src} alt="What the tool returned" className="max-h-64 max-w-full rounded-md border border-border/60" /></span>;
+}
 /** A tool call as one line saying what it did. Opened, the line is there whole and can be selected, with under it what it does
- * not say of the call (the lines an edit changed, the text of a file) and what the call printed. `live`: the agent is still at work; `running` is the call's output so far, while Pi runs it. */
-function ToolRow({ step, live, running }: { step: Tool; live: boolean; running?: string }) {
+ * not say of the call (the lines an edit changed, the text of a file), the pictures it returned and what it printed. `live`: the agent is still at work; `running` is the call's output so far, while Pi runs it. */
+function ToolRow({ step, live, running, profile }: { step: Tool; live: boolean; running?: string; profile: string }) {
   const [open, setOpen] = useState(false);
   const Icon = ICONS.find(([pattern]) => pattern.test(step.name))?.[1] ?? WrenchIcon, printed = step.output ?? running, { verb, subject, detail, stat } = act(step, live);
   return (
@@ -115,16 +124,17 @@ function ToolRow({ step, live, running }: { step: Tool; live: boolean; running?:
           {/* A diff has the whole box to scroll in, its wrapped lines under their text, and what Pi printed under it ("Successfully
               replaced…") says nothing the line does not. */}
           {detail.length > 0 && <Output className={cn(stat && 'max-h-none shrink-0')}>{detail.map((shown, index) => <span key={index} className={cn('-mx-2.5 block px-2.5', stat && 'ps-[calc(0.625rem+2ch)] -indent-[2ch]', shown.change && CHANGES[shown.change])}>{shown.text}</span>)}</Output>}
-          {stat ? null : printed ? <Output>{printed}</Output> : <p className="text-2xs text-secondary-label">{live && step.output === undefined ? 'No output yet.' : 'No output.'}</p>}
+          {step.images && <div className="flex flex-wrap gap-2">{step.images.map((image, at) => <ToolImage key={at} src={source(profile, image)} />)}</div>}
+          {stat ? null : printed ? <Output>{printed}</Output> : step.images ? null : <p className="text-2xs text-secondary-label">{live && step.output === undefined ? 'No output yet.' : 'No output.'}</p>}
         </WorkLogDetails>
       )}
     </WorkLogRow>
   );
 }
-export function StepRow({ step, tools }: { step: Step; tools?: Record<string, string> }) {
+export function StepRow({ step, tools, profile }: { step: Step; tools?: Record<string, string>; profile: string }) {
   if (step.type === 'talk') return <div className="px-1 py-1"><Markdown text={step.text} streaming={step.streaming} /></div>;
   if (step.type === 'fault') return <p className="px-1 py-0.5 text-destructive-foreground text-sm">{step.text}</p>;
-  return <><ToolRow step={step} live={tools !== undefined} running={step.call !== undefined ? tools?.[step.call] : undefined} />{step.name === 'spawn' && <Spawned ids={started(step)} />}</>;
+  return <><ToolRow step={step} live={tools !== undefined} running={step.call !== undefined ? tools?.[step.call] : undefined} profile={profile} />{step.name === 'spawn' && <Spawned ids={started(step)} />}</>;
 }
 /** Counts the seconds since `from` while the agent works. */
 export function Timer({ from }: { from: string }) {
@@ -192,7 +202,7 @@ export function Doing({ from, activity, thinking }: { from: string; activity?: s
 }
 /** The agent's reply: its work, folded once it is done, and then its answer. While it works (`working`) the steps stay open, and
  * the chat says under them what it is doing (`Doing`). The chat's `latest` reply always shows what can be done with it; the others on hover. */
-export const ReplyRow = memo(function ReplyRow({ part, working, latest }: { part: Of<'reply'>; working?: Working; latest: boolean }) {
+export const ReplyRow = memo(function ReplyRow({ part, working, latest, profile }: { part: Of<'reply'>; working?: Working; latest: boolean; profile: string }) {
   const [open, setOpen] = useState(false);
   const { steps, answer } = part, tools = steps.filter(step => step.type === 'tool'), failed = tools.filter(step => step.failed).length;
   // Why a reply failed is said outside the fold too, or a failed turn would look like one that answered nothing.
@@ -207,9 +217,9 @@ export const ReplyRow = memo(function ReplyRow({ part, working, latest }: { part
           </Fold>
         </div>
       )}
-      {(working || open) && steps.length > 0 && <div className={cn('flex min-w-0 flex-col py-1', !working && 'enter')}>{steps.map(step => <StepRow key={step.key} step={step} tools={working?.tools} />)}</div>}
+      {(working || open) && steps.length > 0 && <div className={cn('flex min-w-0 flex-col py-1', !working && 'enter')}>{steps.map(step => <StepRow key={step.key} step={step} tools={working?.tools} profile={profile} />)}</div>}
       {!working && !open && spawned.length > 0 && <Spawned ids={spawned} folded />}
-      {!working && !open && faults.map(step => <StepRow key={step.key} step={step} />)}
+      {!working && !open && faults.map(step => <StepRow key={step.key} step={step} profile={profile} />)}
       {/* An answer in several blocks is a message of the log each: what is cited from one is cited as that message. */}
       {answer && <div className="relative flex min-w-0 flex-col gap-[0.65rem] px-1 py-0.5 pt-2">{answer.said.map((block, at) => <div key={block.key} data-cite={block.key}><Markdown text={block.text} streaming={answer.streaming && at === answer.said.length - 1} /></div>)}</div>}
       {!working && answer && (

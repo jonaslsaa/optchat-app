@@ -82,7 +82,7 @@ export function Timeline({ items, live, running, starting = false, profile, olde
             : part.type === 'work' ? <ReportRow key={part.key} part={part} onAgent={onAgent} />
             : part.type === 'note' ? <NoteRow key={part.key} part={part} />
             : part.type === 'handoff' ? <HandoffRow key={part.key} part={part} writing={running && part === last} />
-            : <ReplyRow key={part.key} part={part} working={running && part === last ? working : undefined} latest={part === latest} />)}</AgentsInChat>
+            : <ReplyRow key={part.key} part={part} working={running && part === last ? working : undefined} latest={part === latest} profile={profile} />)}</AgentsInChat>
           {/* What the agent is doing: under your message until it says something, and then under its reply, as one line. Your
               message is in the chat before Pi has it (`live.sent`), and the agent is at work on it from then: its Pi may still be
               starting. */}

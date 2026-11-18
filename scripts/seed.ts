@@ -142,6 +142,17 @@ export const NAMED: Said[][] = [[
   ['user', 'Where does the server wait for Pi to stop?'],
   ['talk', 'In `src/server/pi.ts:74`, where `stop()` waits out the grace period ([`src/server/pi.ts` on GitHub](https://github.com/acme/optchat-app/blob/main/src/server/pi.ts#L74)); [the shutdown test in `test/pi.test.ts`](test/pi.test.ts) covers it. The old `src/server/wait.ts` is gone.'],
 ]];
+/** A reply whose work read a picture, as Pi's read tool returns one and pi-optchat logs it: named by its file in the profile
+ * (`SEEN_IMAGE`), which whoever seeds it writes. */
+export const SEEN_IMAGE = '5e1f0c2a9b3d4e6f';
+export const SEEN: Said[][] = [[
+  ['user', 'The chat looks cramped on a narrow window. Can you see why?'],
+  ['tool', 'bash {"command":"npm run screenshots /tmp/shots"}'],
+  ['echo', 'bash: /tmp/shots/11-narrow.png'],
+  ['tool', 'read {"path":"/tmp/shots/11-narrow.png"}'],
+  ['echo', `read: Read image file [image/png]\n[image ${SEEN_IMAGE}]`],
+  ['talk', 'The composer keeps its wide padding under 480px, so the message box is narrower than it needs to be. I\'ll take the padding down to `px-3` there.'],
+]];
 /** A chat that names issues and pull requests, for the GitHub list: by link in what was said, in an agent's report and in what
  * `gh pr create` printed, and one only by its number, which the list cannot know. */
 export const SHIPPING: Said[][] = [

@@ -132,6 +132,13 @@ export const FAILED: Said[][] = [[
   ['echo', 'bash: ℹ tests 18\nℹ pass 18\nℹ fail 0\nℹ duration_ms 2212.4'],
   ['talk', 'None: all 18 pass in 2.2 s.'],
 ]];
+/** A picture wider than Pi takes, as it is logged: Pi made it smaller and noted so under what was typed (`RESIZED_IMAGE`, which
+ * whoever seeds it writes). */
+export const RESIZED_IMAGE = '7a3c9e1f0b2d4c6e';
+export const RESIZED: Said[][] = [[
+  ['user', `Why is the gap under the composer so big?\n\n[Image: original 2532x1690, displayed at 2000x1335. Multiply coordinates by 1.27 to map to original image.]\n[image ${RESIZED_IMAGE}]`],
+  ['talk', 'The composer keeps a 24px margin under it on top of the window\'s own padding. I\'ll drop the margin.'],
+]];
 /** A message that runs a skill, as Pi sends `/skill:sol-loop …`: the skill's file, and what was typed under it. */
 const LOOP = '# Sol loop\n\nReview the change with a GPT Sol subagent, fix what it finds, and review again until it finds nothing.\n\n## Steps\n\n1. Diff the branch against `main`.\n2. Spawn the reviewer with the diff and the repository\'s AGENTS.md.\n3. Fix every finding that is real; say why for the rest.\n4. Repeat until the reviewer passes it.';
 export const SKILLED: Said[][] = [[

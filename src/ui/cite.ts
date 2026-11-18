@@ -48,11 +48,15 @@ export interface Skill { name: string; path?: string; body?: string }
 // Pi's own format (its `parseSkillBlock`), with what was typed under it, or only the images sent with it (one newline, as
 // pi-optchat logs them); and Pi's rule for a name as typed: up to the first space.
 const SKILL = /^<skill name="([^"]+)" location="([^"]+)">\n([\s\S]*?)\n<\/skill>(?:\n\n?([\s\S]+))?$/, TYPED = /^\/skill:(\S+)(?: ([\s\S]*))?$/;
+// The note Pi adds under your message for each picture it made smaller (its `formatDimensionNote`): for the model, not you.
+// Other notes stay: one that a picture could not be sent says it never arrived.
+const RESIZED = /\n*^\[Image: original \d+x\d+, displayed at \d+x\d+\. Multiply coordinates by \d+\.\d+ to map to original image\.\]$/gm;
 /** Your message as the chat shows it: the skill it runs, what it cites, and what was typed. */
 export interface Yours { skill?: Skill; cites: Cite[]; text: string }
 /** Your message, read as Pi sent it or as it was typed: a skill and what was typed after its name, or what it cites (`cited`)
  * and what was typed under that. Only a message that begins with a skill runs one, so it cites nothing. */
-export function yours(message: string): Yours {
+export function yours(said: string): Yours {
+  const message = said.replace(RESIZED, '');
   const [, name, path, body, text = ''] = SKILL.exec(message) ?? [];
   if (name) return { skill: { name, path, body }, cites: [], text: text.trim() };
   const [, given, words = ''] = TYPED.exec(message) ?? [];

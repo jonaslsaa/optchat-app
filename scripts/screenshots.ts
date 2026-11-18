@@ -93,6 +93,7 @@ writeFileSync(join(history, 'config.json'), JSON.stringify({ ...JSON.parse(readF
 seed(history, 40, NOW);
 remember(history, 4);
 createProfile(home, 'research');
+createProfile(home, 'pictures');
 for (const file of FILES) { mkdirSync(join(home, file, '..'), { recursive: true }); writeFileSync(join(home, file), ''); }
 const gh = { command: process.execPath, args: [join(import.meta.dirname, '../test/fake-gh.ts')] }, github = (state: object) => writeFileSync(join(home, 'gh', 'gh.json'), JSON.stringify(state));
 process.env.FAKE_GH_HOME = join(home, 'gh');
@@ -683,6 +684,28 @@ async function pictures(browser: Browser, control: Client) {
   const pocket = await open(['long'], { dark: true, width: 420 });
   await sends(pocket);
   await shot(pocket, '97-composer-images-dark-narrow');
+  // A reply's three pictures shown large: the second, with the counter and the buttons that step, and the first zoomed into
+  // twice where it was clicked, light and dark. A grid on a gradient, so the zoom shows.
+  const grid = (size: number, [red, green, blue]: [number, number, number]) => png(size, (x, y) => x % 60 < 3 || y % 60 < 3 ? [255, 255, 255] : [red * (1 - y / size / 2), green * (1 - x / size / 2), blue]);
+  const gallery = await open(['pictures']);
+  await give(gallery, 'paste', [{ name: 'chart.png', type: 'image/png', data: grid(960, [38, 99, 235]) }, { name: 'shot.png', type: 'image/png', data: grid(480, [234, 138, 30]) }, { name: 'plan.png', type: 'image/png', data: grid(480, [22, 163, 74]) }]);
+  await gallery.getByRole('list', { name: 'Images to send' }).getByRole('listitem').nth(2).waitFor();
+  await gallery.getByRole('textbox', { name: 'Message' }).fill('Show me the three pictures again');
+  await gallery.keyboard.press('Enter');
+  for (const [page, light] of [[gallery, true], [await open(['pictures'], { dark: true }), false]] as const) {
+    const replied = page.getByRole('button', { name: 'Show the image large: yours' });
+    await replied.nth(2).waitFor();
+    await replied.nth(1).click();
+    await page.getByRole('dialog', { name: 'The image, large' }).getByText('2 / 3').waitFor();
+    await shot(page, light ? '210-gallery' : '211-gallery-dark');
+    await page.keyboard.press('ArrowLeft');
+    const large = page.getByRole('dialog', { name: 'The image, large' }).locator('img');
+    await page.waitForFunction(() => document.querySelector<HTMLImageElement>('dialog img')?.naturalWidth === 960);
+    const box = await large.boundingBox();
+    if (!box) throw new Error('The picture is not shown large.');
+    await large.click({ position: { x: box.width * 0.3, y: box.height * 0.35 } });
+    await shot(page, light ? '212-gallery-zoomed' : '213-gallery-zoomed-dark');
+  }
 
   // What the agent is thinking, opened from the line under your message while it thinks: wide, then narrow.
   for (const [name, options] of [['101-thinking-opened', {}], ['102-thinking-opened-narrow', { width: 420 }]] as const) {

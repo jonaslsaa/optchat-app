@@ -22,7 +22,7 @@ process.env.FAKE_PI_HOME = join(home, 'pi');
 mkdirSync(join(home, 'pi', 'pi-optchat'), { recursive: true });
 writeFileSync(join(home, 'pi', 'pi-optchat', 'package.json'), JSON.stringify({ name: 'pi-optchat', version: '0.12.2' }));
 writeFileSync(join(home, 'pi', 'state.json'), JSON.stringify({ version: '1.5.2', providers: ['anthropic', 'openai'], packages: { 'npm:pi-optchat': join(home, 'pi', 'pi-optchat') } }));
-for (const name of ['bar', 'cold', 'colder', 'chat', 'beside', 'sheet', 'memory', 'rows', 'menus', 'fields', 'asks', 'windows', 'importing', 'into', 'keys', 'spend', 'commands', 'arrows', 'mute', 'said', 'images', 'tabs', 'slow', 'inline', 'held', 'unread']) {
+for (const name of ['bar', 'cold', 'colder', 'chat', 'beside', 'sheet', 'memory', 'rows', 'menus', 'fields', 'asks', 'windows', 'importing', 'into', 'keys', 'spend', 'commands', 'arrows', 'mute', 'said', 'images', 'gallery', 'tabs', 'slow', 'inline', 'held', 'unread']) {
   const profile = createProfile(home, name);
   if (['bar', 'cold', 'colder', 'memory', 'windows', 'keys', 'spend', 'arrows', 'unread'].includes(name)) { writeMemory(profile, 16); continue; }
   seed(profile, TEAM.length, Date.now(), TEAM);
@@ -932,6 +932,12 @@ test('a tool call that returned a picture shows it small under its line, from th
   await page.keyboard.press('Escape');
   await page.getByRole('dialog', { name: 'The image, large' }).waitFor({ state: 'detached' });
   assert.equal(await focused(page), 'Show the image large: What the tool returned');
+  // A click in it, on the picture or its ×, does not fold the call it was opened from.
+  await picture.click();
+  await page.getByRole('dialog', { name: 'The image, large' }).locator('img').click();
+  await page.getByRole('button', { name: 'Close the image' }).click();
+  await page.getByRole('dialog', { name: 'The image, large' }).waitFor({ state: 'detached' });
+  assert.equal(await read.getAttribute('aria-expanded'), 'true', 'A click in the picture shown large folded its tool call.');
   // A press beside it puts it away too, though the call's details keep a press to themselves.
   await picture.click();
   await page.getByRole('dialog', { name: 'The image, large' }).waitFor();
@@ -1225,7 +1231,12 @@ test('a reply shows a picture on this machine by its path, large on a click; one
   await page.getByText(`No image at ${GONE}`).waitFor();
   assert.equal(await page.getByRole('link', { name: 'pricing' }).getAttribute('href'), 'https://example.com/pricing.png');
   await picture.click();
-  await page.getByRole('dialog', { name: 'The image, large' }).waitFor();
+  const large = page.getByRole('dialog', { name: 'The image, large' });
+  await large.waitFor();
+  // The viewer draws the same file, and the one that is gone is no picture of the reply's to step to.
+  assert.equal(await large.locator('img').getAttribute('src'), await picture.locator('img').getAttribute('src'));
+  assert.match(await large.locator('img').getAttribute('src') ?? '', /^\/file\?/);
+  assert.equal(await large.getByRole('button', { name: 'Next image' }).count(), 0);
   await page.context().close();
 });
 
@@ -1259,6 +1270,8 @@ test('an image that is pasted, dropped or chosen goes with the message, one that
   await large.click();
   await page.getByRole('dialog', { name: 'The image, large' }).waitFor();
   assert.equal(await focused(page), 'The image, large');
+  // One picture is stepped through to no other.
+  assert.equal(await page.getByRole('button', { name: 'Next image' }).count(), 0);
   await goesOn(page, 'with an image shown large');
   assert.equal(await page.getByRole('dialog', { name: 'The image, large' }).count(), 0);
   assert.equal(await focused(page), 'Show the image large');
@@ -1288,6 +1301,92 @@ test('an image that is pasted, dropped or chosen goes with the message, one that
   await page.mouse.click(5, 5); // Beside the picture.
   await page.getByRole('dialog', { name: 'The image, large' }).waitFor({ state: 'detached' });
   // A reply draws no other: an address elsewhere stays a link, which is the rule of `safe.ts` (test/markdown.test.ts).
+});
+
+test('the pictures of a message are stepped through with the arrows, a zoomed one is moved with a drag that leaves it open, and a new one starts fitted', async () => {
+  const page = await open('gallery'), message = page.getByRole('textbox', { name: 'Message' }), large = page.getByRole('dialog', { name: 'The image, large' });
+  // A picture larger than the window, which is fitted to it, and two small ones.
+  await give(page, 'paste', [{ name: 'big.png', type: 'image/png', data: png(1200, [220, 60, 60]) }, { name: 'blue.png', type: 'image/png', data: png(64, [60, 90, 220]) }, { name: 'green.png', type: 'image/png', data: png(64, [60, 180, 90]) }]);
+  await page.getByRole('list', { name: 'Images to send' }).getByRole('listitem').nth(2).waitFor();
+  await message.fill('a picture');
+  await page.keyboard.press('Enter');
+  const replied = page.getByRole('button', { name: 'Show the image large: yours' });
+  await replied.nth(2).waitFor();
+  const counter = (text: string) => large.getByText(text, { exact: true }).waitFor({ timeout: 2000 }).catch(() => assert.fail(`The counter does not say ${text}.`));
+  // Yours are a gallery of their own, not one with the reply's.
+  await page.getByRole('button', { name: 'Show the image large', exact: true }).first().click();
+  await counter('1 / 3');
+  await page.keyboard.press('Escape');
+  await large.waitFor({ state: 'detached' });
+  // The reply's, from the second on: round the end with →, back with ←, and with the buttons.
+  await replied.nth(1).click();
+  await counter('2 / 3');
+  await page.keyboard.press('ArrowRight');
+  await counter('3 / 3');
+  await page.keyboard.press('ArrowRight');
+  await counter('1 / 3');
+  await page.keyboard.press('ArrowLeft');
+  await counter('3 / 3');
+  await page.getByRole('button', { name: 'Next image' }).click();
+  await counter('1 / 3');
+  assert.equal(await large.locator('img').getAttribute('src'), await replied.nth(0).locator('img').getAttribute('src'));
+  // The large one, zoomed with a click and moved with a drag, which closes nothing and zooms nothing again.
+  const picture = large.locator('img'), view = large.locator('div:has(> img)');
+  await page.waitForFunction(() => document.querySelector<HTMLImageElement>('dialog img')?.naturalWidth === 1200);
+  const fitted = (await picture.boundingBox())?.width ?? 0;
+  assert.ok(fitted > 0 && fitted < 1200, `Fitted to the window, not ${fitted} wide.`);
+  // A drag across it while it is fitted is no click: it stays fitted.
+  const over = await picture.boundingBox();
+  assert.ok(over);
+  await page.mouse.move(over.x + over.width / 2, over.y + over.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(over.x + over.width / 2 - 60, over.y + over.height / 2, { steps: 4 });
+  await page.mouse.up();
+  assert.equal(Math.round((await picture.boundingBox())?.width ?? 0), Math.round(fitted), 'A drag zoomed a fitted picture.');
+  await picture.click();
+  assert.equal(Math.round((await picture.boundingBox())?.width ?? 0), Math.round(fitted * 2));
+  const box = await view.boundingBox();
+  assert.ok(box);
+  const left = await view.evaluate(here => here.scrollLeft);
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width / 2 - 80, box.y + box.height / 2 - 60, { steps: 5 });
+  await page.mouse.up();
+  const moved = () => view.evaluate(here => Math.round(here.scrollLeft));
+  assert.equal(await moved(), Math.round(left + 80));
+  assert.equal(await large.count(), 1, 'A drag closed the picture.');
+  assert.equal(Math.round((await picture.boundingBox())?.width ?? 0), Math.round(fitted * 2), 'A drag zoomed the picture.');
+  // Zoomed, the arrows move it before they step; 0 fits it again.
+  await page.keyboard.press('ArrowLeft');
+  await counter('1 / 3');
+  assert.equal(await moved(), Math.round(left + 40));
+  // At its right edge, → steps after all.
+  await view.evaluate(here => { here.scrollLeft = here.scrollWidth; });
+  await page.keyboard.press('ArrowRight');
+  await counter('2 / 3');
+  await page.keyboard.press('ArrowLeft');
+  await counter('1 / 3');
+  await page.waitForFunction(() => document.querySelector<HTMLImageElement>('dialog img')?.naturalWidth === 1200);
+  await picture.click();
+  await page.keyboard.press('+');
+  assert.equal(Math.round((await picture.boundingBox())?.width ?? 0), Math.round(fitted * 3));
+  await page.keyboard.press('0');
+  assert.equal(Math.round((await picture.boundingBox())?.width ?? 0), Math.round(fitted));
+  // Zoomed, then another picture and back: it starts fitted.
+  await picture.click();
+  await page.keyboard.press('ArrowLeft');
+  await counter('1 / 3');
+  await page.getByRole('button', { name: 'Previous image' }).click();
+  await counter('3 / 3');
+  await page.getByRole('button', { name: 'Next image' }).click();
+  await counter('1 / 3');
+  await page.waitForFunction(() => document.querySelector<HTMLImageElement>('dialog img')?.naturalWidth === 1200);
+  assert.equal(Math.round((await picture.boundingBox())?.width ?? 0), Math.round(fitted));
+  // Esc puts it away and nothing else, and the focus is on the picture it was opened from.
+  await page.keyboard.press('Escape');
+  await large.waitFor({ state: 'detached' });
+  assert.equal(await focused(page), 'Show the image large: yours');
+  await page.context().close();
 });
 
 test('a file the chat names opens in your editor when it is in the window\'s folder, and one that is not stays as written', async () => {

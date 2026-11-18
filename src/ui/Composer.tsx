@@ -9,7 +9,8 @@ import { escapes, label, matches, useShortcuts } from './keys.ts';
 import { Model } from './Model.tsx';
 import { app, type State } from './store.ts';
 import { failure, news, recalled, type Item, type Live, type Notice } from './transcript.ts';
-import { Button, cn, Kbd, Picture, Spinner } from './ui.tsx';
+import { Button, cn, Kbd, Spinner } from './ui.tsx';
+import { Picture } from './Picture.tsx';
 
 /** A question from Pi or one of its extensions (`extension_ui_request`): a choice, a yes or no, or a line of text. Esc in it
  * says no, or cancels, as its first button does and as Esc does in Pi's terminal; the run it belongs to goes on. */
@@ -164,7 +165,7 @@ export function Composer({ state, window, live, chat, onSend, ref }: { state: St
         <div onDragOver={event => { if (event.dataTransfer.types.includes('Files')) event.preventDefault(); }} onDrop={event => { if (event.dataTransfer.files.length) { event.preventDefault(); void add(event.dataTransfer.files); } }}
           className="relative isolate rounded-2xl bg-card shadow-composer after:pointer-events-none after:absolute after:inset-0 after:rounded-[inherit] after:border after:border-black/8 dark:bg-(--surface-raised) dark:shadow-none dark:after:border-white/8">
           {images.length > 0 && (
-            <ul aria-label="Images to send" className="flex flex-wrap gap-2.5 px-4 pt-3.5">
+            <ul data-gallery="" aria-label="Images to send" className="flex flex-wrap gap-2.5 px-4 pt-3.5">
               {images.map((picture, at) => (
                 <li key={at} className="relative">
                   <Picture src={address(picture)} className="size-14 rounded-lg object-cover" />

@@ -10,6 +10,7 @@ import { connect } from '../src/client.ts';
 import { startServer } from '../src/server/server.ts';
 import { cited, named } from '../src/ui/cite.ts';
 import { describeOwner, lockProfile } from 'pi-optchat/files';
+import { writeHistories } from './histories.ts';
 import { createProfile, give, png, temporaryHome, writeMemory, writeRun, type Given } from './support.ts';
 
 /** `npm run test:ui`: whose a key is and where the focus goes, which only a browser decides. The page is built and driven in
@@ -21,7 +22,7 @@ process.env.FAKE_PI_HOME = join(home, 'pi');
 mkdirSync(join(home, 'pi', 'pi-optchat'), { recursive: true });
 writeFileSync(join(home, 'pi', 'pi-optchat', 'package.json'), JSON.stringify({ name: 'pi-optchat', version: '0.12.2' }));
 writeFileSync(join(home, 'pi', 'state.json'), JSON.stringify({ version: '1.5.2', providers: ['anthropic', 'openai'], packages: { 'npm:pi-optchat': join(home, 'pi', 'pi-optchat') } }));
-for (const name of ['bar', 'cold', 'colder', 'chat', 'beside', 'sheet', 'memory', 'rows', 'menus', 'fields', 'asks', 'windows', 'importing', 'keys', 'spend', 'commands', 'arrows', 'mute', 'said', 'images', 'tabs', 'slow', 'inline', 'held', 'unread']) {
+for (const name of ['bar', 'cold', 'colder', 'chat', 'beside', 'sheet', 'memory', 'rows', 'menus', 'fields', 'asks', 'windows', 'importing', 'into', 'keys', 'spend', 'commands', 'arrows', 'mute', 'said', 'images', 'tabs', 'slow', 'inline', 'held', 'unread']) {
   const profile = createProfile(home, name);
   if (['bar', 'cold', 'colder', 'memory', 'windows', 'keys', 'spend', 'arrows', 'unread'].includes(name)) { writeMemory(profile, 16); continue; }
   seed(profile, TEAM.length, Date.now(), TEAM);
@@ -47,13 +48,16 @@ seed(createProfile(home, 'files'), 1, Date.now(), NAMED);
 seed(createProfile(home, 'linked'), 1, Date.now(), [[['user', 'Show me.'], ['talk', '[![the preview](/images/linked/0123456789abcdef)](test/pi.test.ts)']]]);
 for (const file of FILES) { mkdirSync(join(home, file, '..'), { recursive: true }); writeFileSync(join(home, file), ''); }
 mkdirSync(join(home, 'new'));
+// Another tool's history on a made-up Mac, and a profile with no messages to import it into.
+writeHistories(join(home, 'mac'), Date.now());
+const brought = createProfile(home, 'brought');
 
 let server: Awaited<ReturnType<typeof startServer>>, fresh: typeof server, browser: Browser;
 // What would have started your editor: nothing does here. The editors found are these, whatever this machine has.
 const launched: Launch[] = [], EDITORS = [['cursor', '/Applications/Cursor.app/Contents/Resources/app/bin/cursor'], ['vscode', '/usr/local/bin/code'], ['zed', '/Applications/Zed.app/Contents/MacOS/cli'], ['finder', '/usr/bin/open']] as const;
 before(async () => {
   await build({ logLevel: 'warn' });
-  server = await startServer({ home, app: join(home, 'app'), cwd: home, pi, launcher: launch => launched.push(launch), editors: () => new Map(EDITORS) });
+  server = await startServer({ home, app: join(home, 'app'), cwd: home, histories: join(home, 'mac'), pi, launcher: launch => launched.push(launch), editors: () => new Map(EDITORS) });
   // A machine with no profile yet, for the first one's name.
   fresh = await startServer({ home: join(home, 'new'), app: join(home, 'new', 'app'), cwd: home, pi });
   browser = await chromium.launch({ channel: 'chrome' });
@@ -196,6 +200,68 @@ test('the usage page closes on Esc and the run goes on, and it reads the ledger 
   await client.request('abort', { window: 'spend/main' });
   client.close();
   await page.getByText('$3.50').first().waitFor({ timeout: 5000 });
+});
+
+test('the Import page opens from the memory view and closes on Esc, and the run goes on', async () => {
+  const page = await open('into');
+  await run(page);
+  await page.getByRole('radiogroup', { name: 'What the page shows' }).getByText('Memory').click();
+  await page.getByRole('button', { name: 'Import…' }).click();
+  await page.getByRole('heading', { name: 'Import into into' }).waitFor();
+  // Esc in its filter is the page's too: a box with nothing to clear has nothing else to do with it.
+  await page.getByRole('textbox', { name: 'Filter projects and conversations' }).click();
+  await page.keyboard.press('Escape');
+  await page.getByRole('heading', { name: 'Import into into' }).waitFor({ state: 'detached', timeout: 2000 });
+  await page.waitForTimeout(400);
+  assert.ok(await stop(page).isVisible(), 'Esc on the Import page stopped the run.');
+});
+
+test('an import runs from the Import page with the chat waiting under it, says when it is done, and a discard, here or anywhere, is not called done', async () => {
+  const page = await open('brought'), heading = page.getByRole('heading', { name: 'Import into brought' });
+  const pick = async () => {
+    await page.getByRole('navigation', { name: 'Sources' }).getByText('Claude Code', { exact: true }).click();
+    await page.getByRole('checkbox', { name: 'All of ~/tmp/scratch' }).check();
+    await page.getByText('Counting…').waitFor({ state: 'detached' });
+    // A profile with no messages is not asked how the history joins them.
+    assert.equal(await page.getByRole('radiogroup', { name: 'How the history joins the memory' }).count(), 0);
+    await page.getByRole('button', { name: 'Start import' }).click();
+    await page.getByRole('heading', { name: 'Importing into brought' }).waitFor();
+  };
+  await page.getByRole('button', { name: 'Open a profile' }).click();
+  await page.getByRole('button', { name: 'Import history…' }).click();
+  await heading.waitFor();
+  await pick();
+  // Closed, the chat has the import's line in place of its composer.
+  await page.getByRole('button', { name: 'Close the import' }).click();
+  await page.getByRole('status').getByText(/Importing/).waitFor();
+  assert.equal(await page.getByRole('textbox', { name: 'Message' }).count(), 0);
+  await page.getByRole('button', { name: 'Show' }).click();
+  // pi-optchat finishes it: the page says so, and opens the memory.
+  writeFileSync(join(brought, 'import-done'), '');
+  await page.getByRole('heading', { name: 'Imported into brought' }).waitFor({ timeout: 5000 });
+  await page.getByRole('button', { name: 'Open memory' }).click();
+  await page.getByRole('heading', { name: 'Memory view' }).waitFor();
+  // Paused and discarded on the page, with a second press: nothing was imported, and nothing is said to be.
+  await page.getByRole('button', { name: 'Import…' }).click();
+  await pick();
+  await page.getByRole('button', { name: 'Pause' }).click();
+  await page.getByRole('heading', { name: 'Import paused' }).waitFor();
+  await page.getByRole('button', { name: 'Discard' }).click();
+  await page.getByRole('button', { name: 'Discard it for good' }).click();
+  await page.getByRole('button', { name: 'Start import' }).waitFor();
+  // Discarded from another tab, where this page saw it paused: not done either.
+  await page.getByRole('navigation', { name: 'Sources' }).getByText('Claude Code', { exact: true }).click();
+  await pick();
+  await page.getByRole('button', { name: 'Pause' }).click();
+  await page.getByRole('heading', { name: 'Import paused' }).waitFor();
+  const other = await connect(server.url);
+  try { await other.request('importControl', { profile: 'brought', action: 'discard' }); } finally { other.close(); }
+  await page.getByRole('button', { name: 'Close the import' }).click();
+  await page.getByRole('textbox', { name: 'Message' }).waitFor({ timeout: 5000 });
+  await page.getByRole('button', { name: 'Open a profile' }).click();
+  await page.getByRole('button', { name: 'Import history…' }).click();
+  await page.getByRole('button', { name: 'Start import' }).waitFor();
+  assert.equal(await page.getByRole('heading', { name: 'Imported into brought' }).count(), 0);
 });
 
 test('Esc in a question Pi asks answers no, and the run goes on with that', async () => {

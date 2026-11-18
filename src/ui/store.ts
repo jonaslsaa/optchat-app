@@ -1,9 +1,10 @@
 import { useSyncExternalStore } from 'react';
 import { connect, type Client } from '../client.ts';
-import type { Command, Config, Line, Message, Method, ModelChoice, Params, Push, Result, Settings, Setup, Updating, Usage, WindowState } from '../protocol.ts';
+import { PIECE, type Command, type Config, type ImportPreview, type ImportStatus, type Line, type Message, type Method, type ModelChoice, type Params, type Push, type Result, type Settings, type Setup, type Updating, type Usage, type WindowState } from '../protocol.ts';
 import { current } from '../window.ts';
 import type { Image } from './images.ts';
 import { asTyped, yours } from './cite.ts';
+import type { Scans, Source } from './imports.ts';
 import { calling, key, NO_TREE, path, read, toggled, type Tree } from './memory.ts';
 import { apply, idle, isMessage, isObject, merged, quiet, replay, stopped, without, words, type Live, type PiMessage } from './transcript.ts';
 
@@ -41,6 +42,13 @@ export interface State {
   config: Record<string, Config>;
   /** What each profile used, as last read: in the range that was last asked for. */
   usage: Record<string, Usage>;
+  /** What a scan of this machine found of each source's history, once it was asked for (`undefined` while it reads), and the
+   * ChatGPT export on its way to the server. */
+  scans: Scans;
+  uploading?: { name: string; sent: number; size: number };
+  /** How each open profile's import stands, as last read, and the import it last finished while the page looked. */
+  imports: Record<string, ImportStatus>;
+  imported: Record<string, { added: number }>;
   /** The images that go with what is typed in each window, kept while you look at another one; not when the page is opened again. */
   attached: Record<string, Image[]>;
   /** Why the last thing you asked for failed. */
@@ -74,8 +82,11 @@ export function title(window: WindowState, state: State) {
   return first ? ((said.skill ? asTyped(said) : said.text) || said.cites[0]?.text || '').split('\n')[0] : UNTITLED;
 }
 
+/** What went wrong, in the words it was said in. */
+const reason = (error: unknown) => error instanceof Error ? error.message : String(error);
+
 export class App {
-  state: State = { connection: 'connecting', profiles: [], tabs: [], windows: [], selected: {}, logs: {}, live: {}, sessions: {}, agents: {}, github: {}, models: {}, commands: {}, chats: {}, memory: {}, config: {}, usage: {}, attached: {}, cutOff: [], dismissed: {} };
+  state: State = { connection: 'connecting', profiles: [], tabs: [], windows: [], selected: {}, logs: {}, live: {}, sessions: {}, agents: {}, github: {}, models: {}, commands: {}, chats: {}, memory: {}, config: {}, usage: {}, attached: {}, cutOff: [], dismissed: {}, scans: {}, imports: {}, imported: {} };
   private client?: Client;
   private retrying?: ReturnType<typeof setTimeout>;
   private closed = false;
@@ -108,7 +119,7 @@ export class App {
       this.client = await connect(url, push => this.receive(push), lost);
       await this.sync();
     } catch (error) {
-      if (this.client) this.set({ error: error instanceof Error ? error.message : String(error) });
+      if (this.client) this.set({ error: reason(error) });
     }
   }
   /** Leaves the server, for good. */
@@ -134,7 +145,7 @@ export class App {
   /** A request to the server; one that fails is shown, not thrown. */
   private async ask<M extends Method>(method: M, params: Params<M>): Promise<Result<M> | undefined> {
     try { return await this.request(method, params); } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+      const message = reason(error);
       // A window that failed to start says so itself, above its composer.
       if (!this.state.windows.some(window => window.error === message)) this.set({ error: message });
     }
@@ -197,7 +208,7 @@ export class App {
     try {
       const config = await this.request('configure', { profile, key, value });
       this.set({ config: { ...this.state.config, [profile]: config } });
-    } catch (error) { return error instanceof Error ? error.message : String(error); }
+    } catch (error) { return reason(error); }
   }
   /** The editors a file can open in here, and the one it opens in now. */
   editors() { return this.ask('editors', {}); }
@@ -212,7 +223,7 @@ export class App {
       await this.request('instruct', { profile, text });
       const config = this.state.config[profile];
       if (config) this.set({ config: { ...this.state.config, [profile]: { ...config, instructions: text } } });
-    } catch (error) { return error instanceof Error ? error.message : String(error); }
+    } catch (error) { return reason(error); }
   }
   /** What a chat needs and whether it is there: as the server last found it, or looked for again now. */
   async checkSetup(fresh = false) {
@@ -222,7 +233,7 @@ export class App {
   /** Makes a profile, which is then there to open. Why not, when pi-optchat will not make it (a name that will not do, or one
    * there is already): that is said where the name was typed, not over the page. */
   async createProfile(name: string) {
-    try { await this.request('createProfile', { name }); } catch (error) { return error instanceof Error ? error.message : String(error); }
+    try { await this.request('createProfile', { name }); } catch (error) { return reason(error); }
     this.set({ profiles: [...this.state.profiles, name].sort() });
   }
   /** The profiles as they are now. Once there is one, it is opened. */
@@ -372,6 +383,71 @@ export class App {
     const usage = await this.ask('usage', { profile, range });
     if (usage && JSON.stringify(usage) !== JSON.stringify(this.state.usage[profile])) this.set({ usage: { ...this.state.usage, [profile]: usage } });
   }
+  /** What a source's scan finds: the server keeps it, and `fresh` has it look again. */
+  async scan(source: Source, fresh = false) {
+    this.set({ scans: { ...this.state.scans, [source]: undefined } });
+    try {
+      const scan = await this.request('importScan', { source, fresh });
+      this.set({ scans: { ...this.state.scans, [source]: scan } });
+    } catch (error) { this.set({ scans: { ...this.state.scans, [source]: { error: reason(error) } } }); }
+  }
+  /** Sends a ChatGPT export to the server a piece at a time, and has it read. Why not, when it was refused. */
+  async upload(file: File) {
+    // Base64 is four characters for three bytes: a piece is as much of the file as the server takes in one.
+    const piece = PIECE / 4 * 3;
+    this.set({ uploading: { name: file.name, sent: 0, size: file.size } });
+    try {
+      for (let offset = 0; offset === 0 || offset < file.size; offset += piece) {
+        const bytes = new Uint8Array(await file.slice(offset, offset + piece).arrayBuffer());
+        let data = '';
+        for (let at = 0; at < bytes.length; at += 0x8000) data += String.fromCharCode(...bytes.subarray(at, at + 0x8000));
+        await this.request('importUpload', { name: file.name, offset, data: btoa(data) });
+        this.set({ uploading: { name: file.name, sent: Math.min(file.size, offset + piece), size: file.size } });
+      }
+    } catch (error) { return reason(error); }
+    finally { this.set({ uploading: undefined }); }
+    await this.scan('chatgpt', true);
+  }
+  /** What importing the picked conversations would bring, or why it cannot be said. */
+  async preview(profile: string, picked: Params<'importPreview'>['picked']): Promise<{ preview?: ImportPreview; error?: string }> {
+    try { return { preview: await this.request('importPreview', { profile, picked }) }; } catch (error) { return { error: reason(error) }; }
+  }
+  /** Keeps how a profile's import stands. One the page saw under way finished when pi-optchat's last finished import ended
+   * after it began (a clock that stands still, as the screenshots' does, ends it when it began), and not when it was
+   * discarded, here or anywhere: then the profile has another memory, which the chat and the
+   * memory view read again. */
+  private importing(profile: string, status: ImportStatus) {
+    const before = this.state.imports[profile];
+    const finished = before && before.state !== 'idle' && status.state === 'idle' && status.last && Date.parse(status.last.completed) >= Date.parse(before.created) ? status.last : undefined;
+    // One that started and ended while the page looked elsewhere changed the memory too, though it is not said as done.
+    const ended = status.state === 'idle' ? status.last?.completed : undefined;
+    const renewed = finished || (before?.state === 'idle' && ended !== undefined && before.last?.completed !== ended);
+    this.set({ imports: { ...this.state.imports, [profile]: status }, ...finished && { imported: { ...this.state.imported, [profile]: { added: finished.added } } } });
+    // The messages are numbered again in the memory the import made: what was read of the one before goes, not merged in.
+    if (renewed) {
+      const { [profile]: _, ...logs } = this.state.logs;
+      this.set({ logs });
+      void this.read(profile);
+      if (this.state.memory[profile]) void this.readMemory(profile);
+    }
+  }
+  async readImport(profile: string) {
+    const status = await this.client?.request('importStatus', { profile }).catch(() => undefined);
+    if (status && JSON.stringify(status) !== JSON.stringify(this.state.imports[profile])) this.importing(profile, status);
+  }
+  /** Starts, pauses, resumes or discards a profile's import, or says why not, in pi-optchat's words. */
+  async startImport(profile: string, picked: Params<'importStart'>['picked'], mode: Params<'importStart'>['mode']) {
+    try {
+      const { [profile]: _, ...imported } = this.state.imported;
+      this.set({ imported });
+      this.importing(profile, await this.request('importStart', { profile, picked, mode }));
+    } catch (error) { return reason(error); }
+  }
+  async controlImport(profile: string, action: Params<'importControl'>['action']) {
+    try { this.importing(profile, await this.request('importControl', { profile, action })); } catch (error) { return reason(error); }
+  }
+  /** Forgets that an import finished, once its page has said so. */
+  seenImport(profile: string) { const { [profile]: _, ...imported } = this.state.imported; this.set({ imported }); }
   /** Reads the commands a window's Pi knows, which starts that Pi: they are its extensions', its prompt templates and its skills. */
   async readCommands(window: string) {
     const answer = await this.client?.request('commands', { window }).catch(() => ({ commands: [] }));
@@ -386,7 +462,7 @@ export class App {
   /** Picks the model of a window's agent, or says why not: that is said in the list it was picked from. The window then
    * says what it runs on. */
   async setModel(window: string, model: ModelChoice) {
-    try { await this.request('setModel', { window, model }); } catch (error) { return error instanceof Error ? error.message : String(error); }
+    try { await this.request('setModel', { window, model }); } catch (error) { return reason(error); }
   }
   /** An agent's chat: what was written of it since it was last read. */
   async readAgent(profile: string, id: string) {
@@ -406,7 +482,7 @@ export class App {
       await this.client.request(method, params);
       // An agent resumed from its chat is no longer cut off.
       if (method === 'tellAgent') void this.findCutOff();
-    } catch (error) { return error instanceof Error ? error.message : String(error); }
+    } catch (error) { return reason(error); }
   }
   private tree(profile: string, change: (tree: Tree) => Tree) { this.set({ memory: { ...this.state.memory, [profile]: change(this.state.memory[profile] ?? NO_TREE) } }); }
   /** A profile's memory view as its files have it now. The lines that are open stay open, unless it is another memory by

@@ -31,7 +31,7 @@ else {
   let check: (() => void) | undefined;
   // A click on the page's update button (`clicked`): the release's page, or what the menu's Check for Updates… does.
   const update = () => clicked(updates?.state(), { open: page => browse(page), look: () => check?.() });
-  const options = { ui: join(import.meta.dirname, '../ui'), cwd: homedir(), opener: terminal(), launcher: launch, update };
+  const options = { ui: join(import.meta.dirname, '../ui'), cwd: homedir(), histories: homedir(), opener: terminal(), launcher: launch, update };
   const server = await startServer({ ...options, port: PORT }).catch(() => startServer(options));
   // The Mac does not fall asleep under agents at work (awake.ts): looked at every ten seconds, which is soon enough for a
   // Mac that takes minutes to sleep. The screen may still go dark.

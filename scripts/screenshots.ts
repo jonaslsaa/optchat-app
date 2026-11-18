@@ -7,6 +7,7 @@ import { startServer } from '../src/server/server.ts';
 // pi-optchat's own lock, which only Pi takes: here it stands for a Pi in a terminal.
 import { defaults, describeOwner, lockProfile } from 'pi-optchat/files';
 import { createProfile, give, png, writeRun } from '../test/support.ts';
+import { chatgptExport, writeHistories } from '../test/histories.ts';
 import { agents, CHANGES, demo, FILES, FORMULAS, limited, NAMED, remember, seed, SHIPPED, SHIPPING, SKILLED, spend, TEAM } from './seed.ts';
 
 /** `npm run screenshots [directory] [--dark]`: a PNG of every main state of the UI, in /tmp/optchat-app-shots unless a directory
@@ -79,6 +80,13 @@ limited(join(home, 'profiles', 'notes'), NOW, { five: 1.01, week: 0.4, overage: 
 limited(join(home, 'profiles', 'work'), NOW, { five: 0.98, week: 0.71, ago: 4 * 60_000, refused: 60_000 });
 limited(join(home, 'profiles', 'links'), NOW, { five: 0.35, week: 0.52, ago: 6 * 3600_000 });
 seed(createProfile(home, 'files'), 1, NOW, NAMED);
+// Another tool's history on a made-up Mac, for the Import page: a profile with a chat to import into, and one with none.
+writeHistories(join(home, 'mac'), NOW);
+const history = createProfile(home, 'history');
+writeFileSync(join(history, 'config.json'), JSON.stringify({ ...JSON.parse(readFileSync(join(history, 'config.json'), 'utf8')), compactor: defaults.compactor }));
+seed(history, 40, NOW);
+remember(history, 4);
+createProfile(home, 'research');
 for (const file of FILES) { mkdirSync(join(home, file, '..'), { recursive: true }); writeFileSync(join(home, file), ''); }
 const gh = { command: process.execPath, args: [join(import.meta.dirname, '../test/fake-gh.ts')] }, github = (state: object) => writeFileSync(join(home, 'gh', 'gh.json'), JSON.stringify(state));
 process.env.FAKE_GH_HOME = join(home, 'gh');
@@ -99,7 +107,7 @@ writeFileSync(join(home, 'pi', 'state.json'), JSON.stringify({ version: '1.5.2',
 
 await build({ logLevel: 'warn' });
 // The editors it finds are these, whatever this machine has.
-const server = await startServer({ home, app: join(home, 'app'), cwd: home, pi, gh, now: () => NOW + 42_000, editors: () => new Map([['cursor', '/c'], ['vscode', '/v'], ['zed', '/z'], ['finder', '/usr/bin/open']]) });
+const server = await startServer({ home, app: join(home, 'app'), cwd: home, histories: join(home, 'mac'), pi, gh, now: () => NOW + 42_000, editors: () => new Map([['cursor', '/c'], ['vscode', '/v'], ['zed', '/z'], ['finder', '/usr/bin/open']]) });
 // A machine with nothing on it yet: no Pi, no profile.
 mkdirSync(join(home, 'new'));
 const fresh = await startServer({ home: join(home, 'new'), app: join(home, 'new', 'app'), cwd: home, pi: { command: join(home, 'no-such-pi'), args: [] }, npm: { command: process.execPath, args: [join(import.meta.dirname, '../test/fake-npm.ts')] },
@@ -708,6 +716,92 @@ async function pictures(browser: Browser, control: Client) {
     await bar.getByRole('button', { name: 'Resume the agents of notes' }).waitFor({ state: 'detached' });
     await shot(bar, '165-cut-off-resumed');
   } finally { await restarted.close(); }
+  // The Import page: its way in from the list of profiles, the sources found, the projects of two of them, a pick with what
+  // the footer says of it (and its warnings), a filter, dark and narrow, a ChatGPT export given, and a profile with no messages,
+  // which is not asked how they join. Then the import itself: running, the chat it takes, paused, and done.
+  {
+    const looked = async (page: Page) => { await page.getByRole('heading', { name: /Import into/ }).waitFor(); await page.getByText('Looking…').first().waitFor({ state: 'detached' }); };
+    const counted = (page: Page) => page.getByText('Counting…').waitFor({ state: 'detached' });
+    const toImport = async (profile: string, options: Parameters<typeof open>[1] = {}) => {
+      const page = await open([profile], options);
+      await page.getByRole('button', { name: 'Open a profile' }).click();
+      await page.getByRole('button', { name: 'Import history…' }).click();
+      await looked(page);
+      return page;
+    };
+    const source = (page: Page, name: string) => page.getByRole('navigation', { name: 'Sources' }).getByText(name, { exact: true }).click();
+    const pickSome = async (page: Page) => {
+      await source(page, 'Claude Code');
+      await source(page, 'Codex');
+      for (const project of ['~/code/garden-planner', '~/work/invoice-service', '~/tmp/scratch']) await page.getByRole('checkbox', { name: `All of ${project}` }).first().check();
+      await page.getByRole('button', { name: /recipe-box/ }).first().click();
+      const opened = page.locator('li:has(button[aria-expanded=true]) > ul');
+      for (const at of [0, 2, 3]) await opened.getByRole('checkbox').nth(at).check();
+      await counted(page);
+    };
+    const into = await open(['history'], { width: 1280, height: 800 });
+    await into.getByRole('button', { name: 'Open a profile' }).click();
+    await shot(into, '170-import-in-profiles-list');
+    await into.getByRole('button', { name: 'Import history…' }).click();
+    await looked(into);
+    await shot(into, '171-import-sources');
+    await source(into, 'Claude Code');
+    await source(into, 'Codex');
+    await shot(into, '172-import-projects');
+    await source(into, 'Claude Code');
+    await source(into, 'Codex');
+    await pickSome(into);
+    await shot(into, '173-import-picked');
+    await into.getByText('Rebuild from scratch').click();
+    await counted(into);
+    await shot(into, '186-import-rebuild');
+    await into.getByText('Append', { exact: true }).click();
+    await into.getByRole('button', { name: /warning/ }).click();
+    await shot(into, '174-import-warnings');
+    await into.getByRole('textbox', { name: 'Filter projects and conversations' }).fill('tide');
+    await into.getByText('3 months').click();
+    await shot(into, '175-import-filter-range');
+    const shade = await toImport('history', { dark: true });
+    await pickSome(shade);
+    await shot(shade, '176-import-picked-dark');
+    const thin = await toImport('history', { width: 420, height: 800 });
+    await pickSome(thin);
+    await shot(thin, '177-import-picked-narrow');
+    const exported = join(home, 'conversations.json');
+    writeFileSync(exported, chatgptExport(12, NOW));
+    await thin.close();
+    await into.getByRole('textbox', { name: 'Filter projects and conversations' }).fill('');
+    await into.getByText('All', { exact: true }).click();
+    await into.locator('input[type=file]').setInputFiles(exported);
+    await into.getByRole('navigation', { name: 'Sources' }).getByText('ChatGPT export', { exact: true }).waitFor();
+    await counted(into);
+    await shot(into, '178-import-chatgpt');
+    const blank = await toImport('research');
+    await source(blank, 'Claude Code');
+    await blank.getByRole('checkbox', { name: 'All of ~/code/garden-planner' }).check();
+    await counted(blank);
+    await shot(blank, '179-import-new-profile');
+    await into.getByRole('button', { name: 'Start import' }).click();
+    await into.getByText('Importing into history').waitFor();
+    await shot(into, '180-import-running');
+    await shot(await toImport('history', { dark: true, ready: '' }), '181-import-running-dark');
+    await into.getByRole('button', { name: 'Close the import' }).click();
+    await into.getByRole('status').getByText(/Importing/).waitFor();
+    await shot(into, '182-import-chat-line');
+    await shot(await open(['history'], { width: 420, height: 800, dark: true, ready: '' }).then(async page => { await page.getByRole('status').getByText(/Importing/).waitFor(); return page; }), '183-import-chat-line-narrow-dark');
+    await into.getByRole('button', { name: 'Show' }).click();
+    await into.getByRole('button', { name: 'Pause' }).click();
+    await into.getByText('Import paused').waitFor();
+    await shot(into, '184-import-paused');
+    await into.getByRole('button', { name: 'Resume' }).click();
+    await into.getByText('Importing into history').waitFor();
+    writeFileSync(join(history, 'import-done'), '');
+    await into.getByText('Imported into history').waitFor();
+    await shot(into, '185-import-done');
+    await into.getByRole('button', { name: 'Open memory' }).click();
+    await into.getByRole('button', { name: 'Import…' }).waitFor();
+    await shot(into, '187-memory-import-button');
+  }
 
   // The desktop app's update button, at the sidebar's foot, in each thing its updater does. Last: from here on the server has
   // an updater, so every page has the button.

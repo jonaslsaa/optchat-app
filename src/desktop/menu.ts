@@ -38,7 +38,7 @@ export function appMenu(does: MenuDoes): MenuItemConstructorOptions[] {
       separator, { role: 'hide', label: `Hide ${NAME}` }, { role: 'hideOthers' }, { role: 'unhide' },
       separator, { role: 'quit', label: `Quit ${NAME}` },
     ] },
-    { label: 'File', submenu: [page('New Connected Window', 'newWindow', 'Shift+Cmd+O'), page('New Profile…', 'newProfile'), separator, { role: 'close' }] },
+    { label: 'File', submenu: [page('New Connected Window', 'newWindow', 'Shift+Cmd+O'), page('New Profile…', 'newProfile'), page('Import History…', 'import'), separator, { role: 'close' }] },
     { role: 'editMenu' },
     { label: 'View', submenu: [
       page('Find in Chat', 'find', 'Cmd+F'), page('Search Memory', 'search', 'Shift+Cmd+F'), page('Chat or Memory', 'memory'), page('Usage', 'usage'), page('Show or Hide Sidebar', 'sidebar', 'Cmd+B'),

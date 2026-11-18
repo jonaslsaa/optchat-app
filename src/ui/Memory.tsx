@@ -1,4 +1,4 @@
-import { ArrowLeftIcon, ChevronRightIcon, QuoteIcon, SearchIcon, XIcon } from 'lucide-react';
+import { ArrowLeftIcon, ChevronRightIcon, HistoryIcon, QuoteIcon, SearchIcon, XIcon } from 'lucide-react';
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type RefObject } from 'react';
 import type { Hit, Line, Message, WindowState } from '../protocol.ts';
 import { CiteSelection } from './Cite.tsx';
@@ -123,7 +123,7 @@ const Reading = () => <p className="flex items-center gap-1.5 px-1.5 py-1.5 text
 
 /** It is read again when the main chat changes (`pulse`), and every three seconds while that says too little (`polled`): the
  * server keeps what it read until the files change, so a look costs it a glance at them. */
-export const MemoryView = memo(function MemoryView({ tree, profile, window, pulse, box, onCite }: { tree: Tree; profile: string; window: WindowState; pulse: string; box: RefObject<HTMLInputElement | null>; onCite?: (cite: Cite) => void }) {
+export const MemoryView = memo(function MemoryView({ tree, profile, window, pulse, box, onCite, onImport }: { tree: Tree; profile: string; window: WindowState; pulse: string; box: RefObject<HTMLInputElement | null>; onCite?: (cite: Cite) => void; onImport: () => void }) {
   const { view } = tree, scroller = useRef<HTMLDivElement>(null), content = useRef<HTMLDivElement>(null), shown = useRef(false), active = polled(tree, window);
   // Where the keys were before the view took them, which is the composer.
   const [before] = useState(() => document.activeElement);
@@ -167,7 +167,9 @@ export const MemoryView = memo(function MemoryView({ tree, profile, window, puls
       <header className="mx-auto w-full max-w-(--chat-content-max-width) shrink-0 border-border/60 border-b px-4.5 pt-3 pb-3 sm:px-6.5">
         <div className="flex items-center gap-3">
           <h2 className="shrink-0 font-medium text-sm">Memory view</h2>
-          <label className="ms-auto flex h-7 w-64 min-w-0 items-center gap-1.5 rounded-[var(--control-radius)] border border-input bg-background px-2 text-muted-foreground shadow-xs/5 focus-within:text-foreground focus-within:ring-2 focus-within:ring-ring dark:bg-input/32">
+          {/* What other tools kept comes into this memory from the Import page. */}
+          <Button variant="ghost-muted" className="ms-auto" title="Import history from Claude Code, Codex, Pi or ChatGPT into this memory" onClick={onImport}><HistoryIcon />Import…</Button>
+          <label className="flex h-7 w-64 min-w-0 items-center gap-1.5 rounded-[var(--control-radius)] border border-input bg-background px-2 text-muted-foreground shadow-xs/5 focus-within:text-foreground focus-within:ring-2 focus-within:ring-ring dark:bg-input/32">
             <SearchIcon className="size-3.5 shrink-0" />
             <input ref={box} type="search" aria-label="Search the memory" title={`Search the messages (${label('mod+shift+f')})`} placeholder="Search messages" value={search?.text ?? ''} spellCheck={false} autoCapitalize="off" autoCorrect="off"
               onChange={event => void app.search(profile, event.target.value)}

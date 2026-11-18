@@ -8,7 +8,7 @@ import { startServer } from '../src/server/server.ts';
 import { defaults, describeOwner, lockProfile } from 'pi-optchat/files';
 import { createProfile, give, png, writeRun } from '../test/support.ts';
 import { chatgptExport, writeHistories } from '../test/histories.ts';
-import { agents, CHANGES, demo, FILES, FORMULAS, limited, NAMED, PICTURED, remember, seed, SEEN, SEEN_IMAGE, SHIPPED, SHIPPING, SKILLED, spend, TEAM } from './seed.ts';
+import { agents, CHANGES, demo, FAILED, FILES, FORMULAS, limited, NAMED, PICTURED, remember, seed, SEEN, SEEN_IMAGE, SHIPPED, SHIPPING, SKILLED, spend, TEAM } from './seed.ts';
 
 /** `npm run screenshots [directory] [--dark]`: a PNG of every main state of the UI, in /tmp/optchat-app-shots unless a directory
  * is named, and all of them in dark mode with `--dark`. It builds the UI, serves it against throwaway profiles under /tmp with
@@ -74,6 +74,7 @@ seed(createProfile(home, 'links'), SHIPPING.length, NOW, SHIPPING);
 seed(createProfile(home, 'formulas'), 1, NOW, FORMULAS);
 writeFileSync(join(home, 'chart.png'), png(240, [38, 99, 235]));
 seed(createProfile(home, 'pictured'), 1, NOW, PICTURED(join(home, 'chart.png')));
+seed(createProfile(home, 'failed'), 1, NOW, FAILED);
 seed(createProfile(home, 'skills'), 1, NOW, SKILLED);
 // The subscription's limits as they were with the latest answer: well within them, past the five hours and on extra usage,
 // a request refused a moment ago, and a count from before the five hours began again. `empty` has none.
@@ -595,6 +596,13 @@ async function pictures(browser: Browser, control: Client) {
     await page.getByRole('button', { name: 'Show the image large: Cache share by day' }).waitFor();
     await page.getByText('No image at').waitFor();
     await page.waitForFunction(() => [...document.images].every(image => image.complete));
+    await shot(page, name);
+  }
+  // A call that failed, opened with the rest of the work: said by a faint red icon and a small ×, not in red words.
+  for (const [name, options] of [['200-tool-failed', {}], ['201-tool-failed-dark', { dark: true }]] as const) {
+    const page = await open(['failed'], options);
+    await page.getByRole('button', { name: /^Worked/ }).click();
+    await page.getByLabel('Failed').waitFor();
     await shot(page, name);
   }
   // A reply that names files: the two in the window's folder are links to your editor, the one that is not stays code.

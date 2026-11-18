@@ -109,8 +109,8 @@ function ToolRow({ step, live, running, profile }: { step: Tool; live: boolean; 
       // Selecting the opened line, to copy a command, is no click on the row.
       onClick={event => { const selected = document.getSelection(); if (!selected || selected.isCollapsed || !event.currentTarget.contains(selected.anchorNode)) setOpen(!open); }}
       onKeyDown={event => { if (event.target === event.currentTarget && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); setOpen(!open); } }}
-      icon={<span className="flex size-4 items-center justify-center text-icon-muted"><Icon className="block size-4 shrink-0 stroke-2" /></span>}
-      label={<><span className={cn('font-medium', step.failed && 'text-destructive')}>{verb}</span> <span className={cn('opacity-80', step.name === 'bash' && 'font-mono')}>{subject}</span>
+      icon={<span className={cn('flex size-4 items-center justify-center', step.failed ? 'text-tool-error-icon/40' : 'text-icon-muted')}><Icon className="block size-4 shrink-0 stroke-2" /></span>}
+      label={<><span className="font-medium">{verb}</span> <span className={cn('opacity-80', step.name === 'bash' && 'font-mono')}>{subject}</span>
         {stat && <span className="ms-1.5 font-mono text-xs tabular-nums">{stat.added > 0 && <span className="me-1 text-success-foreground">+{stat.added}</span>}{stat.removed > 0 && <span className="text-destructive-foreground">−{stat.removed}</span>}</span>}</>}
       trailing={<span className="flex h-6 items-center gap-1 self-start">
         {running !== undefined && step.output === undefined && <Spinner className="text-icon-muted" />}

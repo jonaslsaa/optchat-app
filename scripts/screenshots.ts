@@ -1,4 +1,4 @@
-import { appendFileSync, chmodSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { appendFileSync, chmodSync, copyFileSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { chromium, type Browser, type Page } from 'playwright-core';
 import { build } from 'vite';
@@ -8,7 +8,7 @@ import { startServer } from '../src/server/server.ts';
 import { defaults, describeOwner, lockProfile } from 'pi-optchat/files';
 import { createProfile, give, png, writeRun } from '../test/support.ts';
 import { chatgptExport, writeHistories } from '../test/histories.ts';
-import { agents, CHANGES, demo, FILES, FORMULAS, limited, NAMED, PICTURED, remember, seed, SHIPPED, SHIPPING, SKILLED, spend, TEAM } from './seed.ts';
+import { agents, CHANGES, demo, FILES, FORMULAS, limited, NAMED, PICTURED, remember, seed, SEEN, SEEN_IMAGE, SHIPPED, SHIPPING, SKILLED, spend, TEAM } from './seed.ts';
 
 /** `npm run screenshots [directory] [--dark]`: a PNG of every main state of the UI, in /tmp/optchat-app-shots unless a directory
  * is named, and all of them in dark mode with `--dark`. It builds the UI, serves it against throwaway profiles under /tmp with
@@ -82,6 +82,9 @@ limited(join(home, 'profiles', 'notes'), NOW, { five: 1.01, week: 0.4, overage: 
 limited(join(home, 'profiles', 'work'), NOW, { five: 0.98, week: 0.71, ago: 4 * 60_000, refused: 60_000 });
 limited(join(home, 'profiles', 'links'), NOW, { five: 0.35, week: 0.52, ago: 6 * 3600_000 });
 seed(createProfile(home, 'files'), 1, NOW, NAMED);
+// A reply whose work read a screenshot: the picture is the narrow chat's, once it is taken.
+const seen = createProfile(home, 'seen');
+seed(seen, 1, NOW, SEEN);
 // Another tool's history on a made-up Mac, for the Import page: a profile with a chat to import into, and one with none.
 writeHistories(join(home, 'mac'), NOW);
 const history = createProfile(home, 'history');
@@ -605,6 +608,21 @@ async function pictures(browser: Browser, control: Client) {
     await page.getByRole('button', { name: 'Open in…' }).click();
     await page.getByRole('listbox', { name: 'Editors' }).waitFor();
     await shot(page, list);
+  }
+  // A tool call that returned a picture, opened: light and dark, and the picture large.
+  mkdirSync(join(seen, 'images'));
+  copyFileSync(join(out, '11-narrow.png'), join(seen, 'images', `${SEEN_IMAGE}.png`));
+  for (const [name, options] of [['166-tool-image', {}], ['167-tool-image-dark', { dark: true }]] as const) {
+    const page = await open(['seen'], options);
+    await page.getByRole('button', { name: /^Worked/ }).click();
+    await page.getByRole('button', { name: /^Read \/tmp\/shots\/11-narrow\.png/ }).click();
+    const picture = page.getByRole('button', { name: 'Show the image large: What the tool returned', exact: true });
+    await picture.locator('img').evaluate(img => img instanceof HTMLImageElement && (img.complete || new Promise(done => img.addEventListener('load', done, { once: true }))));
+    await shot(page, name);
+    if (name !== '166-tool-image') continue;
+    await picture.click();
+    await page.getByRole('dialog', { name: 'The image, large' }).waitFor();
+    await shot(page, '168-tool-image-large');
   }
   for (const [name, options] of [['98-files-named', {}], ['99-files-named-dark', { dark: true }], ['100-files-named-narrow', { width: 420 }]] as const) {
     const page = await open(['files'], options);

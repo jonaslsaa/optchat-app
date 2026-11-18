@@ -20,7 +20,8 @@ export interface Line extends Pick<Message, 'kind' | 'text' | 'date'> {
   call?: string;
   /** Part of a connected window's handoff: what its agent wrote for the main chat when the conversation was completed. */
   handoff?: boolean;
-  /** The images of your message, as addresses the page can draw, while it is not in the log, which names them by their files. */
+  /** The images of your message or of a tool's result, as addresses the page can draw, while it is not in the log, which names
+   * them by their files. */
   images?: string[];
 }
 /** A line in its place in the chat. `key` is its number in the profile's log (in a connected window, in its conversation), so it
@@ -128,11 +129,12 @@ const date = (message: PiMessage) => new Date(message.timestamp).toISOString();
 /** What pi-optchat logs a message as, by its own `said`: your words as `user`, a reply's text as `talk` and its tool calls as
  * `tool`, a tool's result and a failed reply as `echo`. What OptChat itself puts in the chat (a subagent's report) is Pi's
  * custom message, which pi-optchat logs as `work` where it sends it. A tool call keeps its id, which the log does not have.
- * The log names an image by its file, which is not written yet: your message keeps its images, and a tool's is named as one. */
+ * The log names an image by its file, which is not written yet: your message and a tool's result keep theirs. An agent's chat
+ * does not carry its images (agents.ts), and has none to draw. */
 export function said(message: PiMessage, streaming = false): Line[] {
   const report = message.role === 'custom' && message.display !== false && words(message.content);
   const calls = Array.isArray(message.content) ? message.content.flatMap(block => isObject(block) && block.type === 'toolCall' ? String(block.id) : []) : [];
-  const images = message.role === 'user' && Array.isArray(message.content) ? message.content.flatMap(block => isObject(block) && block.type === 'image' ? `data:${String(block.mimeType)};base64,${String(block.data)}` : []) : [];
+  const images = (message.role === 'user' || message.role === 'toolResult') && Array.isArray(message.content) ? message.content.flatMap(block => isObject(block) && block.type === 'image' && typeof block.data === 'string' ? `data:${String(block.mimeType)};base64,${block.data}` : []) : [];
   return (report ? [['work', report] as const] : recorded(message, { imageRef: () => images.length ? '' : '[image]' })).map(([kind, text]) => {
     const call = kind === 'tool' ? calls.shift() : undefined;
     return { kind, text, date: date(message), ...streaming && { streaming }, ...call && { call }, ...images.length && { images } };
@@ -245,7 +247,7 @@ export function merged(entries: readonly Message[], page: readonly Message[]): M
  * read off the output, since the log does not say. */
 export type Step = { key: number } & (
   | { type: 'talk'; text: string; streaming?: boolean }
-  | { type: 'tool'; name: string; args: Record<string, unknown>; output?: string; failed: boolean; call?: string }
+  | { type: 'tool'; name: string; args: Record<string, unknown>; output?: string; images?: string[]; failed: boolean; call?: string }
   | { type: 'fault'; text: string });
 export type Tool = Extract<Step, { type: 'tool' }>;
 /** The chat in the blocks it is drawn as: your message with its images, a note, a report from an agent (with the `title` it was
@@ -296,6 +298,12 @@ function closing(items: readonly Item[]): Item[] {
 }
 const text = (items: Item[]) => items.map(item => item.text).join('\n\n');
 const IMAGE = /\[image ([0-9a-f]{16})\]/g;
+/** The pictures a message or a tool's result has, and its text without their names: the addresses it was said with while it is
+ * live (`live`), or else the files the log names, by their names in the profile. */
+function pictured(text: string, live?: string[]) {
+  const images = live ?? [...text.matchAll(IMAGE)].map(match => match[1]);
+  return { images, text: images.length ? text.replace(IMAGE, '').trim() : text };
+}
 function part(items: readonly Item[]): Part {
   const [first] = items, last = items.at(-1)!, common = { key: first.key, items };
   if (first.handoff) {
@@ -305,8 +313,8 @@ function part(items: readonly Item[]): Part {
   }
   if (first.kind === 'user') {
     // A picture is named under what was typed. One that is named in what the message cites is the cited message's.
-    const { skill, cites, text } = yours(first.text);
-    return { ...common, type: 'user', date: first.date, cites, ...skill && { skill }, text: text.replace(IMAGE, '').trim(), images: first.images ?? [...text.matchAll(IMAGE)].map(match => match[1]) };
+    const { skill, cites, text } = yours(first.text), { images, text: typed } = pictured(text, first.images);
+    return { ...common, type: 'user', date: first.date, cites, ...skill && { skill }, text: typed.trim(), images };
   }
   if (first.kind === 'note') return { ...common, type: 'note', text: first.text };
   if (first.kind === 'work') {
@@ -330,7 +338,7 @@ const COMMAND_FAILED = /(^|\n)Command (exited with code [1-9]\d*|aborted|timed o
  * printed. */
 function steps(items: readonly Item[]): Step[] {
   const result: Step[] = [], waiting: Tool[] = [];
-  for (const { key, kind, text, streaming, call } of items) {
+  for (const { key, kind, text, streaming, call, images } of items) {
     if (kind === 'talk') result.push({ key, type: 'talk', text, ...streaming && { streaming } });
     else if (kind === 'tool') {
       const space = text.indexOf(' '), step: Tool = { key, type: 'tool', name: space < 0 ? text : text.slice(0, space), args: {}, failed: false, ...call && { call } };
@@ -338,11 +346,11 @@ function steps(items: readonly Item[]): Step[] {
       result.push(step); waiting.push(step);
     } else if (/^Agent (error|aborted): /.test(text) || !waiting.length) result.push({ key, type: 'fault', text });
     else {
-      const output = text.slice(text.indexOf(': ') + 2);
+      const { images: shown, text: output } = pictured(text.slice(text.indexOf(': ') + 2), images);
       const step = waiting.shift()!;
       // Pi's edit and write say nothing else when they did their work, and the log does not keep that a call failed.
       const changes = step.name === 'edit' || step.name === 'write';
-      Object.assign(step, { output, failed: /^error\b/i.test(output) || step.name === 'bash' && COMMAND_FAILED.test(output) || changes && !output.startsWith('Successfully') });
+      Object.assign(step, { output, ...shown.length && { images: shown }, failed: /^error\b/i.test(output) || step.name === 'bash' && COMMAND_FAILED.test(output) || changes && !output.startsWith('Successfully') });
     }
   }
   return result;

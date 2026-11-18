@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { after, before, test } from 'node:test';
 import { chromium, type Browser, type Locator, type Page } from 'playwright-core';
 import { build } from 'vite';
-import { agents, CHANGES, FILES, FORMULAS, GONE, NAMED, PICTURED, remember, seed, TEAM } from '../scripts/seed.ts';
+import { agents, CHANGES, FILES, FORMULAS, GONE, NAMED, PICTURED, remember, seed, SEEN, SEEN_IMAGE, TEAM } from '../scripts/seed.ts';
 import type { Launch } from '../src/server/files.ts';
 import { connect } from '../src/client.ts';
 import { startServer } from '../src/server/server.ts';
@@ -49,6 +49,12 @@ writeMemory(createProfile(home, 'paged'), 260);
 seed(createProfile(home, 'files'), 1, Date.now(), NAMED);
 seed(createProfile(home, 'linked'), 1, Date.now(), [[['user', 'Show me.'], ['talk', '[![the preview](/images/linked/0123456789abcdef)](test/pi.test.ts)']]]);
 for (const file of FILES) { mkdirSync(join(home, file, '..'), { recursive: true }); writeFileSync(join(home, file), ''); }
+// A reply whose work read a picture the profile keeps, one it no longer has, and one that printed nothing else.
+const seen = createProfile(home, 'seen');
+seed(seen, 1, Date.now(), [[...SEEN[0].slice(0, -1), ['tool', 'read {"path":"/tmp/shots/gone.png"}'], ['echo', 'read: Read image file [image/png]\n[image 00000000deadbeef]'],
+  ['tool', 'read {"path":"/tmp/shots/only.png"}'], ['echo', `read: [image ${SEEN_IMAGE}]`], ...SEEN[0].slice(-1)]]);
+mkdirSync(join(seen, 'images'));
+writeFileSync(join(seen, 'images', `${SEEN_IMAGE}.png`), png(64, [38, 99, 235]));
 mkdirSync(join(home, 'new'));
 // Another tool's history on a made-up Mac, and a profile with no messages to import it into.
 writeHistories(join(home, 'mac'), Date.now());
@@ -900,6 +906,37 @@ test('a long edit opens as its diff, which scrolls in its box and does not make 
   assert.ok(box && box.height <= 384 && box.whole > box.height, `the details box scrolls: ${JSON.stringify(box)}`);
   assert.equal(box.diff, box.drawn, 'the diff is drawn whole inside it');
   assert.equal(box.page, 0, 'the page does not scroll');
+  await page.context().close();
+});
+
+test('a tool call that returned a picture shows it small under its line, from the profile\'s file, and large on a click; one the profile no longer has says so', async () => {
+  const page = await open('seen');
+  await page.getByRole('button', { name: /^Worked/ }).click();
+  const read = page.getByRole('button', { name: /^Read \/tmp\/shots\/11-narrow\.png/ }), picture = read.getByRole('button', { name: 'Show the image large: What the tool returned', exact: true });
+  await read.click();
+  const img = picture.locator('img');
+  await img.evaluate(img => img instanceof HTMLImageElement && (img.complete || new Promise(done => img.addEventListener('load', done, { once: true }))));
+  assert.equal(await img.evaluate(img => img instanceof HTMLImageElement ? img.naturalWidth : 0), 64);
+  // What it printed is there without the name of the picture, which is drawn.
+  assert.match(await read.innerText(), /Read image file \[image\/png\]/);
+  assert.doesNotMatch(await read.innerText(), /\[image [0-9a-f]/);
+  await page.getByRole('button', { name: /^Read \/tmp\/shots\/gone\.png/ }).click();
+  await page.getByText('Image unavailable').waitFor();
+  // A call that returned only a picture shows the picture, and no "No output." under it.
+  const only = page.getByRole('button', { name: /^Read \/tmp\/shots\/only\.png/ });
+  await only.click();
+  await only.getByRole('button', { name: 'Show the image large: What the tool returned', exact: true }).waitFor();
+  assert.doesNotMatch(await only.innerText(), /No output/);
+  await picture.click();
+  await page.getByRole('dialog', { name: 'The image, large' }).waitFor();
+  await page.keyboard.press('Escape');
+  await page.getByRole('dialog', { name: 'The image, large' }).waitFor({ state: 'detached' });
+  assert.equal(await focused(page), 'Show the image large: What the tool returned');
+  // A press beside it puts it away too, though the call's details keep a press to themselves.
+  await picture.click();
+  await page.getByRole('dialog', { name: 'The image, large' }).waitFor();
+  await page.mouse.click(5, 5);
+  await page.getByRole('dialog', { name: 'The image, large' }).waitFor({ state: 'detached', timeout: 2000 });
   await page.context().close();
 });
 

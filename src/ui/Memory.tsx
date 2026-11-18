@@ -35,8 +35,8 @@ const Original = memo(function Original({ messages, profile }: { messages: Messa
     : part.type === 'work' ? <ReportRow key={part.key} part={part} />
     : part.type === 'note' ? <NoteRow key={part.key} part={part} />
     : part.type !== 'reply' ? null
-    : part.answer ? <ReplyRow key={part.key} part={part} latest />
-    : <div key={part.key} className="flex min-w-0 flex-col py-1">{part.steps.map(step => <StepRow key={step.key} step={step} />)}</div>);
+    : part.answer ? <ReplyRow key={part.key} part={part} latest profile={profile} />
+    : <div key={part.key} className="flex min-w-0 flex-col py-1">{part.steps.map(step => <StepRow key={step.key} step={step} profile={profile} />)}</div>);
 });
 /** The button on a line or on a message that was found, which cites it whole. It is there under the pointer and with the keys. */
 function CiteWhole({ onCite }: { onCite: () => void }) {

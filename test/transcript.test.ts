@@ -122,8 +122,9 @@ test('the chat is drawn in parts: your message with its images, a report by its 
 test('a tool call shows the pictures its result has, live or from the log, without their names in what it printed', () => {
   const picture = { type: 'image', data: 'aGk=', mimeType: 'image/png' }, read = { type: 'toolCall', id: 'c1', name: 'read', arguments: { path: 'shot.png' } };
   const tool = (items: Item[]) => parts(items).flatMap(part => part.type === 'reply' ? part.steps : []).find(step => step.type === 'tool');
-  const live = spoken([reply(1, read), { role: 'toolResult', timestamp: T + 2000, toolName: 'read', content: [text('Read image file [image/png]'), picture] }]);
-  assert.partialDeepStrictEqual(tool(live), { output: 'Read image file [image/png]', images: ['data:image/png;base64,aGk='] });
+  // What it printed is kept as it was, a bare [image] too: only the names of the pictures it draws are taken out.
+  const live = spoken([reply(1, read), { role: 'toolResult', timestamp: T + 2000, toolName: 'read', content: [text('Read image file [image/png], not [image]'), picture] }]);
+  assert.partialDeepStrictEqual(tool(live), { output: 'Read image file [image/png], not [image]', images: ['data:image/png;base64,aGk='] });
   const kept = logged([entry(0, 'tool', 1, 'read {"path":"shot.png"}'), entry(1, 'echo', 2, 'read: Read image file [image/png]\n[image 0123456789abcdef]')]);
   assert.partialDeepStrictEqual(tool(kept), { output: 'Read image file [image/png]', images: ['0123456789abcdef'] });
   // An agent's chat leaves its images out (agents.ts): there is nothing to draw.

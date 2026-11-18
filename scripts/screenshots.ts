@@ -6,10 +6,9 @@ import { connect, type Client } from '../src/client.ts';
 import { startServer } from '../src/server/server.ts';
 // pi-optchat's own lock, which only Pi takes: here it stands for a Pi in a terminal.
 import { defaults, describeOwner, lockProfile } from 'pi-optchat/files';
-import { SEEN, SEEN_IMAGE } from './seed.ts';
 import { createProfile, give, png, writeRun } from '../test/support.ts';
 import { chatgptExport, writeHistories } from '../test/histories.ts';
-import { agents, CHANGES, demo, FILES, FORMULAS, limited, NAMED, PICTURED, remember, seed, SHIPPED, SHIPPING, SKILLED, spend, TEAM } from './seed.ts';
+import { agents, CHANGES, demo, FILES, FORMULAS, limited, NAMED, PICTURED, remember, seed, SEEN, SEEN_IMAGE, SHIPPED, SHIPPING, SKILLED, spend, TEAM } from './seed.ts';
 
 /** `npm run screenshots [directory] [--dark]`: a PNG of every main state of the UI, in /tmp/optchat-app-shots unless a directory
  * is named, and all of them in dark mode with `--dark`. It builds the UI, serves it against throwaway profiles under /tmp with

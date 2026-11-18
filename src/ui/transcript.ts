@@ -297,12 +297,12 @@ function closing(items: readonly Item[]): Item[] {
   return items.slice(items.findLastIndex(item => item.kind !== 'talk' || item.date !== last?.date) + 1);
 }
 const text = (items: Item[]) => items.map(item => item.text).join('\n\n');
-const IMAGE = /\[image ([0-9a-f]{16})\]/g, MARK = /\[image(?: [0-9a-f]{16})?\]/g;
+const IMAGE = /\[image ([0-9a-f]{16})\]/g;
 /** The pictures a message or a tool's result has, and its text without their names: the addresses it was said with while it is
  * live (`live`), or else the files the log names, by their names in the profile. */
 function pictured(text: string, live?: string[]) {
   const images = live ?? [...text.matchAll(IMAGE)].map(match => match[1]);
-  return { images, text: images.length ? text.replace(MARK, '').trim() : text };
+  return { images, text: images.length ? text.replace(IMAGE, '').trim() : text };
 }
 function part(items: readonly Item[]): Part {
   const [first] = items, last = items.at(-1)!, common = { key: first.key, items };
@@ -371,7 +371,7 @@ export function recalled(chat: readonly Item[], text: string, back: boolean) {
   // A picture you sent is not text to send again: the log names it, and a message as Pi has it says only that there was one.
   const said = chat.flatMap(item => {
     const said = yours(item.kind === 'user' ? item.text : '');
-    return asTyped({ ...said, text: said.text.replace(MARK, '').trim() }).trim() || [];
+    return asTyped({ ...said, text: said.text.replace(/\[image(?: [0-9a-f]{16})?\]/g, '').trim() }).trim() || [];
   });
   const past = [...new Set(said.reverse())], at = past.indexOf(text);
   if (text ? at < 0 : !back) return;

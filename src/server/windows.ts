@@ -97,7 +97,9 @@ export class Windows {
     return { window: opened.state };
   }
   async prompt({ window, text, images, whenBusy = 'steer' }: Params<'prompt'>): Promise<Result<'prompt'>> {
-    const opened = this.get(window), pi = await this.started(opened);
+    const opened = this.get(window);
+    await opened.restarting?.catch(() => {}); // For the Pi it is started again as, not the one that is stopping.
+    const pi = await this.started(opened);
     // It would steer the agent while it writes its handoff, and be part of neither conversation.
     if (opened.completing) throw new Error('This conversation is being handed to the main chat. Send your message once it is.');
     // Always with a queueing behaviour, as T3 Code sends it: Pi then starts a run or queues the message, whichever is true by
@@ -141,7 +143,7 @@ export class Windows {
   }
   async models({ window }: Params<'models'>): Promise<Result<'models'>> {
     const opened = this.get(window);
-    await opened.restarting?.catch(() => {}); // Asked of the Pi it is started again as, not of the one that is stopping.
+    await opened.restarting?.catch(() => {});
     const { pi } = opened;
     return pi ? { models: await offered(pi) } : this.options.catalog();
   }
@@ -169,6 +171,7 @@ export class Windows {
    * profile's agents live in that Pi, and are reached through it. */
   async owned(profile: string) {
     const main = this.window(profile);
+    await main.restarting?.catch(() => {});
     await this.look(main);
     if (!main.state.outside) await this.started(main);
   }
@@ -177,7 +180,8 @@ export class Windows {
   restart(profile: string) {
     const main = this.window(profile);
     if (main.state.outside) throw new Error('This chat is running outside the app: start that Pi again where it runs.');
-    return main.restarting ??= (async () => { await this.stop(main); await this.owned(profile); })().finally(() => { main.restarting = undefined; });
+    // What asks for its Pi meanwhile waits for the new one (`restarting`), so the new one is started here, not through `owned`.
+    return main.restarting ??= (async () => { await this.stop(main); await this.look(main); if (!main.state.outside) await this.started(main); })().finally(() => { main.restarting = undefined; });
   }
   /** Keeps the app's Pi on a profile on the pi-optchat that is installed. One that loaded an older one is started again if it
    * has nothing to do: no window of the profile is in a run or starting, and `idle` says nothing else is at work in it (its
@@ -187,8 +191,9 @@ export class Windows {
     if (main?.restarting) return main.restarting;
     const loaded = main?.pi && !main.starting ? main.optchat : undefined, installed = loaded && await this.options.optchat();
     if (!main || !loaded || !installed || !older(loaded, installed)) return;
-    const busy = [...this.windows.values()].some(({ state }) => state.profile === profile && (state.status === 'running' || state.status === 'starting'));
-    if (!busy && await idle()) return this.restart(profile);
+    // At work is looked at last, after what is asked, so nothing can start in between and be stopped by the restart.
+    const idling = await idle(), busy = [...this.windows.values()].some(({ state, starting }) => state.profile === profile && (starting !== undefined || state.status === 'running'));
+    if (idling && !busy) return this.restart(profile);
     if (main.state.stale !== installed) { main.state.stale = installed; this.changed(main); }
   }
   /** Stops every Pi and starts no more. Connected windows go first: each hands its conversation to the profile's owner as it

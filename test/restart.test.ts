@@ -57,10 +57,9 @@ test('a Pi at work on an older pi-optchat is not stopped: it is marked, and star
   assert.partialDeepStrictEqual(await window(), { status: 'running', stale: '0.12.2' });
   assert.equal(await pid(), before);
 
-  assert.deepEqual(await request('restart', { profile: 'working' }), {});
-  const after = await window();
-  assert.equal(after?.status, 'idle');
-  assert.equal(after?.stale, undefined);
+  // A message sent while it starts again reaches the new Pi.
+  assert.deepEqual(await Promise.all([request('restart', { profile: 'working' }), request('prompt', { window: main, text: 'hello' })]), [{}, { disposition: 'started' }]);
+  assert.equal((await window())?.stale, undefined);
   assert.notEqual(await pid(), before);
 });
 

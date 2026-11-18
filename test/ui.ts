@@ -1225,7 +1225,12 @@ test('a reply shows a picture on this machine by its path, large on a click; one
   await page.getByText(`No image at ${GONE}`).waitFor();
   assert.equal(await page.getByRole('link', { name: 'pricing' }).getAttribute('href'), 'https://example.com/pricing.png');
   await picture.click();
-  await page.getByRole('dialog', { name: 'The image, large' }).waitFor();
+  const large = page.getByRole('dialog', { name: 'The image, large' });
+  await large.waitFor();
+  // The viewer draws the same file, and the one that is gone is no picture of the reply's to step to.
+  assert.equal(await large.locator('img').getAttribute('src'), await picture.locator('img').getAttribute('src'));
+  assert.match(await large.locator('img').getAttribute('src') ?? '', /^\/file\?/);
+  assert.equal(await large.getByRole('button', { name: 'Next image' }).count(), 0);
   await page.context().close();
 });
 

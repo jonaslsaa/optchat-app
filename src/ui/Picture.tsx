@@ -50,7 +50,7 @@ function Viewer({ pictures, at: first, opener, onClose }: Gallery & { opener: Re
     <dialog ref={box} tabIndex={-1} aria-label="The image, large" onKeyDown={keys} onClose={() => { onClose(); opener.current?.focus({ preventScroll: true }); }}
       // Beside the picture is the dialog itself; a drag that moves a zoomed picture starts on the picture, and is no press beside it.
       onPointerDown={event => { if (event.target === event.currentTarget) { event.preventDefault(); box.current?.close(); } }}
-      className="enter fixed inset-0 m-0 flex size-full max-h-none max-w-none items-center justify-center bg-black/70 p-6 outline-none backdrop:bg-transparent">
+      className="enter fixed inset-0 m-0 flex size-full max-h-none max-w-none items-center justify-center bg-black/85 p-6 outline-none backdrop:bg-transparent">
       <Button variant="ghost-muted" size="icon-sm" aria-label="Close the image" onClick={() => box.current?.close()} className="absolute top-3 right-3 z-20 rounded-full bg-black/65 text-white ring-1 ring-white/20 hover:bg-black/80 hover:text-white focus-visible:ring-white"><XIcon /></Button>
       {many && <Button variant="ghost-muted" size="icon-sm" aria-label="Previous image" onClick={() => step(-1)} className={cn(nav, 'left-3')}><ChevronLeftIcon className="size-5" /></Button>}
       {picture && (

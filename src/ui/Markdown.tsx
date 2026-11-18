@@ -7,7 +7,7 @@ import { highlighter, painter, type Token } from './highlight.ts';
 import { splitMarkdownBlocks } from './markdownStreamBlocks.ts';
 import { dollars } from './math.ts';
 import { fileTarget } from './paths.ts';
-import { link, safe, shown } from './safe.ts';
+import { link, pathOf, safe, shown } from './safe.ts';
 import { app } from './store.ts';
 import { csv } from './table.ts';
 import { closed, paced } from './transcript.ts';
@@ -100,7 +100,7 @@ function Image(props: ComponentProps<'img'> & ExtraProps) {
   const at = shown(props.src), linked = useContext(InLink), [gone, setGone] = useState(false);
   if (!at) return linked ? props.alt || String(props.src ?? '') : safe.img(props);
   if (linked) return safe.img(props);
-  if (gone) return <span className="inline-block rounded-md border border-border px-2 py-0.5 text-muted-foreground text-xs">No image at {decodeURI(String(props.src))}</span>;
+  if (gone) return <span className="inline-block rounded-md border border-border px-2 py-0.5 text-muted-foreground text-xs">No image at {pathOf(String(props.src))}</span>;
   return <Picture src={at} alt={props.alt} className="max-h-[30rem]" onError={() => setGone(true)} />;
 }
 const components: Components = {

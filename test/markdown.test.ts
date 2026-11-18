@@ -21,6 +21,8 @@ test('a reply cannot make the page fetch anything: only the profile\'s own image
   assert.match(html('![shot](/images/work/0123456789abcdef)'), /<p><img src="\/images\/work\/0123456789abcdef" alt="shot"\/><\/p>$/);
   // A picture on this machine by its absolute path, which the page asks this server for; not a relative one, nor another kind.
   assert.match(html('![chart](</tmp/a chart.png>)'), /<img src="\/file\?path=%2Ftmp%2Fa\+chart\.png&amp;token=" alt="chart"\/>/);
+  // An escaped # is part of the file's name.
+  assert.match(html('![chart](/tmp/chart%231.png)'), /path=%2Ftmp%2Fchart%231\.png&amp;/);
   for (const address of ['tmp/chart.png', '/tmp/notes.svg', '/tmp/chart.png?x=1', 'file:///tmp/chart.png'])
     assert.doesNotMatch(html(`![x](${address})`), /<img/, address);
 

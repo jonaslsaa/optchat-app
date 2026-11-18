@@ -10,11 +10,13 @@ import type { Components } from 'react-markdown';
 const PROFILE_IMAGE = /^\/images\/[^/]+\/[0-9a-f]{16}$/, PICTURE = /^\/(?!\/)[^?#]*\.(?:png|jpe?g|gif|webp)$/i;
 /** The socket's token, from the address that opened the page, after its #: a picture on this machine is served only with it. */
 export const token = typeof location === 'undefined' ? '' : location.hash.slice(1);
+/** The path an image's address names: `%23` is a `#` in the file's name. As written when it is not a valid address. */
+export const pathOf = (src: string) => { try { return decodeURIComponent(src); } catch { return src; } };
 /** Where the page gets an image a reply names, when it may draw it at all. */
 export function shown(src: unknown) {
   if (typeof src !== 'string') return undefined;
   if (PROFILE_IMAGE.test(src)) return src;
-  try { const path = decodeURI(src); return PICTURE.test(path) ? `/file?${new URLSearchParams({ path, token })}` : undefined; } catch { return undefined; }
+  return PICTURE.test(src) ? `/file?${new URLSearchParams({ path: pathOf(src), token })}` : undefined;
 }
 export const link = (props: ComponentProps<'a'>) => createElement('a', { ...props, target: '_blank', rel: 'noreferrer noopener' });
 export const safe = {

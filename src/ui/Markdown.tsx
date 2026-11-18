@@ -99,9 +99,9 @@ function Code({ node: _, ...props }: ComponentProps<'code'> & { node?: unknown }
 function Image(props: ComponentProps<'img'> & ExtraProps) {
   const at = shown(props.src), linked = useContext(InLink), [gone, setGone] = useState(false);
   if (!at) return linked ? props.alt || String(props.src ?? '') : safe.img(props);
-  if (linked) return safe.img(props);
   if (gone) return <span className="inline-block rounded-md border border-border px-2 py-0.5 text-muted-foreground text-xs">No image at {pathOf(String(props.src))}</span>;
-  return <Picture src={at} alt={props.alt} className="max-h-[30rem]" onError={() => setGone(true)} />;
+  const drawn = { src: at, alt: props.alt, className: 'max-h-[30rem]', onError: () => setGone(true) };
+  return linked ? <img {...drawn} title={props.title} /> : <Picture {...drawn} />;
 }
 const components: Components = {
   ...safe,

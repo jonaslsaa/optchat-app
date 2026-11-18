@@ -587,7 +587,7 @@ async function pictures(browser: Browser, control: Client) {
     await shot(page, name);
   }
   // A reply that shows a picture on this machine by its path, one that is gone, and one on the web as a link.
-  for (const [name, options] of [['193-reply-picture', {}], ['194-reply-picture-dark', { dark: true }], ['195-reply-picture-narrow', { width: 420 }]] as const) {
+  for (const [name, options] of [['196-reply-picture', {}], ['197-reply-picture-dark', { dark: true }], ['198-reply-picture-narrow', { width: 420 }]] as const) {
     const page = await open(['pictured'], options);
     await page.getByRole('button', { name: 'Show the image large: Cache share by day' }).waitFor();
     await page.getByText('No image at').waitFor();

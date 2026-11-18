@@ -1635,8 +1635,8 @@ test('New Profile…: the menu and the list of profiles open a dialog that makes
     await first.waitForTimeout(300);
     assert.deepEqual([await first.getByRole('dialog').count(), await focused(first)], [0, 'Profile name']);
     await first.context().close();
-    // Named there, the first profile is asked what history it brings, in the dialog's second step alone; starting empty puts
-    // the keys in its chat. With no history found on the Mac (no `histories`), it says so instead of offering cards, and its
+    // The first profile is asked what history it brings, in the dialog's second step alone, wherever it is named (the first
+    // page and the settings share it: here the settings); starting empty puts the keys in its chat. With no history found on the Mac (no `histories`), it says so instead of offering cards, and its
     // way on is a ChatGPT export.
     const none = join(at, 'none');
     mkdirSync(none);
@@ -1644,15 +1644,22 @@ test('New Profile…: the menu and the list of profiles open a dialog that makes
     try {
       const welcome = await (await browser.newContext({ viewport: WIDE, reducedMotion: 'reduce' })).newPage();
       await welcome.goto(bare.page);
+      // Named in the settings, which have the first page's setup: they give way to the new chat and its second step.
+      const theme = welcome.getByRole('radiogroup', { name: 'Theme' });
+      await welcome.getByRole('textbox', { name: 'Profile name' }).waitFor();
+      await welcome.keyboard.press('ControlOrMeta+Comma');
+      await theme.waitFor();
       await welcome.getByRole('textbox', { name: 'Profile name' }).fill('first');
       await welcome.keyboard.press('Enter');
       const empty = welcome.getByRole('dialog', { name: 'Bring your history' });
       await empty.getByText('No history from Claude Code, Codex or Pi was found on this Mac.').waitFor();
-      assert.deepEqual([await empty.getByText(/kept what you did/).count(), await empty.getByRole('checkbox').count(), await focused(welcome)], [0, 0, 'Bring a ChatGPT export…']);
+      assert.deepEqual([await empty.getByText(/kept what you did/).count(), await empty.getByRole('checkbox').count(), await focused(welcome), await theme.count()], [0, 0, 'Bring a ChatGPT export…', 0]);
+      // ⌘, opens no page under the dialog: started empty, the new chat is what is there.
+      await welcome.keyboard.press('ControlOrMeta+Comma');
       await welcome.getByRole('button', { name: 'Start empty' }).click();
       await welcome.locator('dialog').waitFor({ state: 'detached' });
       await welcome.getByRole('textbox', { name: 'Message' }).waitFor();
-      assert.equal(await focused(welcome), 'Message');
+      assert.deepEqual([await focused(welcome), await theme.count()], ['Message', 0]);
       await welcome.context().close();
     } finally { await bare.close(); }
     // While the setup lacks something (here no Pi at all) nothing could be imported: a profile made on the first page, or in the

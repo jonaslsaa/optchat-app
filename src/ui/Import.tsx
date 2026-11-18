@@ -224,7 +224,8 @@ function Done({ profile, added, onMemory, onAsk, onMore }: { profile: string; ad
 export function BringHistory({ state, profile, onEmpty, onChoose }: { state: State; profile: string; onEmpty: () => void; onChoose: (from: Source[]) => void }) {
   const [from, setFrom] = useState<Source[]>([]);
   useEffect(() => { for (const source of LOCAL) if (!(source in state.scans)) void app.scan(source); }, []);
-  const none = LOCAL.every(source => source in state.scans && !foundIn(state.scans, source).length);
+  // A source being looked for has its key with nothing under it yet: nothing is said of it until its scan has come.
+  const none = LOCAL.every(source => state.scans[source] !== undefined && !foundIn(state.scans, source).length);
   if (none) return (
     <form onSubmit={event => { event.preventDefault(); onChoose([]); }}>
       <p className="mt-1 text-muted-foreground text-xs">{profile} starts with an empty memory. No history from Claude Code, Codex or Pi was found on this Mac.</p>

@@ -8,7 +8,8 @@ import { Button, cn, Switch } from './ui.tsx';
 
 /** The settings page, in place of the chat, in tabs: how the app looks, where new windows run and what a chat needs (`Setup`);
  * the settings of the profile in front as pi-optchat keeps them (`Config`); and its instructions. Before there is a profile the app's
- * own parts are the first page (`Welcome`), with what a chat needs first. */
+ * own parts are the first page (`Welcome`), with what a chat needs first. The first profile can be made in either
+ * (`onMade`). */
 
 const THEMES = { system: 'System', light: 'Light', dark: 'Dark' } satisfies Record<Kept['theme'], string>;
 
@@ -79,7 +80,7 @@ type Tab = keyof typeof TABS;
 let chosen: Tab = 'general';
 const ORDER = Object.keys(TABS) as Tab[];
 
-export function Settings({ state, onClose }: { state: State; onClose: () => void }) {
+export function Settings({ state, onClose, onMade }: { state: State; onClose: () => void; onMade: (profile: string) => void }) {
   const { profile } = state, config = profile === undefined ? undefined : state.config[profile], id = useId();
   // It opens on what a chat still needs, if it needs something. With no profile there is only what is the app's, and no tabs.
   const [picked, setPicked] = useState(missing(state) ? 'general' : chosen), tabbed = profile !== undefined, tab = tabbed ? picked : 'general';
@@ -97,7 +98,7 @@ export function Settings({ state, onClose }: { state: State; onClose: () => void
     document.getElementById(`${id}-${next}`)?.focus();
   };
   const pages: Record<Tab, ReactNode> = {
-    general: <>{state.settings && <Choices settings={state.settings} />}<Needs state={state} /></>,
+    general: <>{state.settings && <Choices settings={state.settings} />}<Needs state={state} onMade={onMade} /></>,
     profile: profile !== undefined && config && (
       <Section title={`Profile: ${profile}`} hint="pi-optchat's settings for this profile. A change is saved when you leave its field, and a chat that is running picks it up without a restart.">
         <Config key={profile} profile={profile} config={config} models={state.models[mainOf(profile)]?.models ?? []} />

@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process';
-import { accessSync, constants, realpathSync, statSync } from 'node:fs';
+import { accessSync, constants, readFileSync, realpathSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { basename, delimiter, isAbsolute, join, relative, resolve, sep } from 'node:path';
+import { basename, delimiter, extname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 
 /** A file the agent named, opened in your editor. The name is the model's, so it is only ever a file that is there, under the
  * folder the window runs in: resolved with its links followed, and not a folder or anything else. Nothing of it is run: the
@@ -10,6 +10,19 @@ export function inside(cwd: string, path: string): string | undefined {
   try {
     const root = realpathSync(cwd), file = realpathSync(resolve(root, path)), from = relative(root, file);
     return from && from.split(sep)[0] !== '..' && !isAbsolute(from) && statSync(file).isFile() ? file : undefined;
+  } catch { return undefined; }
+}
+
+const PICTURES: Record<string, string> = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.webp': 'image/webp' };
+/** A picture a reply shows by its path (`safe.ts`), as the page is sent it: an absolute path, resolved with its links followed,
+ * to a file of one of these kinds by its name, of 10 MB at most. Not SVG, which can carry script. The path is the model's, and
+ * the agent can read any file anyway: this only lets you see it, and nothing leaves the machine. */
+export function picture(path: string) {
+  try {
+    // Not `//host/share` nor `\\host\share`: on Windows that is a network path, which signs in to its host to be looked up.
+    if (!isAbsolute(path) || /^[\\/]{2}/.test(path)) return undefined;
+    const file = realpathSync(path), type = PICTURES[extname(file).toLowerCase()], stat = statSync(file);
+    return type && stat.isFile() && stat.size <= 10 * 1024 * 1024 ? { type, data: readFileSync(file) } : undefined;
   } catch { return undefined; }
 }
 

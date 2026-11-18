@@ -8,7 +8,7 @@ import { startServer } from '../src/server/server.ts';
 import { defaults, describeOwner, lockProfile } from 'pi-optchat/files';
 import { createProfile, give, png, writeRun } from '../test/support.ts';
 import { chatgptExport, writeHistories } from '../test/histories.ts';
-import { agents, CHANGES, demo, FILES, FORMULAS, limited, NAMED, remember, seed, SHIPPED, SHIPPING, SKILLED, spend, TEAM } from './seed.ts';
+import { agents, CHANGES, demo, FILES, FORMULAS, limited, NAMED, PICTURED, remember, seed, SHIPPED, SHIPPING, SKILLED, spend, TEAM } from './seed.ts';
 
 /** `npm run screenshots [directory] [--dark]`: a PNG of every main state of the UI, in /tmp/optchat-app-shots unless a directory
  * is named, and all of them in dark mode with `--dark`. It builds the UI, serves it against throwaway profiles under /tmp with
@@ -72,6 +72,8 @@ seed(ship, SHIPPING.length, NOW, SHIPPING);
 agents(ship, NOW + 42_000);
 seed(createProfile(home, 'links'), SHIPPING.length, NOW, SHIPPING);
 seed(createProfile(home, 'formulas'), 1, NOW, FORMULAS);
+writeFileSync(join(home, 'chart.png'), png(240, [38, 99, 235]));
+seed(createProfile(home, 'pictured'), 1, NOW, PICTURED(join(home, 'chart.png')));
 seed(createProfile(home, 'skills'), 1, NOW, SKILLED);
 // The subscription's limits as they were with the latest answer: well within them, past the five hours and on extra usage,
 // a request refused a moment ago, and a count from before the five hours began again. `empty` has none.
@@ -582,6 +584,14 @@ async function pictures(browser: Browser, control: Client) {
   for (const [name, options] of [['91-formulas-and-table', {}], ['92-formulas-and-table-dark', { dark: true }], ['93-formulas-and-table-narrow', { width: 420 }]] as const) {
     const page = await open(['formulas'], options);
     await page.locator('.katex-display').waitFor();
+    await shot(page, name);
+  }
+  // A reply that shows a picture on this machine by its path, one that is gone, and one on the web as a link.
+  for (const [name, options] of [['196-reply-picture', {}], ['197-reply-picture-dark', { dark: true }], ['198-reply-picture-narrow', { width: 420 }]] as const) {
+    const page = await open(['pictured'], options);
+    await page.getByRole('button', { name: 'Show the image large: Cache share by day' }).waitFor();
+    await page.getByText('No image at').waitFor();
+    await page.waitForFunction(() => [...document.images].every(image => image.complete));
     await shot(page, name);
   }
   // A reply that names files: the two in the window's folder are links to your editor, the one that is not stays code.

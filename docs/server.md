@@ -81,7 +81,7 @@ The server pushes four things to every client:
 - `{ push: 'settings', settings }` when the settings are changed, and `{ push: 'setup', setup }` as an install runs and when it ends.
 - `{ push: 'update', update }` each time the desktop app's updater does something else ([desktop.md](desktop.md#updates)): only from a server whose shell has one.
 
-A profile's images are plain HTTP: `GET /images/<profile>/<name>` for a message's `[image <name>]`. Every other path is a file of the built UI (`dist/ui`, [ui.md](ui.md)), with the page at `/`.
+A profile's images are plain HTTP: `GET /images/<profile>/<name>` for a message's `[image <name>]`. A picture a reply names by its path is `GET /file?path=<absolute path>&token=<the socket's token>`: with the token only, an absolute path, resolved with its links followed, to a file that is PNG, JPEG, GIF or WebP by its name (not SVG, which can carry script) and 10 MB at most (`picture` in `src/server/files.ts`). Anything else is a 404. It serves any such file: the agent can read every file you can anyway, and only you see it. Every other path is a file of the built UI (`dist/ui`, [ui.md](ui.md)), with the page at `/`.
 
 ### Connecting late
 

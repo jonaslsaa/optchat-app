@@ -112,3 +112,17 @@ test('a main chat a Pi outside the app holds names files in that Pi\'s folder, a
   assert.deepEqual(await client.request('isFile', { window: remote, path: 'src/There.ts' }), { file: false });
   await assert.rejects(client.request('openFile', { window: remote, path: 'src/There.ts' }), /not a file/);
 });
+
+test('a picture a reply names by its absolute path is served to the page alone, and nothing that is not one', async t => {
+  const shot = join(home, 'shot.png'), data = Buffer.from('a picture');
+  writeFileSync(shot, data);
+  symlinkSync(join(home, 'secret.txt'), join(home, 'secret.png'));
+  const token = 'the-token', server = await startServer({ home, cwd, token });
+  t.after(() => server.close());
+  const fetched = (path: string, given = token) => fetch(`http://127.0.0.1:${server.port}/file?${new URLSearchParams({ path, token: given })}`);
+  const served = await fetched(shot);
+  assert.deepEqual([served.status, served.headers.get('content-type'), Buffer.from(await served.arrayBuffer())], [200, 'image/png', data]);
+  // Not without the token, nor by a relative or a network path, nor a file of another kind, nor one only its name says is a picture.
+  for (const [path, given] of [[shot, 'wrong'], ['shot.png', token], [join(home, 'secret.txt'), token], [join(home, 'secret.png'), token], [join(home, 'gone.png'), token], [`/${shot}`, token], ['\\\\host\\share\\shot.png', token]])
+    assert.equal((await fetched(path, given)).status, 404, `${path} ${given}`);
+});

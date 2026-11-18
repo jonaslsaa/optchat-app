@@ -9,7 +9,7 @@ import { Value } from 'typebox/value';
 import { WebSocket, WebSocketServer } from 'ws';
 import { Envelope, methods, REFUSED, type Method, type Params, type Push, type Result, type ServerMessage, type Updating } from '../protocol.ts';
 import { Agents } from './agents.ts';
-import { inside, installed, opening, preferred, EDITORS, type Installed, type Launch as Opened } from './files.ts';
+import { inside, installed, picture, opening, preferred, EDITORS, type Installed, type Launch as Opened } from './files.ts';
 import { GitHub } from './github.ts';
 import { Imports } from './imports.ts';
 import { reason } from './pi.ts';
@@ -64,7 +64,8 @@ const LOOPBACK = ['localhost', '127.0.0.1', '[::1]'];
 const loopback = (url: string) => { try { return LOOPBACK.includes(new URL(url).hostname); } catch { return false; } };
 
 /** Starts the app's server on this machine only: the protocol of `protocol.ts` on a WebSocket at `/ws`, a profile's images at
- * `/images/<profile>/<name>`, and the UI's page everywhere else. `close` stops every Pi it started and waits for them. */
+ * `/images/<profile>/<name>`, a picture on this machine a reply shows at `/file?path=<path>&token=<token>` (`picture`), and the
+ * UI's page everywhere else. `close` stops every Pi it started and waits for them. */
 export async function startServer({ port = 0, origins = [], ui = join(import.meta.dirname, '../../dist/ui'), home = dataHome(), app = appHome(), cwd, pi, flags = [], npm, gh, opener, launcher, editors = () => installed(), update, histories, grace = 15_000, now = Date.now, token = randomBytes(32).toString('base64url') }: ServerOptions) {
   ui = resolve(ui);
   home = resolve(home); // Pi runs in each window's directory, and has to find the same profiles from there.
@@ -171,7 +172,14 @@ export async function startServer({ port = 0, origins = [], ui = join(import.met
     response.setHeader('content-security-policy', "default-src 'self'; img-src 'self' data:; font-src 'self' data:; style-src 'self' 'unsafe-inline'; frame-ancestors 'none'");
     try {
       if (request.method !== 'GET' || !allowed(request)) { response.writeHead(404).end(); return; }
-      const { pathname } = new URL(request.url ?? '/', 'http://localhost'), image = /^\/images\/([^/]+)\/([0-9a-f]{16})$/.exec(pathname);
+      const { pathname, searchParams } = new URL(request.url ?? '/', 'http://localhost'), image = /^\/images\/([^/]+)\/([0-9a-f]{16})$/.exec(pathname);
+      if (pathname === '/file') {
+        // Behind the socket's token: a file anywhere on this machine is for the page alone.
+        const shown = searchParams.get('token') === token ? picture(searchParams.get('path') ?? '') : undefined;
+        if (shown) response.writeHead(200, { 'content-type': shown.type, 'cache-control': 'no-store' }).end(shown.data);
+        else response.writeHead(404).end();
+        return;
+      }
       const found = image ? profiles.image(image[1], image[2]) : undefined, file = image ? undefined : page(pathname);
       if (found) response.writeHead(200, { 'content-type': found.mimeType, 'cache-control': 'private, max-age=31536000, immutable' }).end(found.data);
       else if (file) response.writeHead(200, { 'content-type': file.type, 'cache-control': file.cache }).end(file.data);

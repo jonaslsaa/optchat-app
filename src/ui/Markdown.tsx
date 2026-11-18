@@ -7,7 +7,7 @@ import { highlighter, painter, type Token } from './highlight.ts';
 import { splitMarkdownBlocks } from './markdownStreamBlocks.ts';
 import { dollars } from './math.ts';
 import { fileTarget } from './paths.ts';
-import { link, safe } from './safe.ts';
+import { link, pathOf, safe, shown } from './safe.ts';
 import { app } from './store.ts';
 import { csv } from './table.ts';
 import { closed, paced } from './transcript.ts';
@@ -94,12 +94,14 @@ function Code({ node: _, ...props }: ComponentProps<'code'> & { node?: unknown }
   const target = fileTarget(String(props.children)), code = <code {...props} />;
   return window && target && !linked ? <File window={window} {...target}>{code}</File> : code;
 }
-/** An image that is drawn, which only one of the profile's own is (`safe`), is shown large on a click; a link stays a link.
- * In a link it is the link's: drawn plain, or its words. */
+/** An image that is drawn, which only one the reply may draw is (`safe`), is shown large on a click; a link stays a link. In a
+ * link it is the link's: drawn plain, or its words. A picture on this machine that is no longer there, or never was one, says so. */
 function Image(props: ComponentProps<'img'> & ExtraProps) {
-  const drawn = safe.img(props), linked = useContext(InLink);
-  if (drawn.type !== 'img') return linked ? props.alt || String(props.src ?? '') : drawn;
-  return linked ? drawn : <Picture src={String(props.src)} alt={props.alt} />;
+  const at = shown(props.src), linked = useContext(InLink), [gone, setGone] = useState(false);
+  if (!at) return linked ? props.alt || String(props.src ?? '') : safe.img(props);
+  if (gone) return <span className="inline-block rounded-md border border-border px-2 py-0.5 text-muted-foreground text-xs">No image at {pathOf(String(props.src))}</span>;
+  const drawn = { src: at, alt: props.alt, className: 'max-h-[30rem]', onError: () => setGone(true) };
+  return linked ? <img {...drawn} title={props.title} /> : <Picture {...drawn} />;
 }
 const components: Components = {
   ...safe,

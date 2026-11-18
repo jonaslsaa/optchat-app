@@ -129,6 +129,13 @@ export const SKILLED: Said[][] = [[
   ['user', `<skill name="sol-loop" location="/home/.agents/skills/sol-loop/SKILL.md">\nReferences are relative to /home/.agents/skills/sol-loop.\n\n${LOOP}\n</skill>\n\nthe last commit, before I open the PR`],
   ['talk', 'Round 1 found two things: `stop()` never clears its timer, and the test reads the log before it is flushed. Both are fixed in `a1b2c3d`. Round 2 passed with nothing to add.'],
 ]];
+/** A reply that shows pictures: one on this machine by its absolute path (`chart`), one that is no longer there, and one on the
+ * web, which stays a link. */
+export const GONE = '/tmp/optchat-gone/last-week.png';
+export const PICTURED = (chart: string): Said[][] => [[
+  ['user', 'How did the cache do this week?'],
+  ['talk', `Here is the week as \`npm run usage\` drew it:\n\n![Cache share by day](${chart})\n\nLast week's chart was in /tmp and is gone: ![last week](${GONE})\n\nThe rates are on the pricing page: ![pricing](https://example.com/pricing.png)`],
+]];
 /** A reply that names files: two that are in the window's folder (`FILES`), and one that is not. */
 export const FILES = ['src/server/pi.ts', 'test/pi.test.ts'];
 export const NAMED: Said[][] = [[

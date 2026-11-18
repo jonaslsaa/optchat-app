@@ -32,7 +32,7 @@ Two servers on one machine share that folder. Each reads the settings when it st
 
 A fourth line in the page is the first profile. You name it there and `createProfile { name }` makes it, by pi-optchat's `createProfile` (from `pi-optchat/files`): pi-optchat says what a name may be, refuses one that is taken, and writes the profile's settings and instructions as it does in a terminal. The profile opens at once; it needs no Pi to be made. A name that will not do is refused under the field, in pi-optchat's words. Every later profile is made the same way, from New profile… ([ui.md](ui.md)). Until there is one, the setup is the first thing the page shows; after that it is part of the settings, and a notice at the top says when something is missing.
 
-The server looks once and keeps what it found: the page, an install and a window's Pi all read that one look. **Check again** looks afresh, and so does a prompt that finds no Pi, since you may have installed one in a terminal meanwhile.
+The server looks once and keeps what it found: the page, an install and a window's Pi all read that one look. **Check again** looks afresh, and so does a prompt that finds no Pi, since you may have installed one in a terminal meanwhile. After an install and on **Check again**, a chat whose Pi runs an older pi-optchat than is now installed is started again on the new one, or offered a Restart if it is at work ([server.md](server.md#windows)).
 
 ### What the app changes, and what it never does
 

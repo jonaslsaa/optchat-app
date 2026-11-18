@@ -787,6 +787,41 @@ async function pictures(browser: Browser, control: Client) {
     await bar.getByRole('button', { name: 'Resume the agents of notes' }).waitFor({ state: 'detached' });
     await shot(bar, '165-cut-off-resumed');
   } finally { await restarted.close(); }
+  // A newer pi-optchat was pulled into the checkout the Pi loads it from, while the app's Pis ran the one before: `notes` had
+  // nothing to do and an agent a restart cut off, `work` was in a run. Resume starts the Pi of `notes` again on the new one and
+  // then works; `work`'s is not stopped unasked, and once the setup is checked again a line offers to restart it.
+  const later = join(home, 'pulled'), checkout = join(later, 'pi', 'pi-optchat'), older = { command: join(later, 'pi', 'pi'), args: [] };
+  const pull = (version: string) => writeFileSync(join(checkout, 'package.json'), JSON.stringify({ name: 'pi-optchat', version }));
+  mkdirSync(checkout, { recursive: true });
+  pull('0.12.1');
+  writeFileSync(join(later, 'pi', 'state.json'), JSON.stringify({ version: '1.5.2', providers: ['anthropic'], packages: { [checkout]: checkout } }));
+  writeFileSync(older.command, `#!/bin/sh\nFAKE_PI_HOME="${join(later, 'pi')}" exec "${process.execPath}" "${fake}" "$@"\n`);
+  chmodSync(older.command, 0o755);
+  seed(createProfile(later, 'work'), TEAM.length, NOW, TEAM);
+  const notes = createProfile(later, 'notes');
+  seed(notes, 2, NOW);
+  writeRun(notes, { id: '9e1f2a3b', title: 'Tidy the release checklist', task: 'Tidy docs/release.md.', state: 'interrupted', started: NOW - 30_000, ended: NOW, cutOff: true, model: 'anthropic/claude-sonnet-5', report: 'Cut off when Pi closed.' });
+  const behind = await startServer({ home: later, app: join(later, 'app'), cwd: home, pi: older, now: () => NOW + 42_000 }), asked = await connect(behind.url);
+  try {
+    for (const [profile, text] of [['notes', 'hello'], ['work', 'wait for me']]) {
+      const { window } = await asked.request('open', { profile });
+      await asked.request('prompt', { window: window.id, text });
+    }
+    while ((await asked.request('windows', {})).windows.find(window => window.id === 'notes/main')?.status !== 'idle') await new Promise(resolve => setTimeout(resolve, 50));
+    pull('0.12.2');
+    const resume = await open(['work'], { at: behind.page, cutOff: true });
+    await resume.getByRole('button', { name: 'Resume the agents of notes' }).click();
+    await resume.getByRole('tab', { name: 'notes', selected: true }).waitFor();
+    await resume.getByRole('button', { name: 'Resume the agents of notes' }).waitFor({ state: 'detached' });
+    await resume.getByText('pi-optchat is too old for this app.').waitFor({ state: 'detached' }); // The setup looked again.
+    await shot(resume, '232-older-pi-resumed');
+    await asked.request('setup', { fresh: true }); // The setup's "Check again", as after a pull.
+    for (const [name, dark] of [['230-older-pi-at-work', false], ['231-older-pi-at-work-dark', true]] as const) {
+      const page = await open(['work'], { at: behind.page, dark });
+      await page.getByRole('button', { name: 'Restart the Pi of work' }).waitFor();
+      await shot(page, name);
+    }
+  } finally { asked.close(); await behind.close(); }
   // The Import page: its way in from the list of profiles, the sources found, the projects of two of them, a pick with what
   // the footer says of it (and its warnings), a filter, dark and narrow, a ChatGPT export given, and a profile with no messages,
   // which is not asked how they join. Then the import itself: running, the chat it takes, paused, and done.

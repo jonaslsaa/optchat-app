@@ -133,7 +133,7 @@ test('a Pi that dies in a run leaves its window stopped with the reason, and the
 function held(t: TestContext) {
   const pushes: Push[] = [], cwd = mkdtempSync(join(home, 'cwd-'));
   let looking = Promise.withResolvers<void>(), found = Promise.withResolvers<typeof fake>();
-  const windows = new Windows({ home, grace: 2000, cwd: () => cwd, push: push => pushes.push(push), catalog: async () => ({ models: [] }), pi: () => { looking.resolve(); return found.promise; } });
+  const windows = new Windows({ home, grace: 2000, cwd: () => cwd, push: push => pushes.push(push), catalog: async () => ({ models: [] }), optchat: async () => undefined, pi: () => { looking.resolve(); return found.promise; } });
   t.after(() => windows.shutdown());
   const statuses = (id: string) => pushes.flatMap(push => push.push === 'window' && push.window.id === id ? [push.window.status] : []).filter((status, k, all) => status !== all[k - 1]);
   return { windows, statuses, looking: () => looking.promise, find: () => found.resolve(fake), again: () => { looking = Promise.withResolvers(); found = Promise.withResolvers(); } };

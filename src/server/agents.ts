@@ -2,7 +2,8 @@ import { readFileSync, statSync } from 'node:fs';
 import { attachAgent, profileOwner, readRuns, resumeCutOff, type AttachedAgent, type RunInfo } from 'pi-optchat/files';
 import { working } from '../agent.ts';
 import type { Agent, Params, Result } from '../protocol.ts';
-import { profileDirectory } from './profiles.ts';
+import { hungUp, profileDirectory } from './profiles.ts';
+import { MINIMUM_OPTCHAT } from './setup.ts';
 
 type Message = Record<string, unknown>;
 const SHOWN = 30, KEPT = 20;
@@ -56,6 +57,9 @@ export class Agents {
     return count > 0 && await this.owned(profile) ? count : 0;
   }
 
+  /** Whether any of the profile's agents has not ended, by its record: one that is paused too, which stopping its Pi would cut off. */
+  atWork(profile: string) { return this.runs(profile).some(working); }
+
   async list({ profile, limit = SHOWN }: Params<'agents'>): Promise<Result<'agents'>> {
     const runs = this.runs(profile).sort((a, b) => b.started - a.started);
     // A run saved as working is at work only if a Pi has the profile open, the app's or one in a terminal: a Pi that died
@@ -87,7 +91,7 @@ export class Agents {
     return own.filter(run => run.cutOff || !owned && left(run)).map(({ id, started }) => ({ id, started }));
   }
   /** Has the Pi that has the profile open resume its cut-off agents. */
-  async resume(profile: string) { await resumeCutOff(profileDirectory(this.home, profile)); }
+  async resume(profile: string) { await resumeCutOff(profileDirectory(this.home, profile)).catch(hungUp(MINIMUM_OPTCHAT)); }
 
   /** One of the profile's agents, in the Pi that has the profile open: only that Pi reaches its agents, and pi-optchat's
    * `attachAgent` asks it. The app's own Pi or one in a terminal alike, and nothing is kept open: an agent is read from its files. */

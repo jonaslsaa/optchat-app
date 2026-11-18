@@ -75,10 +75,15 @@ export async function startServer({ port = 0, origins = [], ui = join(import.met
   const send = (socket: WebSocket, message: ServerMessage) => { if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify(message)); };
   const push = (push: Push) => { for (const socket of sockets.clients) send(socket, push); };
   let settings = readSettings(app), updating: Updating | undefined;
-  const setup = new Setup({ app, cwd, pi, npm, opener, push: setup => push({ push: 'setup', setup }) });
+  const setup = new Setup({ app, cwd, pi, npm, opener, push: setup => push({ push: 'setup', setup }), installed: () => void everywhere() });
   // A window runs in the folder the settings name, unless that folder is gone since it was kept.
-  const windows = new Windows({ home, grace, push, cwd: () => settings.cwd && isDirectory(settings.cwd) ? settings.cwd : cwd, pi: async () => { const { command, args } = await setup.launch(); return { command, args: [...args, ...flags] }; }, catalog: () => setup.catalog() });
+  const windows = new Windows({ home, grace, push, cwd: () => settings.cwd && isDirectory(settings.cwd) ? settings.cwd : cwd, pi: async () => { const { command, args } = await setup.launch(); return { command, args: [...args, ...flags] }; }, optchat: () => setup.optchatVersion(), catalog: () => setup.catalog() });
   const imports = new Imports({ home, histories, app, owned: profile => windows.owned(profile) });
+  // A Pi of the app's on a pi-optchat older than the one installed now is started again while nothing is at work in its
+  // profile (`Windows.current`): before what an older one may not know (resuming agents, a change of settings), and once
+  // pi-optchat may have changed (an install here, the setup's "Check again" after a pull in a checkout).
+  const current = (profile: string) => windows.current(profile, async () => !agents.atWork(profile) && (await imports.status({ profile }).catch(() => undefined))?.state !== 'running');
+  const everywhere = () => Promise.all(windows.list().windows.filter(window => window.role === 'main').map(({ profile }) => current(profile).catch(() => {})));
   // The folder the files a window's chat names are read from: where its Pi runs, which for a main chat a Pi outside the app
   // holds is that Pi's, and none when that Pi is on another machine or does not say.
   const folder = (id: string) => {
@@ -107,13 +112,14 @@ export async function startServer({ port = 0, origins = [], ui = join(import.met
       const found = editors();
       return { editors: [...found.keys()].map(id => ({ id, label: EDITORS[id].label })), current: preferred(found, settings.editor) };
     },
-    config: params => profiles.config(params), configure: params => profiles.configure(params), instruct: params => profiles.instruct(params),
+    config: params => profiles.config(params), configure: async params => { await current(params.profile); return profiles.configure(params); }, instruct: params => profiles.instruct(params),
     // An agent is reached through the Pi that has its profile open, and a message to one is worth starting that Pi for.
     tellAgent: async params => { await windows.owned(params.profile); return agents.tell(params); },
     interruptAgent: params => agents.interrupt(params), stopAgent: params => agents.stop(params),
     cutOff: async () => ({ profiles: (await Promise.all(profiles.list().profiles.map(async ({ name }) => ({ profile: name, agents: await agents.cutOff(name) })))).filter(cut => cut.agents.length) }),
     // As a message to an agent is, resuming them is worth starting the Pi that reaches them.
-    resumeAgents: async ({ profile }) => { await windows.owned(profile); await agents.resume(profile); return {}; },
+    resumeAgents: async ({ profile }) => { await windows.owned(profile); await current(profile); await agents.resume(profile); return {}; },
+    restart: async ({ profile }) => { await windows.restart(profile); return {}; },
     profiles: () => profiles.list(), createProfile: params => profiles.create(params), history: params => profiles.history(params), view: params => profiles.view(params), zoom: params => profiles.zoom(params), original: params => profiles.original(params), search: params => profiles.search(params),
     windows: () => windows.list(), open: params => windows.open(params), prompt: params => windows.prompt(params), dequeue: params => windows.dequeue(params), abort: params => windows.abort(params),
     complete: params => windows.complete(params), close: params => windows.close(params), records: params => windows.records(params),
@@ -125,7 +131,7 @@ export async function startServer({ port = 0, origins = [], ui = join(import.met
     updateNow: () => { if (!update || !updating) throw new Error('This app does not update itself.'); update(); return {}; },
     settings: () => settings,
     setSettings: params => { settings = writeSettings(app, settings, params); push({ push: 'settings', settings }); return settings; },
-    setup: params => setup.state(params), install: async params => { await setup.install(params); return {}; },
+    setup: async params => { const state = await setup.state(params); if (params.fresh) await everywhere(); return state; }, install: async params => { await setup.install(params); return {}; },
     signIn: async params => { await setup.signIn(params); return {}; }, signedIn: params => setup.signedIn(params),
   };
   const isMethod = (method: string): method is Method => Object.hasOwn(handlers, method);

@@ -7,7 +7,7 @@ import { canComplete } from '../window.ts';
 import { chosen, offered } from './models.ts';
 import { Pi, reason } from './pi.ts';
 import { profileDirectory } from './profiles.ts';
-import { MINIMUM_OPTCHAT } from './setup.ts';
+import { MINIMUM_OPTCHAT, older } from './setup.ts';
 
 export interface WindowsOptions {
   home: string;
@@ -15,6 +15,8 @@ export interface WindowsOptions {
   cwd(): string;
   /** The Pi to run, and arguments to give it before `--optchat-profile <name> --mode rpc`. It fails when there is none. */
   pi(): Promise<{ command: string; args: readonly string[] }>;
+  /** The version of pi-optchat a Pi started now loads, where that is known. */
+  optchat(): Promise<string | undefined>;
   /** The models Pi can use and what it runs on by itself, for a window that has no Pi to ask. */
   catalog(): Promise<Result<'models'>>;
   /** How long a Pi asked to stop may take before it is killed, in milliseconds. */
@@ -23,6 +25,10 @@ export interface WindowsOptions {
 }
 interface Opened {
   state: WindowState; pi?: Pi; starting?: Promise<Pi>;
+  /** The version of pi-optchat its Pi loaded as it started: it keeps that code until it stops, whatever is installed since. */
+  optchat?: string;
+  /** Its Pi is being started again (`restart`). */
+  restarting?: Promise<void>;
   /** What Pi wrote since the latest run began, less the streaming updates a later record made redundant. */
   records: { seq: number; record: PiRecord }[];
   /** The number of the last record that is no longer kept. */
@@ -134,7 +140,9 @@ export class Windows {
     return answered('get_commands', methods.commands.result, await (await this.started(this.get(window))).request({ type: 'get_commands' }));
   }
   async models({ window }: Params<'models'>): Promise<Result<'models'>> {
-    const { pi } = this.get(window);
+    const opened = this.get(window);
+    await opened.restarting?.catch(() => {}); // Asked of the Pi it is started again as, not of the one that is stopping.
+    const { pi } = opened;
     return pi ? { models: await offered(pi) } : this.options.catalog();
   }
   async setModel({ window, model }: Params<'setModel'>): Promise<Result<'setModel'>> {
@@ -163,6 +171,25 @@ export class Windows {
     const main = this.window(profile);
     await this.look(main);
     if (!main.state.outside) await this.started(main);
+  }
+  /** Starts the profile's main chat's Pi again, so that it runs the pi-optchat installed now. What it was doing stops, as it
+   * does when the app quits: the chat is in the profile's memory, and the new Pi reads it from there. */
+  restart(profile: string) {
+    const main = this.window(profile);
+    if (main.state.outside) throw new Error('This chat is running outside the app: start that Pi again where it runs.');
+    return main.restarting ??= (async () => { await this.stop(main); await this.owned(profile); })().finally(() => { main.restarting = undefined; });
+  }
+  /** Keeps the app's Pi on a profile on the pi-optchat that is installed. One that loaded an older one is started again if it
+   * has nothing to do: no window of the profile is in a run or starting, and `idle` says nothing else is at work in it (its
+   * agents, an import). A Pi at work is never stopped unasked: it is marked `stale`, and the page offers to start it again. */
+  async current(profile: string, idle: () => Promise<boolean>) {
+    const main = this.windows.get(mainId(profile));
+    if (main?.restarting) return main.restarting;
+    const loaded = main?.pi && !main.starting ? main.optchat : undefined, installed = loaded && await this.options.optchat();
+    if (!main || !loaded || !installed || !older(loaded, installed)) return;
+    const busy = [...this.windows.values()].some(({ state }) => state.profile === profile && (state.status === 'running' || state.status === 'starting'));
+    if (!busy && await idle()) return this.restart(profile);
+    if (main.state.stale !== installed) { main.state.stale = installed; this.changed(main); }
   }
   /** Stops every Pi and starts no more. Connected windows go first: each hands its conversation to the profile's owner as it
    * leaves, so the owner has to be there still. */
@@ -239,7 +266,7 @@ export class Windows {
     closed();
     if (joins && !main.state.outside) await this.started(main, () => !gone()).catch(error => { closed(); throw error; });
     if (!joins && state.outside) throw new Error('This chat is running outside the app.');
-    const { command, args } = await this.options.pi();
+    const [{ command, args }, optchat] = await Promise.all([this.options.pi(), this.options.optchat()]);
     closed();
     Object.assign(opened, { records: [], dropped: state.seq, fault: undefined });
     opened.ui.clear();
@@ -248,7 +275,7 @@ export class Windows {
     // the owner. Should a Pi outside the app take the profile just now, it fails with who that is, and never joins it unasked.
     const pi: Pi = new Pi({ command, args: [...args, '--append-system-prompt', PROMPT, '--optchat-profile', state.profile, '--optchat-connect', joins ? 'join' : 'off'], cwd: state.cwd, env: { ...process.env, OPTCHAT_HOME: home } },
       record => this.record(opened, record), error => this.exited(opened, pi, error));
-    opened.pi = pi;
+    Object.assign(opened, { pi, optchat });
     try {
       // Pi answers once its extensions have started the session, so by now pi-optchat has the profile or has said why not.
       // Without its profile it takes every prompt and answers nothing, so such a Pi is stopped, not left looking idle.
@@ -288,7 +315,7 @@ export class Windows {
     if (opened.pi !== pi) return;
     const { state } = opened, why = state.status === 'starting' ? opened.fault ?? error : error;
     opened.pi = undefined; opened.ui.clear();
-    state.status = 'stopped'; delete state.completed;
+    state.status = 'stopped'; delete state.completed; delete state.stale;
     if (why) state.error = why;
     this.changed(opened);
   }

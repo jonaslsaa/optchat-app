@@ -57,13 +57,15 @@ export type Offered = Static<typeof Offered>;
  * record the window pushed. `cwd` is where its Pi runs, set when the window is first opened.
  * `model` is what its agent runs on: its Pi's own word once that runs. Before, it is the model you picked for the window,
  * which its Pi is given as it starts, or for the main chat the one it was last on, which pi-optchat keeps in the profile and
- * starts it on. With neither it is absent: the window starts on Pi's default, which `models` tells. */
+ * starts it on. With neither it is absent: the window starts on Pi's default, which `models` tells.
+ * `stale`, on a main window: its Pi still runs the pi-optchat it started on, older than the one installed since (this version),
+ * and was at work when the server looked, so it was not started again unasked (`restart`). */
 export const WindowState = Type.Object({
   id: Type.String(), profile: Type.String(), role: Type.Enum(['main', 'connected']), cwd: Type.String(),
   status: Type.Enum(['stopped', 'starting', 'idle', 'running', 'closed']), seq: id,
   completed: Type.Optional(Type.Boolean()), since: Type.Optional(Type.Number()), error: Type.Optional(Type.String()),
   outside: Type.Optional(Type.Union([Type.Object({ pid: Type.Integer(), host: Type.String(), cwd: Type.String() }), Type.Literal('unknown')])),
-  model: Type.Optional(ModelChoice),
+  model: Type.Optional(ModelChoice), stale: Type.Optional(Type.String()),
 });
 export type WindowState = Static<typeof WindowState>;
 
@@ -269,6 +271,8 @@ export const methods = {
    * open, which is started first if none has (pi-optchat's `resumeCutOff`). Their agents go on through them, and the main agent
    * is told once. An RPC Pi resumes none by itself: resuming spends tokens, so the app asks you first. */
   resumeAgents: method(Type.Object({ profile: Type.String() }), none),
+  /** Starts the Pi of a profile's main chat again, the app's own, on the pi-optchat installed now: what it was doing stops. */
+  restart: method(Type.Object({ profile: Type.String() }), none),
 
   /** The issues and pull requests the profile's main chat named by their address on github.com, with what GitHub says of
    * them: the latest named first, `limit` of them (30 unless said), and `more` for how many that leaves

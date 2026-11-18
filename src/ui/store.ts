@@ -254,6 +254,8 @@ export class App {
     await Promise.all([this.openProfile(profile), this.ask('resumeAgents', { profile })]);
     await this.findCutOff();
   }
+  /** Starts the Pi of a profile's main chat again, on the pi-optchat installed now. */
+  async restartPi(profile: string) { await this.ask('restart', { profile }); }
   /** Takes a profile's line off the bar until an agent of it that started later is cut off. Its agents are still in its list. */
   dismissCutOff(profile: string) {
     const latest = Math.max(...this.state.cutOff.find(cut => cut.profile === profile)?.agents.map(agent => agent.started) ?? []);

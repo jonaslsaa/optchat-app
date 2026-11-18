@@ -7,11 +7,13 @@ import { previewImport, profileSocket, readImport, readRuns, removeStaleSocket, 
 // How pi-optchat's Pi checks and writes a change of settings: not among its exports yet, so from where it is built.
 import { checkPatch, patchConfigFile } from '../node_modules/pi-optchat/dist/profiles.js';
 import { working } from '../src/agent.ts';
+import { older } from '../src/server/setup.ts';
 
 /** A Pi that owns a profile, as far as the app asks it things: pi-optchat's socket in the profile's folder, answering `attach`,
  * `say`, `interrupt`, `stop` and `resume`, and `resume-cut-off`, as pi-optchat does (its window-bridge.ts), by changing the agent's record on disk and
- * refusing in pi-optchat's words, `configure` by changing the profile's settings, and `import-*` by writing an import's files as pi-optchat does. No agent runs. It is the fake Pi's (`fake-pi.ts`), and lasts as long as its process. */
-export async function fakeOwner(directory: string, clock: () => number) {
+ * refusing in pi-optchat's words, `configure` by changing the profile's settings, and `import-*` by writing an import's files as pi-optchat does. No agent runs. It is the fake Pi's (`fake-pi.ts`), and lasts as long as its process.
+ * `optchat` is the version of pi-optchat it stands for: one before 0.12.2 does not know `resume-cut-off`, and hangs up on it. */
+export async function fakeOwner(directory: string, clock: () => number, optchat = '0.12.2') {
   const path = profileSocket(directory, 'windows');
   const run = (id: string) => readRuns(directory).find(run => run.id === id);
   const save = (run: RunInfo) => writeFileSync(join(directory, 'runs', `${run.id}.optchat.json`), JSON.stringify(run));
@@ -69,6 +71,7 @@ export async function fakeOwner(directory: string, clock: () => number) {
     const send = wire(socket, async frame => {
       if (frame.kind !== 'request') return;
       const { action, text = '' } = frame;
+      if (action === 'resume-cut-off' && older(optchat, '0.12.2')) { socket.destroy(); return; }
       try {
         // An import's step, answered with how the import stands then, as pi-optchat's own Pi answers it.
         if (importing[action]) { await importing[action](text); send({ kind: 'reply', id: frame.id, text: JSON.stringify(await readImport(directory)) }); return; }

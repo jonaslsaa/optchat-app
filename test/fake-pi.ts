@@ -23,6 +23,7 @@ import { clamp, levels, type Thinking } from '../src/models.ts';
  *   `bare` is a Pi without pi-optchat, `old` one whose pi-optchat is from before 0.11.9 and names no role, and in `noisy`
  *   another extension fails. `slow` starts only once the file `go` is in FAKE_PI_HOME. `importing` has an import that was paused: pi-optchat takes no message for it, says why
  *   (`notify`) and answers the prompt as `handled`, as it answers a command it ran.
+ * - Its owner stands for the pi-optchat FAKE_PI_HOME has installed as it starts (`fake-owner.ts`), and keeps it while it runs.
  * - It runs on a model, as Pi does: the one the profile keeps as its main chat's when it owns the profile, else the first it
  *   lists. `set_model` and `set_thinking_level` change it, and an owner keeps the pick in the profile, as pi-optchat does.
  * - It writes nowhere but in its profile and FAKE_PI_HOME, and in the file FAKE_PI_STOPPED names, where each one with a
@@ -287,7 +288,10 @@ if (profile === 'busy') {
 const directory = join(process.env.OPTCHAT_HOME ?? '.', 'profiles', profile);
 if (!joins && !['busy', 'bare'].includes(profile) && existsSync(directory)) {
   await lockProfile(directory, describeOwner({ profile, pid: process.pid, host: hostname(), cwd: process.cwd() }));
-  await fakeOwner(directory, () => script.clock ?? Date.now());
+  // The pi-optchat it loaded as it started, which it keeps whatever is installed later.
+  const optchat = Object.values(installed.packages).flatMap((path): { name?: string; version?: string }[] => { try { return [JSON.parse(readFileSync(join(path, 'package.json'), 'utf8'))]; } catch { return []; } })
+    .find(read => read.name === 'pi-optchat')?.version;
+  await fakeOwner(directory, () => script.clock ?? Date.now(), optchat);
 }
 let buffer = '';
 // `slow` takes its time to start: it reads nothing it is sent until the file `go` is in FAKE_PI_HOME.

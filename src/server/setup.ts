@@ -32,6 +32,8 @@ export interface SetupOptions {
   /** What opens a file in a terminal of its own, for Pi's sign-in (`terminal()`). Without it the app opens none. */
   opener?: Launch;
   push: (setup: State) => void;
+  /** Called once an install or update has put what it was for in place. */
+  installed?: () => void;
 }
 
 /** A Pi that runs. `managed`: it is the one the app installed, so the app's to update. `listed`: it was found on your PATH. */
@@ -41,9 +43,14 @@ interface Checked { found?: Found; state: Omit<State, 'job'> }
 /** How much of what an install printed is kept to explain its failure, and how much of one line. */
 const TAIL = 4000, LINE = 1000;
 /** Whether a version is before another, by its three numbers: a pre-release counts as its release. */
-const older = (version: string, than: string) => {
+export const older = (version: string, than: string) => {
   const [a, b] = [version, than].map(v => /(\d+)\.(\d+)\.(\d+)/.exec(v)?.slice(1).map(Number) ?? [0, 0, 0]);
   return a[0] !== b[0] ? a[0] < b[0] : a[1] !== b[1] ? a[1] < b[1] : a[2] < b[2];
+};
+const Manifest = Type.Object({ name: Type.Literal('pi-optchat'), version: Type.String() });
+/** pi-optchat's `package.json` in `path`, if that is where it is. */
+const manifest = (path: string) => {
+  try { const read: unknown = JSON.parse(readFileSync(join(path, 'package.json'), 'utf8')); return Value.Check(Manifest, read) ? read : undefined; } catch { return undefined; }
 };
 const same = (a: string, b: string) => { try { return realpathSync(a) === realpathSync(b); } catch { return false; } };
 const runs = (file: string) => { try { accessSync(file, constants.X_OK); return statSync(file).isFile(); } catch { return false; } };
@@ -88,15 +95,15 @@ function run({ command, args }: Launch, more: readonly string[], { cwd, timeout,
 export const terminal = (): Launch | undefined => process.platform === 'darwin' ? { command: '/usr/bin/open', args: [] } : undefined;
 
 export class Setup {
-  private readonly options: Required<Omit<SetupOptions, 'opener'>> & Pick<SetupOptions, 'opener'>;
+  private readonly options: Required<Omit<SetupOptions, 'opener' | 'installed'>> & Pick<SetupOptions, 'opener' | 'installed'>;
   /** The Pi the app installed, if it has. */
   private readonly managed: Launch;
   private checked?: Promise<Checked>;
   private job?: State['job'];
   private pushing?: ReturnType<typeof setTimeout>;
   private readonly closing = new AbortController();
-  constructor({ app, cwd, push, opener, pi = { command: 'pi', args: [] }, npm = { command: 'npm', args: [] } }: SetupOptions) {
-    this.options = { app, cwd, push, pi, npm, opener };
+  constructor({ app, cwd, push, opener, installed, pi = { command: 'pi', args: [] }, npm = { command: 'npm', args: [] } }: SetupOptions) {
+    this.options = { app, cwd, push, pi, npm, opener, installed };
     this.managed = { command: join(app, 'pi', 'node_modules', '.bin', 'pi'), args: [] };
   }
   /** The Pi a window runs: yours if you have one, else the one the app installed. */
@@ -106,6 +113,14 @@ export class Setup {
     if (!found) { ({ found } = await this.look(true)); void this.push(); }
     if (!found) throw new Error('Pi is not installed. Open the settings to install it.');
     return found;
+  }
+  /** The version of pi-optchat a Pi started now loads: read from its folder as it is now, since a pull in a checkout changes it
+   * with nothing to say so. Which folder that is, is as last checked; a version other than the one found then is a reason to
+   * look again, and the page hears of what that finds. */
+  async optchatVersion() {
+    const { path, version: found } = (await this.look()).state.optchat, version = path === undefined ? undefined : manifest(path)?.version;
+    if (version !== found) void this.look(true).then(() => this.push()).catch(() => {});
+    return version;
   }
   /** What is there, as last checked; `fresh` checks again. */
   async state({ fresh = false }: Params<'setup'> = {}): Promise<State> {
@@ -146,6 +161,7 @@ export class Setup {
       line: (missing ? `${launch.command} was not found on this machine.` : code === 0 ? `${name} ran to its end, but what it was to install is not there.` : `${name} ended with code ${code}: ${failed ?? last}`).slice(0, 300),
     };
     void this.push();
+    if (this.job.state === 'done') this.options.installed?.();
   }
   /** Opens a terminal of your own in which Pi signs you in to `provider`: `pi auth login`, which needs a terminal, and opens
    * your browser itself. The line is written to a file in the app's folder and that file is opened. Nothing from the page is
@@ -233,10 +249,8 @@ export class Setup {
     const lines = output.split('\n').map(line => line.trim());
     for (const [at, path] of lines.entries()) {
       if (!isAbsolute(path)) continue;
-      let manifest: unknown;
-      try { manifest = JSON.parse(readFileSync(join(path, 'package.json'), 'utf8')); } catch { continue; }
-      if (!Value.Check(Type.Object({ name: Type.Literal('pi-optchat'), version: Type.String() }), manifest)) continue;
-      const { version } = manifest;
+      const version = manifest(path)?.version;
+      if (version === undefined) continue;
       if (!older(version, MINIMUM_OPTCHAT)) return { state: 'ok', version, path };
       return { state: 'old', version, path, ...lines[at - 1] === OPTCHAT
         ? { installable: true, message: `Older than ${MINIMUM_OPTCHAT}, which this app needs. Update it here, or in a terminal:`, command: shown(named, ['update', OPTCHAT]) }

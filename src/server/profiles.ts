@@ -44,6 +44,14 @@ export function pair(memory: Memory, id: number): [call: number, result: number]
   return call !== undefined && memory.text(result).startsWith(`${memory.text(call).split(' ', 1)[0]}:`) ? [call, result] : undefined;
 }
 
+/** For a request to the Pi that has a profile open, which a pi-optchat from before `since` does not know: it hangs up on it,
+ * which pi-optchat can only call a lost connection, so what to do about it is said with it. The app starts its own Pi again
+ * on a newer pi-optchat by itself (`Windows.current`); this is for one in a terminal, and one that was at work. */
+export const hungUp = (since: string) => (error: unknown): never => {
+  if (error instanceof Error && error.message === 'Connection to the original Pi window was lost') throw new Error(`${error.message}. If the Pi that has this profile open runs a pi-optchat older than ${since}, update it (pi update npm:pi-optchat, or a pull in its checkout) and start that Pi again.`, { cause: error });
+  throw error;
+};
+
 /** Profiles as they are on disk, read through `pi-optchat/files`, which is all the app knows of pi-optchat's files. No Pi process
  * is needed to read one, and one that is running is not disturbed: it stays the only writer of its memory, and the app
  * summarizes nothing, so a node Pi has not built yet stays unbuilt. A profile's settings and instructions are changed here,
@@ -64,14 +72,9 @@ export class Profiles {
     return { settings, compactor: config.compactor, standard: defaults.compactor, subagent: config.subagent, instructions: readInstructions(directory) };
   }
   /** Changes one thing of them. pi-optchat checks what the page sent (its `checkPatch`) and refuses in its own words; the Pi
-   * that has the profile open applies the change at once, and with none pi-optchat writes the file under the profile's lock.
-   * A Pi whose pi-optchat is from before 0.11.12 does not know the request and hangs up on it, which pi-optchat can only call
-   * a lost connection: what to do about it is said with it. */
+   * that has the profile open applies the change at once, and with none pi-optchat writes the file under the profile's lock. */
   async configure({ profile, key, value }: Params<'configure'>): Promise<Result<'configure'>> {
-    await updateConfig(profileDirectory(this.home, profile), { [key]: value }).catch((error: unknown) => {
-      if (error instanceof Error && error.message === 'Connection to the original Pi window was lost') throw new Error(`${error.message}. If the Pi that has this profile open runs a pi-optchat older than 0.11.12, update it there (pi update npm:pi-optchat) and start that Pi again.`, { cause: error });
-      throw error;
-    });
+    await updateConfig(profileDirectory(this.home, profile), { [key]: value }).catch(hungUp('0.11.12'));
     return this.config({ profile });
   }
   /** Keeps the profile's instructions, as pi-optchat writes them: whole, beside the old file and then in its place. */

@@ -6,7 +6,7 @@ import { busy, polled } from './agents.ts';
 import { AtWork, useAgents } from './Agents.tsx';
 import type { Cite, Place } from './cite.ts';
 import { Composer } from './Composer.tsx';
-import { CutOff } from './CutOff.tsx';
+import { CutOff, Stale } from './CutOff.tsx';
 import type { MenuAction } from '../menu.ts';
 import { label, useMenu, useOverlay, useShortcuts } from './keys.ts';
 import { InWindow } from './Markdown.tsx';
@@ -197,6 +197,7 @@ export function App() {
         </p>
       )}
       <CutOff state={state} />
+      <Stale state={state} />
       {needs && !settings && state.profile && (
         <p role="status" className="notice enter flex shrink-0 items-center justify-center gap-2 bg-warning-surface px-4 py-1.5 text-warning-foreground text-xs">
           {needs}.<button type="button" onClick={() => setPage('settings')} className="rounded-sm font-medium underline underline-offset-2">Set up</button>

@@ -123,6 +123,15 @@ export const FORMULAS: Said[][] = [[
   ['user', 'How much does the cache save us, roughly?'],
   ['talk', 'A cached read costs a tenth of new input, so with a cache share $c$ the input bill is\n\n$$\n\\text{cost} = (1 - c) + \\frac{c}{10}\n$$\n\nof what it was. At $c = 0.92$ that is about $0.17$ of it: last week\'s $57.89 would have been about $340 without it.\n\n| Role | Cost | Cache read |\n| --- | ---: | ---: |\n| Main chat | $36.41 | 92% |\n| Subagents | $19.45 | 88% |\n| Compactor | $2.02 | 71% |'],
 ]];
+/** A reply whose work has a call that failed, as one often harmlessly does: a `grep` that found nothing, then the run it was after. */
+export const FAILED: Said[][] = [[
+  ['user', 'Is any test slow?'],
+  ['tool', 'bash {"command":"npm test | grep slow"}'],
+  ['echo', 'bash: \nCommand exited with code 1'],
+  ['tool', 'bash {"command":"npm test"}'],
+  ['echo', 'bash: ℹ tests 18\nℹ pass 18\nℹ fail 0\nℹ duration_ms 2212.4'],
+  ['talk', 'None: all 18 pass in 2.2 s.'],
+]];
 /** A message that runs a skill, as Pi sends `/skill:sol-loop …`: the skill's file, and what was typed under it. */
 const LOOP = '# Sol loop\n\nReview the change with a GPT Sol subagent, fix what it finds, and review again until it finds nothing.\n\n## Steps\n\n1. Diff the branch against `main`.\n2. Spawn the reviewer with the diff and the repository\'s AGENTS.md.\n3. Fix every finding that is real; say why for the rest.\n4. Repeat until the reviewer passes it.';
 export const SKILLED: Said[][] = [[

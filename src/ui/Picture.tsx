@@ -47,7 +47,9 @@ function Viewer({ pictures, at: first, opener, onClose }: Gallery & { opener: Re
   };
   const nav = 'absolute top-1/2 z-20 size-10 -translate-y-1/2 rounded-full border-transparent text-white/90 hover:bg-white/10 hover:text-white focus-visible:ring-white';
   return createPortal(
-    <dialog ref={box} tabIndex={-1} aria-label="The image, large" onKeyDown={keys} onClose={() => { onClose(); opener.current?.focus({ preventScroll: true }); }}
+    // A portal's events go up through the page's parts around the picture as React has them: a click in it is no click on the
+    // tool call it was opened from, which would fold shut.
+    <dialog ref={box} tabIndex={-1} aria-label="The image, large" onKeyDown={keys} onClick={event => event.stopPropagation()} onClose={() => { onClose(); opener.current?.focus({ preventScroll: true }); }}
       // Beside the picture is the dialog itself; a drag that moves a zoomed picture starts on the picture, and is no press beside it.
       onPointerDown={event => { if (event.target === event.currentTarget) { event.preventDefault(); box.current?.close(); } }}
       className="enter fixed inset-0 m-0 flex size-full max-h-none max-w-none items-center justify-center bg-black/85 p-6 outline-none backdrop:bg-transparent">

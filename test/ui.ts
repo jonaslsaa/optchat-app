@@ -932,6 +932,12 @@ test('a tool call that returned a picture shows it small under its line, from th
   await page.keyboard.press('Escape');
   await page.getByRole('dialog', { name: 'The image, large' }).waitFor({ state: 'detached' });
   assert.equal(await focused(page), 'Show the image large: What the tool returned');
+  // A click in it, on the picture or its ×, does not fold the call it was opened from.
+  await picture.click();
+  await page.getByRole('dialog', { name: 'The image, large' }).locator('img').click();
+  await page.getByRole('button', { name: 'Close the image' }).click();
+  await page.getByRole('dialog', { name: 'The image, large' }).waitFor({ state: 'detached' });
+  assert.equal(await read.getAttribute('aria-expanded'), 'true', 'A click in the picture shown large folded its tool call.');
   // A press beside it puts it away too, though the call's details keep a press to themselves.
   await picture.click();
   await page.getByRole('dialog', { name: 'The image, large' }).waitFor();

@@ -56,8 +56,8 @@ function Profile({ state, profile, onSettings, onUsage, onNewProfile, onImport, 
   const [remembering, setMemory] = useState(false), toChat = useCallback(() => setMemory(false), []);
   const windows = state.windows.filter(window => window.profile === profile);
   const window = windows.find(w => w.id === state.selected[profile]) ?? windows.find(w => w.id === mainOf(profile));
-  // ⌥ and a digit pick the rows the sidebar shows, in its order.
-  const ids = shelved(windows, state.shelves, window?.id ?? '').rows.map(window => window.id).join(' ');
+  // What the sidebar shows, and in its order what ⌥ and a digit pick.
+  const list = shelved(windows, state.shelves, window?.id ?? ''), ids = list.rows.map(window => window.id).join(' ');
   const live = (window && state.live[window.id]) ?? NOTHING, log = state.logs[profile], session = window && state.sessions[window.id];
   // The main chat is the profile's log. A connected window's conversation is only in its Pi until it is handed off.
   const own = window?.role === 'connected', memory = remembering && !own;
@@ -106,7 +106,7 @@ function Profile({ state, profile, onSettings, onUsage, onNewProfile, onImport, 
   // A file the chat names is looked for in the folder this window runs in (the panel and the memory view are the main chat's).
   return (
     <InWindow value={window.id}><div className="flex min-h-0 flex-1">
-      {sidebar && <div ref={drawer} className="max-md:enter max-md:enter-from-left max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:z-40 max-md:shadow-xl"><Sidebar state={state} profile={profile} selected={window.id} onPick={() => setOver(false)} /></div>}
+      {sidebar && <div ref={drawer} className="max-md:enter max-md:enter-from-left max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:z-40 max-md:shadow-xl"><Sidebar state={state} profile={profile} list={list} selected={window.id} onPick={() => setOver(false)} /></div>}
       {sidebar && <button type="button" aria-label="Close the sidebar" onClick={() => setOver(false)} className="enter fixed inset-0 z-30 bg-black/20 md:hidden dark:bg-black/60" />}
       {/* The keys in this column are the chat's, or the memory view's while that stands in its place (keys.ts): its top row
           too, where the focus is right after the memory view is chosen. */}

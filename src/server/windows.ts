@@ -107,7 +107,7 @@ export class Windows {
     // the time it arrives, and a run that began meanwhile (a subagent's report) cannot make it fail.
     const send = () => pi.request({ type: 'prompt', message: text, ...images?.length && { images }, streamingBehavior: whenBusy });
     // pi-optchat's command, typed as a message, is Complete all the same.
-    return answered('prompt', methods.prompt.result, await (text.trim() === '/complete' ? this.handingOff(opened, send) : send()));
+    return answered('prompt', methods.prompt.result, await (text.trim() === '/complete' ? this.handingOff(opened, send, { disposition: 'handled' }) : send()));
   }
   async dequeue({ window }: Params<'dequeue'>): Promise<Result<'dequeue'>> {
     return answered('clear_queue', methods.dequeue.result, await this.running(window).request({ type: 'clear_queue' }));
@@ -121,8 +121,7 @@ export class Windows {
     const opened = this.get(window);
     if (opened.state.completing) return {}; // Asked again: the one under way answers for both.
     if (!canComplete(opened.state)) throw new Error('Complete hands a connected conversation to the main chat. This window has none to hand off.');
-    // One closed while it waited fails for that, which says nothing new.
-    await this.handingOff(opened, () => this.running(window).request({ type: 'prompt', message: '/complete' })).catch((error: unknown) => { if (!opened.closed) throw error; });
+    await this.handingOff(opened, () => this.running(window).request({ type: 'prompt', message: '/complete' }), undefined);
     return {};
   }
   async close({ window }: Params<'close'>): Promise<Result<'close'>> {
@@ -215,10 +214,11 @@ export class Windows {
     await Promise.all(windows.filter(isMain).map(opened => this.stop(opened)));
   }
 
-  /** Sends pi-optchat's `/complete`. Until Pi has answered it, the window takes no other message, and says it is `completing`. */
-  private async handingOff<T>(opened: Opened, send: () => Promise<T>) {
+  /** Sends pi-optchat's `/complete`. Until Pi has answered it, the window takes no other message, and says it is `completing`.
+   * One closed while it waited fails for that, which says nothing new: it answers `closed` instead. */
+  private async handingOff<T, C>(opened: Opened, send: () => Promise<T>, closed: C) {
     opened.state.completing = true; this.changed(opened);
-    try { return await send(); } finally { delete opened.state.completing; this.changed(opened); }
+    try { return await send(); } catch (error) { if (opened.closed) return closed; throw error; } finally { delete opened.state.completing; this.changed(opened); }
   }
   /** The profile's main window, made the first time it is asked for, or a new connected window. */
   private window(profile: string, role: WindowState['role'] = 'main', cwd = this.options.cwd()) {

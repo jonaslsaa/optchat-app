@@ -781,6 +781,9 @@ test('Complete moves a connected window\'s row to the shelf of those being hande
   await shelf('Completed').waitFor();
   assert.equal(await shelf('Completed').getAttribute('aria-expanded'), 'false', 'closed until opened');
   assert.equal(await done.count(), 0);
+  // ⌥ and a digit pick the rows in sight, top to bottom: the main chat, then the handoff under way.
+  await page.keyboard.press('Alt+2');
+  await page.waitForFunction(() => document.querySelector('nav [aria-current]')?.textContent?.includes('hold Complete'), undefined, { timeout: 3000 });
   await shelf('Completed').click();
   assert.equal(await done.getByLabel('Completed').count(), 1);
   assert.deepEqual(await offered(done), [], 'what is handed off stays, with nothing to click');

@@ -168,8 +168,8 @@ export class App {
   private async ask<M extends Method>(method: M, params: Params<M>): Promise<Result<M> | undefined> {
     try { return await this.request(method, params); } catch (error) {
       const message = reason(error);
-      // A window that failed to start says so itself, above its composer.
-      if (!this.state.windows.some(window => window.error === message)) this.set({ error: message });
+      // A window that failed to start says so itself, above its composer, where that is in sight.
+      if (!this.state.windows.some(window => window.error === message && (this.state.selected[window.profile] ?? mainOf(window.profile)) === window.id)) this.set({ error: message });
     }
   }
   private async sync() {

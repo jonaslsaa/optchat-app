@@ -12,13 +12,13 @@ import { Button, cn, Kbd, Spinner, WindowDot } from './ui.tsx';
 import { UpdateButton } from './Update.tsx';
 
 /** The profile's windows: its main chat on top, connected windows below, and at the foot the shelves of those being handed to
- * the main chat and those it has (`shelved`), under a top row as high as the chat's, where a new window is opened, and over the
+ * the main chat and those it has (`list`, from `shelved`: the profile's, as ⌥ and a digit pick them too), under a top row as high as the chat's, where a new window is opened, and over the
  * desktop app's update button. A row shows its ⌥ digit while ⌥ is
  * held. `onPick`: a window was picked or a new one asked for, which is what the sidebar was opened for where it lies over the
  * chat. A double-click on a connected window's name, F2 on its row, or the desktop app's right-click Rename, renames it (`Rename`), and its
  * right-click Remove removes it. The shelves are T3 Code's "Working" and "Settled" ones, and the row and its states are T3 Code's sidebar thread row (MIT, see THIRD_PARTY_NOTICES.md). */
-export function Sidebar({ state, profile, selected, onPick }: { state: State; profile: string; selected: string; onPick: () => void }) {
-  const { top, shelves, rows } = shelved(state.windows.filter(window => window.profile === profile), state.shelves, selected), hints = useAltHeld(), [renaming, setRenaming] = useState<string>();
+export function Sidebar({ state, profile, list: { top, shelves, rows }, selected, onPick }: { state: State; profile: string; list: ReturnType<typeof shelved>; selected: string; onPick: () => void }) {
+  const hints = useAltHeld(), [renaming, setRenaming] = useState<string>();
   useEffect(() => {
     const asked = ({ detail }: Event & { detail?: unknown }) => {
       if (!isObject(detail) || typeof detail.window !== 'string') return;
@@ -58,7 +58,7 @@ export function Sidebar({ state, profile, selected, onPick }: { state: State; pr
         </button>
         {renaming === window.id ? <Rename window={window.id} name={name} done={() => setRenaming(undefined)} className="absolute inset-y-1 right-1.5 left-8" /> : end && (
           <span className="absolute inset-y-0 right-1.5 hidden items-center group-focus-within/row:flex group-hover/row:flex pointer-coarse:flex">
-            {end === 'complete' ? <Button variant="ghost-muted" size="icon-xs" aria-label="Complete" title="Complete: hand this conversation to the main chat" onClick={() => void app.complete(window.id)}><CheckIcon /></Button>
+            {end === 'complete' ? <Button variant="ghost-muted" size="icon-xs" aria-label="Complete" title="Complete: hand this conversation to the main chat" onClick={() => { if (active) onPick(); void app.complete(window.id); }}><CheckIcon /></Button>
               : <Button variant="ghost-muted" size="icon-xs" aria-label="Close window" title="Close window" onClick={() => void app.closeWindow(window.id)}><XIcon /></Button>}
           </span>
         )}

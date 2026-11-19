@@ -218,13 +218,13 @@ test('a Complete under way is said in the window until its Pi answers, and asked
   const { window } = await request('open', { profile: 'work', role: 'connected' });
   await request('prompt', { window: window.id, text: 'hello, and hold Complete' });
   const completing = async () => (await request('windows', {})).windows.find(({ id }) => id === window.id)?.completing;
-  const first = request('complete', { window: window.id });
+  const first = request('prompt', { window: window.id, text: '/complete' });
   while (!await completing()) await sleep(10);
   assert.deepEqual(await request('complete', { window: window.id }), {});
   assert.deepEqual(await request('prompt', { window: window.id, text: '/complete' }), { disposition: 'handled' });
-  // Closed while it waits, the window ends the Complete with no error of its own.
+  // Closed while it waits, the window ends the Complete with no error of its own (the UI test closes one its button began).
   await request('close', { window: window.id });
-  assert.deepEqual(await first, {});
+  assert.deepEqual(await first, { disposition: 'handled' });
 });
 
 test('a connected window starts the profile\'s owner first, joins it, and Complete hands it off', async t => {

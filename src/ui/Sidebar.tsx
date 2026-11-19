@@ -1,5 +1,6 @@
 import { CheckIcon, MessageSquareIcon, MessagesSquareIcon, SquarePenIcon, XIcon } from 'lucide-react';
 import { canComplete } from '../window.ts';
+import { Art } from './Art.tsx';
 import { label, useAltHeld } from './keys.ts';
 import { app, title, UNTITLED, type State } from './store.ts';
 import { Button, cn, Kbd, WindowDot } from './ui.tsx';
@@ -12,12 +13,15 @@ import { UpdateButton } from './Update.tsx';
 export function Sidebar({ state, profile, selected, onPick }: { state: State; profile: string; selected: string; onPick: () => void }) {
   const windows = state.windows.filter(window => window.profile === profile), hints = useAltHeld();
   return (
-    <nav aria-label="Windows" className="flex h-full w-(--sidebar-width) shrink-0 flex-col border-sidebar-border border-r bg-sidebar text-sidebar-foreground">
-      <div className="window-bar window-start max-md:window-corner flex h-(--topbar-height) shrink-0 items-center justify-between ps-4.5 pe-2.5">
-        <span className="text-sidebar-muted-foreground text-xs"><b className="font-semibold text-sidebar-foreground">Opt</b>Chat</span>
-        <Button variant="ghost-muted" size="icon-sm" aria-label="New window" title={`New window (${label('mod+shift+o')})`} onClick={() => { onPick(); void app.newWindow(profile); }}><SquarePenIcon /></Button>
+    <nav aria-label="Windows" className="relative flex h-full w-(--sidebar-width) shrink-0 flex-col border-sidebar-border border-r bg-sidebar text-sidebar-foreground">
+      {/* A theme's drawing, under the top row: what is on it is white, since the sky is dark in light and dark alike. */}
+      <Art />
+      <div className="window-bar window-start max-md:window-corner relative flex h-(--topbar-height) shrink-0 items-center justify-between ps-4.5 pe-2.5">
+        <span className="text-sidebar-muted-foreground text-xs art:text-white/75"><b className="font-semibold text-sidebar-foreground art:text-white">Opt</b>Chat</span>
+        <Button variant="ghost-muted" size="icon-sm" aria-label="New window" title={`New window (${label('mod+shift+o')})`} onClick={() => { onPick(); void app.newWindow(profile); }}
+          className="art:text-white/80 art:hover:bg-white/15 art:hover:text-white"><SquarePenIcon /></Button>
       </div>
-      <ul className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto px-2 pb-2">
+      <ul className="relative flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto px-2 pb-2">
         {windows.map((window, index) => {
           const active = window.id === selected, name = title(window, state), connected = window.role === 'connected', completes = canComplete(window);
           return (

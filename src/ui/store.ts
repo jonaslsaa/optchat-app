@@ -5,6 +5,7 @@ import { current } from '../window.ts';
 import type { Image } from './images.ts';
 import { asTyped, yours } from './cite.ts';
 import type { Scans, Source } from './imports.ts';
+import { parseTheme, type Theme, type Unread } from './themes.ts';
 import { calling, key, NO_TREE, path, read, toggled, type Tree } from './memory.ts';
 import { apply, idle, isMessage, isObject, merged, quiet, replay, stopped, without, words, type Live, type PiMessage } from './transcript.ts';
 
@@ -55,6 +56,8 @@ export interface State {
   error?: string;
   /** The app's settings, and what a chat needs with whether it is there, once the server has said. */
   settings?: Settings;
+  /** Your own themes, as the files in the app's themes folder (`folder`) are read (`themes.ts`), once the server has said. */
+  themes?: { folder: string; files: (Theme | Unread)[] };
   setup?: Setup;
   /** What the desktop app's updater is doing, where the app updates itself: the update button shows it. */
   update?: Updating;
@@ -167,6 +170,7 @@ export class App {
     this.set({ connection: 'open', profiles: names, tabs, profile, selected, windows: ordered(windows.windows), live: kept(this.state.live), sessions: kept(this.state.sessions), attached: typed(this.state.attached), error: undefined });
     // Neither is waited for: looking for Pi takes a moment, and the chat does not need it to show.
     void this.ask('settings', {}).then(settings => settings && this.set({ settings }));
+    void this.readThemes();
     void this.ask('update', {}).then(said => said && this.set({ update: said.update }));
     void this.checkSetup();
     void this.findCutOff();
@@ -197,6 +201,13 @@ export class App {
   update() { return this.ask('updateNow', {}); }
   /** Changes the settings it names; every page gets them all as the server kept them. */
   saveSettings(change: Params<'setSettings'>) { return this.ask('setSettings', change); }
+  /** Your own themes as their files are now: read when the page connects and when the settings show them. */
+  async readThemes() {
+    const found = await this.ask('themes', {});
+    if (found) this.set({ themes: { folder: found.folder, files: found.files.map(({ file, text, error }) => text === undefined ? { id: file, error: error ?? 'It could not be read.' } : parseTheme(file, text)) } });
+  }
+  /** Opens the folder your themes are in. */
+  openThemes() { return this.ask('openThemes', {}); }
   /** A profile's settings and instructions as its files have them now. */
   async readConfig(profile: string) {
     const config = await this.ask('config', { profile });

@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import { existsSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, statSync } from 'node:fs';
 import { createServer, type IncomingMessage } from 'node:http';
 import { hostname } from 'node:os';
 import { extname, join, resolve, sep } from 'node:path';
@@ -14,7 +14,7 @@ import { GitHub } from './github.ts';
 import { Imports } from './imports.ts';
 import { reason } from './pi.ts';
 import { profileDirectory, Profiles } from './profiles.ts';
-import { appHome, isDirectory, readSettings, writeSettings } from './settings.ts';
+import { appHome, isDirectory, readSettings, readThemes, writeSettings } from './settings.ts';
 import { Setup, type Launch } from './setup.ts';
 import { usage } from './usage.ts';
 import { Windows, type WindowsOptions } from './windows.ts';
@@ -131,6 +131,14 @@ export async function startServer({ port = 0, origins = [], ui = join(import.met
     updateNow: () => { if (!update || !updating) throw new Error('This app does not update itself.'); update(); return {}; },
     settings: () => settings,
     setSettings: params => { settings = writeSettings(app, settings, params); push({ push: 'settings', settings }); return settings; },
+    themes: () => readThemes(app),
+    openThemes: () => {
+      if (!launcher) throw new Error('This server opens no folder.');
+      const { folder } = readThemes(app);
+      mkdirSync(folder, { recursive: true });
+      launcher({ command: process.platform === 'win32' ? 'explorer' : process.platform === 'darwin' ? '/usr/bin/open' : 'xdg-open', args: [folder] });
+      return {};
+    },
     setup: async params => { const state = await setup.state(params); if (params.fresh) await everywhere(); return state; }, install: async params => { await setup.install(params); return {}; },
     signIn: async params => { await setup.signIn(params); return {}; }, signedIn: params => setup.signedIn(params),
   };

@@ -14,7 +14,7 @@ import { clamp, levels, type Thinking } from '../src/models.ts';
  *   and answers for its agents (`fake-owner.ts`), and logs what is said to the profile's `main/`, as pi-optchat does; a window keeps its conversation to itself (`get_messages`), and writes a handoff
  *   when it is completed with `/complete`.
  * - A prompt holding "wait" stays mid-reply until a `release` command or an abort, and one holding "think" thinks before it answers; "ask" asks a dialog first and replies with its
- *   answer; "crash" kills it without an answer. A message sent during a run waits in the queue it was sent to: one that steers
+ *   answer; "crash" kills it without an answer; after one holding "hold Complete" a window never answers `/complete`. A message sent during a run waits in the queue it was sent to: one that steers
  *   is answered next, one for later after those.
  * - `/skill:name …` of a skill it lists (`get_commands`) is sent as Pi sends it: the skill's file, with what was typed under it.
  * - FAKE_PI_SCRIPT names a JSON file of longer replies (`Script`), for the screenshots: a prompt holding one of its words gets
@@ -89,7 +89,7 @@ type Image = { type: 'image'; data: string; mimeType: string };
 export type Content = { type: 'text'; text: string } | Image | { type: 'thinking'; thinking: string } | { type: 'toolCall'; id: string; name: string; arguments: Record<string, unknown> };
 interface Said { role: string; content: Content[]; timestamp: number; stopReason?: string; errorMessage?: string; toolCallId?: string; toolName?: string; customType?: string; display?: boolean }
 const messages: Said[] = [];
-let completed = false, marked: number | undefined, after: number | undefined;
+let completed = false, marked: number | undefined, after: number | undefined, holds = false;
 /** Replies by a word of the prompt: turns of the agent's work, each a reply with tool calls and what those print, and then its
  * answer. With `clock` the messages' times start there and go up a second a message, where they are otherwise the time it is.
  * `handoff` is what a window writes for the main chat when it is completed. */
@@ -249,6 +249,7 @@ const commands: Record<string, (command: Record<string, unknown>) => unknown> = 
   prompt: ({ message, images, streamingBehavior }) => {
     const text = String(message);
     if (text === '/complete') {
+      if (holds) return new Promise(() => {});
       // A reply being written is stopped first, and the handoff follows once that run has ended.
       const hand = () => { handoff(); marked = now(); role(completed = true, after); };
       if (running) { release?.({ aborted: true }); void settled.then(hand); } else hand();
@@ -259,6 +260,7 @@ const commands: Record<string, (command: Record<string, unknown>) => unknown> = 
       return { disposition: 'handled' };
     }
     if (completed) role(completed = false, after = marked); // The next message begins a new conversation, and pi-optchat says so, and from when, before the run.
+    if (text.includes('hold Complete')) holds = true;
     if (text.includes('crash')) { process.stderr.write('out of memory\n'); process.exit(3); }
     if (running) { (streamingBehavior === 'followUp' ? followUp : steering).push(expanded(text)); write({ type: 'queue_update', steering, followUp }); return { disposition: 'queued' }; }
     settled = run(text, Array.isArray(images) ? images : []); return { disposition: 'started' };

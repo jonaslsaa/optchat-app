@@ -6,7 +6,7 @@ import { app, title, UNTITLED, type State } from './store.ts';
 import { Button, cn, Kbd, WindowDot } from './ui.tsx';
 import { UpdateButton } from './Update.tsx';
 
-/** The profile's windows: its main chat on top, connected windows below, each with Complete and close, under a top row as high
+/** The profile's windows: its main chat on top, connected windows below, each with one button for what can be done to it, under a top row as high
  * as the chat's, where a new window is opened, and over the desktop app's update button. A row shows its ⌥ digit while ⌥ is
  * held. `onPick`: a window was picked or a new one asked for, which is what the sidebar was opened for where it lies over the
  * chat. The row and its states are T3 Code's sidebar thread row (MIT, see THIRD_PARTY_NOTICES.md). */
@@ -23,7 +23,7 @@ export function Sidebar({ state, profile, selected, onPick }: { state: State; pr
       </div>
       <ul className="relative flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto px-2 pb-2">
         {windows.map((window, index) => {
-          const active = window.id === selected, name = title(window, state), connected = window.role === 'connected', completes = canComplete(window);
+          const active = window.id === selected, name = title(window, state), connected = window.role === 'connected';
           return (
             <li key={window.id} className="group/row relative">
               <button type="button" aria-current={active || undefined} onClick={() => { onPick(); app.select(window.id); }}
@@ -32,18 +32,20 @@ export function Sidebar({ state, profile, selected, onPick }: { state: State; pr
                 {!connected ? <MessagesSquareIcon className="size-4 shrink-0 text-sidebar-muted-foreground" />
                   : window.completed ? <span title="Completed: handed to the main chat" className="flex"><CheckIcon aria-label="Completed" className="size-4 shrink-0 text-sidebar-muted-foreground" /></span>
                   : <MessageSquareIcon className="size-4 shrink-0 text-sidebar-muted-foreground" />}
-                {/* Complete and close stand at the end of a connected window's row while the pointer or the focus is on it, and always
-                    where there is no pointer to hover with. The title gives them room, so it is cut short before them. */}
+                {/* A connected window's row has one button at its end while the pointer or the focus is on it, and always where there
+                    is no pointer to hover with: Complete while it has a conversation to hand to the main chat, and close once it has
+                    none, or while a Complete waits for its Pi, which may never answer. The row is never offered both. The title gives
+                    it room, so it is cut short before it. */}
                 <span className={cn('min-w-0 flex-1 truncate text-sm', active ? 'font-medium text-foreground' : 'text-sidebar-foreground/80', (window.completed || name === UNTITLED) && 'text-sidebar-muted-foreground',
-                  connected && (completes ? 'group-focus-within/row:pe-10 group-hover/row:pe-10 pointer-coarse:pe-10' : 'group-focus-within/row:pe-4 group-hover/row:pe-4 pointer-coarse:pe-4'))}>{name}</span>
+                  connected && 'group-focus-within/row:pe-4 group-hover/row:pe-4 pointer-coarse:pe-4')}>{name}</span>
                 <span className={cn('flex h-6 shrink-0 items-center justify-end gap-1', connected && 'group-focus-within/row:invisible group-hover/row:invisible pointer-coarse:invisible')}>
                   <WindowDot windows={[window]} />{hints && index < 9 && <Kbd className="bg-transparent text-2xs text-sidebar-muted-foreground/70 max-md:hidden">{label(`alt+${index + 1}`)}</Kbd>}
                 </span>
               </button>
               {connected && (
-                <span className="absolute inset-y-0 right-1.5 hidden items-center gap-0.5 group-focus-within/row:flex group-hover/row:flex pointer-coarse:flex">
-                  {completes && <Button variant="ghost-muted" size="icon-xs" aria-label="Complete" title="Complete: hand this conversation to the main chat" onClick={() => void app.complete(window.id)}><CheckIcon /></Button>}
-                  <Button variant="ghost-muted" size="icon-xs" aria-label="Close window" title="Close window" onClick={() => void app.closeWindow(window.id)}><XIcon /></Button>
+                <span className="absolute inset-y-0 right-1.5 hidden items-center group-focus-within/row:flex group-hover/row:flex pointer-coarse:flex">
+                  {canComplete(window) && !state.completing.includes(window.id) ? <Button variant="ghost-muted" size="icon-xs" aria-label="Complete" title="Complete: hand this conversation to the main chat" onClick={() => void app.complete(window.id)}><CheckIcon /></Button>
+                    : <Button variant="ghost-muted" size="icon-xs" aria-label="Close window" title="Close window" onClick={() => void app.closeWindow(window.id)}><XIcon /></Button>}
                 </span>
               )}
             </li>

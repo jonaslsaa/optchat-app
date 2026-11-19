@@ -9,7 +9,7 @@ import { startServer } from '../src/server/server.ts';
 import { transcript } from '../src/ui/agents.ts';
 import { building, listed, path, polled } from '../src/ui/memory.ts';
 import { cite, citing } from '../src/ui/cite.ts';
-import { App, cutOffShown, title, UNTITLED, type State } from '../src/ui/store.ts';
+import { App, cutOffShown, shelved, title, UNTITLED, type State } from '../src/ui/store.ts';
 import { chat } from '../src/ui/transcript.ts';
 // pi-optchat's own lock, which only Pi takes: here it stands for a Pi in a terminal.
 import { describeOwner, lockProfile } from 'pi-optchat/files';
@@ -535,4 +535,19 @@ test('a connected window renamed is called by its name on every page, an empty n
   await one.app.rename('work/main', 'Not mine');
   assert.equal(one.app.state.error, 'The main chat keeps its name.');
   assert.equal(title(one.app.state.windows.find(window => window.role === 'main')!, one.app.state), 'Main chat');
+});
+
+test('the sidebar has a window on the shelf its state says, a closed shelf shows only the window shown, and an empty one is not there', () => {
+  const at = (id: string, state: Partial<WindowState> = {}): WindowState => ({ id: `work/${id}`, profile: 'work', role: id === 'main' ? 'main' : 'connected', cwd: '/', status: 'idle', seq: 0, ...state });
+  const windows = [at('main'), at('1', { completed: true }), at('2', { completing: true }), at('3', { status: 'stopped' }), at('4', { completed: true })];
+  const ids = (list: WindowState[]) => list.map(({ id }) => id.slice(5));
+  const sidebar = (open: { completing: boolean; completed: boolean }, selected: string) => {
+    const { top, shelves, rows } = shelved(windows, open, `work/${selected}`);
+    return { top: ids(top), shelves: shelves.map(({ name, count, open, rows }) => ({ name, count, open, rows: ids(rows) })), rows: ids(rows) };
+  };
+  assert.deepEqual(sidebar({ completing: true, completed: false }, '4'), {
+    top: ['main', '3'], shelves: [{ name: 'completing', count: 1, open: true, rows: ['2'] }, { name: 'completed', count: 2, open: false, rows: ['4'] }], rows: ['main', '3', '2', '4'],
+  });
+  assert.deepEqual(sidebar({ completing: false, completed: true }, 'main').rows, ['main', '3', '1', '4']);
+  assert.deepEqual(shelved(windows.slice(0, 1), { completing: true, completed: true }, 'work/main').shelves, []);
 });

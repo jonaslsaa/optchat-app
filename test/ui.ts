@@ -7,7 +7,7 @@ import { build } from 'vite';
 import { agents, CHANGES, FILES, FORMULAS, GONE, NAMED, PICTURED, remember, seed, SEEN, SEEN_IMAGE, TEAM } from '../scripts/seed.ts';
 import type { Launch } from '../src/server/files.ts';
 import { connect } from '../src/client.ts';
-import { RENAME_EVENT } from '../src/menu.ts';
+import { ROW_EVENT } from '../src/menu.ts';
 import { startServer } from '../src/server/server.ts';
 import { cited, named } from '../src/ui/cite.ts';
 import { describeOwner, lockProfile } from 'pi-optchat/files';
@@ -736,36 +736,76 @@ test('the windows over a narrow chat are open for one pick: a window picked, a n
   await beside.waitFor({ timeout: 3000 }).catch(() => assert.fail('The windows did not come back beside the chat in a wide window.'));
 });
 
-test('a connected window\'s row offers one thing: Complete while its conversation is open, and to close it once that is handed off', async () => {
-  const page = await open('finish'), row = page.getByRole('navigation', { name: 'Windows' }).getByRole('listitem').nth(1);
-  /** The buttons at the end of the row, which show with the pointer on it. */
-  const offered = async () => { await row.hover(); return row.getByRole('button', { name: /^(Complete|Close window)$/ }).evaluateAll(buttons => buttons.map(button => button.getAttribute('aria-label'))); };
-  await page.getByRole('button', { name: 'New window' }).click();
-  await page.getByRole('heading', { name: 'New connected window' }).waitFor();
-  await page.getByRole('textbox', { name: 'Message' }).fill('hello there');
+test('Complete moves a connected window\'s row to the shelf of those being handed off, and then to the closed shelf of those handed off, and the main chat is shown from the moment it begins', async () => {
+  const page = await open('finish'), sidebar = page.getByRole('navigation', { name: 'Windows' }), box = page.getByRole('textbox', { name: 'Message' });
+  const shelf = (name: string) => sidebar.getByRole('button', { name: new RegExp(`^${name} \\d+$`) });
+  /** The buttons at the end of a row, which show with the pointer on it. */
+  const offered = async (row: Locator) => { await row.hover(); return row.getByRole('button', { name: /^(Complete|Close window)$/ }).evaluateAll(buttons => buttons.map(button => button.getAttribute('aria-label'))); };
+  const shown = () => sidebar.locator('[aria-current]').innerText();
+  const remove = (row: Locator) => row.evaluate((row, type) => dispatchEvent(new CustomEvent(type, { detail: { window: row.getAttribute('data-row'), action: 'remove' } })), ROW_EVENT);
+  const begin = async (text: string) => {
+    await page.getByRole('button', { name: 'New window' }).click();
+    await page.getByRole('heading', { name: 'New connected window' }).waitFor();
+    await box.fill(text);
+    await page.keyboard.press('Enter');
+    await page.getByRole('main').getByRole('button', { name: 'Complete' }).waitFor(); // In the window's top row, once it has said something.
+  };
+  await begin('hello there');
+  const done = sidebar.locator('li[data-row]').filter({ hasNotText: 'hold' });
+  await begin('hello there, and hold Complete'); // Its Pi never answers Complete.
+  const hung = sidebar.locator('li[data-row]').filter({ hasText: 'hold Complete' });
+  assert.deepEqual(await offered(done), ['Complete'], 'an open conversation is completed, not closed');
+  // Completed from its row while another window is shown, it goes on the shelf, turning; the one shown stays.
+  await done.getByRole('button').first().click();
+  await hung.hover();
+  await hung.getByRole('button', { name: 'Complete', exact: true }).click();
+  await shelf('Handing off').waitFor();
+  assert.equal(await shelf('Handing off').getAttribute('aria-expanded'), 'true', 'open while something is handed off');
+  assert.equal(await hung.getByLabel('Working').count(), 1);
+  assert.deepEqual(await offered(hung), [], 'nothing to click on a handoff under way');
+  assert.equal((await shown()).trim(), 'hello there', 'the window you are in stays');
+  // Shown again, its top row says so and offers nothing, and Complete typed in it again is no error.
+  await hung.getByRole('button').first().click();
+  await page.getByRole('main').getByRole('button', { name: 'Handing off…' }).waitFor();
+  assert.equal(await page.getByRole('main').getByRole('button', { name: 'Handing off…' }).isDisabled(), true);
+  await box.fill('/complete');
+  await page.keyboard.press('Escape');
   await page.keyboard.press('Enter');
-  await page.getByRole('button', { name: 'Complete', exact: true }).first().waitFor(); // The one in the window's top row, once it has said something.
-  assert.deepEqual(await offered(), ['Complete'], 'an open conversation is completed, not closed');
-  await row.getByRole('button', { name: 'Complete', exact: true }).click();
-  await page.getByText('Completed', { exact: true }).waitFor();
-  assert.deepEqual(await offered(), ['Close window'], 'a completed one has nothing left to hand off');
-  await row.getByRole('button', { name: 'Close window' }).click();
-  await row.waitFor({ state: 'detached' });
-  // A Pi that never answers Complete is closed from there all the same, and the Complete that failed for it says nothing.
-  const hung = await open('finish'), stuck = hung.getByRole('navigation', { name: 'Windows' }).getByRole('listitem').nth(1);
-  await hung.getByRole('button', { name: 'New window' }).click();
-  await hung.getByRole('heading', { name: 'New connected window' }).waitFor();
-  await hung.getByRole('textbox', { name: 'Message' }).fill('hello there, and hold Complete');
-  await hung.keyboard.press('Enter');
-  await hung.getByRole('main').getByRole('button', { name: 'Complete' }).waitFor();
-  await stuck.hover();
-  await stuck.getByRole('button', { name: 'Complete', exact: true }).click();
-  await hung.getByRole('main').getByRole('button', { name: 'Complete' }).click(); // Asked again from the top row, it still waits.
-  await stuck.hover();
-  await stuck.getByRole('button', { name: 'Close window' }).click();
-  await stuck.waitFor({ state: 'detached' });
-  await hung.waitForTimeout(300);
-  assert.equal(await hung.getByRole('alert').count(), 0, 'no error for the Complete the close ended');
+  // Complete typed in the window you are in shows the main chat at once, and once the handoff is in, the window is on the
+  // shelf of those handed off, closed, which shows only its count.
+  await done.getByRole('button').first().click();
+  await box.fill('/complete');
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('Enter');
+  await page.waitForFunction(() => document.querySelector('nav [aria-current]')?.textContent?.includes('Main chat'), undefined, { timeout: 3000 });
+  await shelf('Completed').waitFor();
+  assert.equal(await shelf('Completed').getAttribute('aria-expanded'), 'false', 'closed until opened');
+  assert.equal(await done.count(), 0);
+  // ⌥ and a digit pick the rows in sight, top to bottom: the main chat, then the handoff under way.
+  await page.keyboard.press('Alt+2');
+  await page.waitForFunction(() => document.querySelector('nav [aria-current]')?.textContent?.includes('hold Complete'), undefined, { timeout: 3000 });
+  await shelf('Completed').click();
+  assert.equal(await done.getByLabel('Completed').count(), 1);
+  assert.deepEqual(await offered(done), [], 'what is handed off stays, with nothing to click');
+  // Closed again, it still shows the window you are in.
+  await done.getByRole('button').first().click();
+  await shelf('Completed').click();
+  assert.equal(await done.count(), 1, 'the window shown never leaves the sidebar');
+  // The desktop app's right click offers Rename and Remove on the row the page says it was on: a connected one, never the main chat.
+  const menuRow = () => page.evaluate(() => document.documentElement.dataset.menuRow);
+  await done.click({ button: 'right' });
+  assert.equal(await menuRow(), await done.getAttribute('data-row'));
+  await sidebar.getByRole('listitem').first().click({ button: 'right' });
+  assert.equal(await menuRow(), undefined);
+  await page.keyboard.press('Escape');
+  // Its Remove, on either shelf: a Pi that never answers Complete is let go, and the Complete that failed for it says nothing.
+  await remove(done);
+  await done.waitFor({ state: 'detached' });
+  assert.equal(await shelf('Completed').count(), 0, 'an empty shelf is not shown');
+  await remove(hung);
+  await hung.waitFor({ state: 'detached' });
+  await page.waitForTimeout(300);
+  assert.equal(await page.getByRole('alert').count(), 0, 'no error for the Complete asked again, nor the one the close ended');
 });
 
 test('a connected window is renamed in place from its row or its title: Enter keeps the name, Esc what it was and the run goes on, and an empty name gives back the automatic one; the main chat keeps its own', async () => {
@@ -804,8 +844,8 @@ test('a connected window is renamed in place from its row or its title: Enter ke
   const narrow = await open('renames', NARROW), over = narrow.getByRole('button', { name: 'Close the sidebar' });
   await narrow.keyboard.press('ControlOrMeta+b');
   await over.waitFor();
-  const id = await narrow.getByRole('navigation', { name: 'Windows' }).getByRole('listitem').nth(1).getAttribute('data-rename') ?? '';
-  await narrow.evaluate(([event, id]) => dispatchEvent(new CustomEvent(event, { detail: id })), [RENAME_EVENT, id]);
+  const id = await narrow.getByRole('navigation', { name: 'Windows' }).getByRole('listitem').nth(1).getAttribute('data-row') ?? '';
+  await narrow.evaluate(([event, window]) => dispatchEvent(new CustomEvent(event, { detail: { window, action: 'rename' } })), [ROW_EVENT, id]);
   await narrow.getByRole('textbox', { name: 'Window name' }).fill('Not kept');
   await narrow.keyboard.press('Escape');
   assert.equal(await over.count(), 1, 'the windows are still open');

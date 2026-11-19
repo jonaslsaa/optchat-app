@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { chromium, type Browser, type Locator, type Page } from 'playwright-core';
 import { build } from 'vite';
 import { connect, type Client } from '../src/client.ts';
+import { ROW_EVENT } from '../src/menu.ts';
 import { startServer } from '../src/server/server.ts';
 // pi-optchat's own lock, which only Pi takes: here it stands for a Pi in a terminal.
 import { defaults, describeOwner, lockProfile } from 'pi-optchat/files';
@@ -220,10 +221,19 @@ async function pictures(browser: Browser, control: Client) {
   await named.fill('');
   await work.keyboard.press('Enter');
   await row.getByText('Give me a demo of this repository').waitFor();
+  // Completed, it is on the shelf of those handed off, which is closed, and the main chat is shown; opened, the shelf shows it.
+  const completedShelf = work.getByRole('button', { name: /^Completed \d+$/ });
   await work.getByRole('main').getByRole('button', { name: 'Complete' }).click();
-  await work.getByText('Completed', { exact: true }).waitFor();
+  await completedShelf.waitFor();
+  await shot(work, '276-shelf-completed-closed');
+  await completedShelf.click();
+  await shot(work, '277-shelf-completed-open');
+  const done = work.getByRole('navigation', { name: 'Windows' }).locator('li[data-row]');
+  await done.getByRole('button').first().click();
+  await work.getByRole('main').getByText('Completed', { exact: true }).waitFor();
   await shot(work, '09-completed-window');
-  await shot(work, '271-window-row-completed', row);
+  await shot(work, '271-window-row-completed', done);
+  await completedShelf.click(); // Closed again, as it starts.
 
   await work.getByRole('button', { name: 'Open a profile' }).click();
   await work.getByRole('option', { name: 'notes' }).click();
@@ -1056,16 +1066,27 @@ async function pictures(browser: Browser, control: Client) {
   const tiny = await open(['work'], { width: 420, height: 800, dark: true });
   await tiny.getByRole('button', { name: 'Toggle the sidebar' }).click();
   await shot(tiny, '255-theme-grove-narrow-dark');
-  // A Complete its Pi never answers: the row offers to close the window instead. Last, as it leaves a handoff in that chat.
+  // A Complete its Pi never answers: the row is on the shelf of handoffs under way, turning, and the main chat is shown; the
+  // window shown again says so in its top row. Last, as it leaves a handoff in that chat.
   await control.request('setSettings', { palette: { light: null, dark: null } });
-  const hung = await open(['empty']), waiting = hung.getByRole('navigation', { name: 'Windows' }).getByRole('listitem').nth(1);
-  await hung.getByRole('button', { name: 'New window' }).click();
-  await say(hung, 'Give me a demo of this repository, and hold Complete');
-  await hung.getByRole('main').getByRole('button', { name: 'Complete' }).waitFor();
-  await waiting.hover();
-  await waiting.getByRole('button', { name: 'Complete', exact: true }).click();
-  await shot(hung, '272-window-row-completing', waiting);
-  await hung.getByRole('button', { name: 'Close window' }).click();
-  await waiting.waitFor({ state: 'detached' });
-  await hung.close();
+  for (const dark of [false, true]) {
+    const hung = await open(['empty'], { dark: dark || allDark }), waiting = hung.getByRole('navigation', { name: 'Windows' }).locator('li[data-row]');
+    await hung.getByRole('button', { name: 'New window' }).click();
+    await hung.getByRole('heading', { name: 'New connected window' }).waitFor();
+    await say(hung, 'Give me a demo of this repository, and hold Complete');
+    await hung.getByRole('main').getByRole('button', { name: 'Complete' }).waitFor();
+    await waiting.hover();
+    await waiting.getByRole('button', { name: 'Complete', exact: true }).click();
+    await hung.getByRole('button', { name: /^Handing off \d+$/ }).waitFor();
+    await shot(hung, dark ? '279-shelf-handing-off-dark' : '272-window-row-completing', waiting);
+    if (!dark) {
+      await waiting.getByRole('button').first().click();
+      await hung.getByRole('main').getByRole('button', { name: 'Handing off…' }).waitFor();
+      await shot(hung, '278-window-handing-off');
+    }
+    // The right click's Remove, which a page has no menu for: the event the desktop app's menu sends.
+    await waiting.evaluate((row, type) => dispatchEvent(new CustomEvent(type, { detail: { window: row.getAttribute('data-row'), action: 'remove' } })), ROW_EVENT);
+    await waiting.waitFor({ state: 'detached' });
+    await hung.close();
+  }
 }

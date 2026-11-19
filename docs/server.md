@@ -80,7 +80,7 @@ The client sends `{ id, method, params }` and gets `{ id, result }` or `{ id, er
 
 The server pushes four things to every client:
 
-- `{ push: 'window', window }` when a window changes: its `status` (`stopped`, `starting`, `idle`, `running`, or `closed`), `error` if its Pi failed, `completed` once a connected window's conversation is handed off, and the `model` it runs on.
+- `{ push: 'window', window }` when a window changes: its `status` (`stopped`, `starting`, `idle`, `running`, or `closed`), `error` if its Pi failed, `completing` while its Complete is under way (asked with `complete` or a `/complete` prompt, until its Pi has answered), `completed` once a connected window's conversation is handed off, and the `model` it runs on.
 - `{ push: 'record', window, seq, record }` for every record Pi writes: its session events and extension UI requests, passed through as they are (Pi's `docs/json.md` and `docs/rpc-extension-ui.md`).
 - `{ push: 'settings', settings }` when the settings are changed, and `{ push: 'setup', setup }` as an install runs and when it ends.
 - `{ push: 'update', update }` each time the desktop app's updater does something else ([desktop.md](desktop.md#updates)): only from a server whose shell has one.

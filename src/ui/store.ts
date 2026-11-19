@@ -67,14 +67,29 @@ export interface State {
    * latest start among those you dismissed: only an agent started after it brings the profile's line back. */
   cutOff: Result<'cutOff'>['profiles'];
   dismissed: Record<string, number>;
-  /** The windows whose Complete was asked for here and has no answer yet: a Pi that never gives one is closed from there. */
-  completing: string[];
+  /** Which of the sidebar's shelves are open (`shelf`), for every profile. */
+  shelves: Record<Shelf, boolean>;
 }
 type Provider = Params<'signIn'>['provider'];
 const PAGE = 200, SAVED = 'optchat-app', DRAFTS = 'optchat-app-drafts', DISMISSED = 'optchat-app-cut-off', SIGN_IN_ASKS = 100;
 export const mainOf = (profile: string) => `${profile}/main`;
 const ordered = (windows: WindowState[]) => windows.toSorted((a, b) => a.profile.localeCompare(b.profile) || Number(b.role === 'main') - Number(a.role === 'main') || a.id.localeCompare(b.id, undefined, { numeric: true }));
 export const UNTITLED = 'Untitled window';
+/** The shelves at the foot of the sidebar, as T3 Code's are (MIT, see THIRD_PARTY_NOTICES.md): the connected windows being
+ * handed to the main chat, and those it has. A window is on the one its state says, and on none while it is open. */
+export const SHELVES = ['completing', 'completed'] as const;
+export type Shelf = typeof SHELVES[number];
+export const shelf = ({ completing, completed }: WindowState): Shelf | undefined => completing ? 'completing' : completed ? 'completed' : undefined;
+/** A profile's sidebar: its windows on top, then each shelf that has any, with all of them while it is open, and only the window
+ * shown (`selected`) while it is closed, so the chat you are in never leaves the sidebar. */
+export function shelved(windows: WindowState[], open: Record<Shelf, boolean>, selected: string) {
+  const on = (name?: Shelf) => windows.filter(window => shelf(window) === name);
+  const shelves = SHELVES.map(name => ({ name, all: on(name), open: open[name] })).filter(({ all }) => all.length)
+    .map(({ all, ...rest }) => ({ ...rest, count: all.length, rows: rest.open ? all : all.filter(window => window.id === selected) }));
+  // `rows`: what the sidebar shows, top to bottom, which is what ⌥ and a digit pick from.
+  const top = on(undefined);
+  return { top, shelves, rows: [...top, ...shelves.flatMap(({ rows }) => rows)] };
+}
 /** The profiles the bar over the page offers to resume: cut off, and not dismissed since. */
 export const cutOffShown = ({ cutOff, dismissed }: Pick<State, 'cutOff' | 'dismissed'>) =>
   cutOff.filter(({ profile, agents }) => agents.some(({ started }) => started > (Object.hasOwn(dismissed, profile) ? dismissed[profile] : -Infinity)));
@@ -93,7 +108,7 @@ export function title(window: WindowState, state: State) {
 const reason = (error: unknown) => error instanceof Error ? error.message : String(error);
 
 export class App {
-  state: State = { connection: 'connecting', profiles: [], tabs: [], windows: [], selected: {}, logs: {}, live: {}, sessions: {}, agents: {}, github: {}, models: {}, commands: {}, chats: {}, memory: {}, config: {}, usage: {}, attached: {}, cutOff: [], dismissed: {}, scans: {}, imports: {}, imported: {}, completing: [] };
+  state: State = { connection: 'connecting', profiles: [], tabs: [], windows: [], selected: {}, logs: {}, live: {}, sessions: {}, agents: {}, github: {}, models: {}, commands: {}, chats: {}, memory: {}, config: {}, usage: {}, attached: {}, cutOff: [], dismissed: {}, scans: {}, imports: {}, imported: {}, shelves: { completing: true, completed: false } };
   private client?: Client;
   private retrying?: ReturnType<typeof setTimeout>;
   private closed = false;
@@ -141,8 +156,8 @@ export class App {
     const before = this.state, next = { ...before, ...patch };
     // A lost connection is said once, for as long as it lasts: whatever fails meanwhile fails for that reason.
     this.state = next.connection === 'lost' || next.connection === 'refused' ? { ...next, error: undefined } : next;
-    const { tabs, profile, selected } = this.state;
-    if (tabs !== before.tabs || profile !== before.profile || selected !== before.selected) this.storage().setItem(SAVED, JSON.stringify({ tabs, profile, selected }));
+    const { tabs, profile, selected, shelves } = this.state;
+    if (tabs !== before.tabs || profile !== before.profile || selected !== before.selected || shelves !== before.shelves) this.storage().setItem(SAVED, JSON.stringify({ tabs, profile, selected, shelves }));
     for (const listener of this.listeners) listener();
   }
   private request<M extends Method>(method: M, params: Params<M>) {
@@ -153,8 +168,8 @@ export class App {
   private async ask<M extends Method>(method: M, params: Params<M>): Promise<Result<M> | undefined> {
     try { return await this.request(method, params); } catch (error) {
       const message = reason(error);
-      // A window that failed to start says so itself, above its composer.
-      if (!this.state.windows.some(window => window.error === message)) this.set({ error: message });
+      // A window that failed to start says so itself, above its composer, where that is in sight.
+      if (!this.state.windows.some(window => window.error === message && (this.state.selected[window.profile] ?? mainOf(window.profile)) === window.id)) this.set({ error: message });
     }
   }
   private async sync() {
@@ -171,7 +186,9 @@ export class App {
     // one whenever it is opened, so what was typed in it stays.
     const typed = <T>(by: Record<string, T>) => Object.fromEntries(Object.entries(by).filter(([id]) => here(id) || names.some(name => mainOf(name) === id)));
     this.keepAll(typed(this.drafts()));
-    this.set({ connection: 'open', profiles: names, tabs, profile, selected, windows: ordered(windows.windows), live: kept(this.state.live), sessions: kept(this.state.sessions), attached: typed(this.state.attached), error: undefined });
+    const open = isObject(saved) && isObject(saved.shelves) ? saved.shelves : {}, shelves = { ...this.state.shelves };
+    for (const name of SHELVES) { const was = open[name]; if (typeof was === 'boolean') shelves[name] = was; }
+    this.set({ connection: 'open', profiles: names, tabs, profile, selected, shelves, windows: ordered(windows.windows), live: kept(this.state.live), sessions: kept(this.state.sessions), attached: typed(this.state.attached), error: undefined });
     // Neither is waited for: looking for Pi takes a moment, and the chat does not need it to show.
     void this.ask('settings', {}).then(settings => settings && this.set({ settings }));
     void this.readThemes();
@@ -188,7 +205,9 @@ export class App {
   /** A window as the server has it now; a closed one is gone, and the profile shows its main chat instead. */
   private put(window: WindowState) {
     const others = this.state.windows.filter(w => w.id !== window.id), gone = window.status === 'closed';
-    const selected = gone && this.state.selected[window.profile] === window.id ? { ...this.state.selected, [window.profile]: mainOf(window.profile) } : this.state.selected;
+    // So does one whose Complete began, at once: the handoff is on its way to the main chat, and that is where it arrives.
+    const was = this.window(window.id), handing = window.completing && was && !was.completing;
+    const selected = (gone || handing) && this.state.selected[window.profile] === window.id ? { ...this.state.selected, [window.profile]: mainOf(window.profile) } : this.state.selected;
     if (!gone) { this.set({ windows: ordered([...others, window]), selected }); return; }
     // What a closed window said and asked goes with it, and what was being typed in it.
     this.keep(window.id, ''); this.attach(window.id, []);
@@ -598,13 +617,7 @@ export class App {
     return queued ? [...queued.steering, ...queued.followUp] : [];
   }
   async rename(window: string, name: string) { await this.ask('rename', { window, name }); }
-  async complete(window: string) {
-    if (this.state.completing.includes(window)) return; // Asked once already: a second would be refused, and end the wait.
-    this.set({ completing: [...this.state.completing, window] });
-    // One closed while it waited fails for that, which says nothing new.
-    try { await this.request('complete', { window }); } catch (error) { if (this.state.completing.includes(window)) this.set({ error: reason(error) }); }
-    this.set({ completing: this.state.completing.filter(id => id !== window) });
-  }
+  async complete(window: string) { await this.ask('complete', { window }); }
   private files = new Map<string, Promise<boolean>>();
   /** Whether a path the chat named is a file in the window's folder: asked once a path and window, so a component can wait on
    * it with `use`. A file made since is a link once the page is opened again. */
@@ -621,10 +634,8 @@ export class App {
     return (await this.client?.request('mentions', { window, query }).catch(() => undefined))?.mentions ?? [];
   }
   async openFile(window: string, path: string, line?: number) { await this.ask('openFile', { window, path, line }); }
-  async closeWindow(window: string) {
-    this.set({ completing: this.state.completing.filter(id => id !== window) });
-    await this.ask('close', { window });
-  }
+  async closeWindow(window: string) { await this.ask('close', { window }); }
+  toggleShelf(shelf: Shelf) { this.set({ shelves: { ...this.state.shelves, [shelf]: !this.state.shelves[shelf] } }); }
   /** Answers a dialog, which then goes; one whose answer did not arrive stays to be answered again. */
   async answer(window: string, response: Omit<Params<'answer'>, 'window'>) {
     if (await this.ask('answer', { window, ...response })) this.expire(window, response.id);

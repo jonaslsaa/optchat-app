@@ -996,7 +996,7 @@ async function pictures(browser: Browser, control: Client) {
   for (let n = 0; n < 7; n++) await control.request('open', { profile: 'work', role: 'connected' });
   const themes = ['optchat', 'blossom', 'grove', 'ocean', 'ember', 'iris'];
   for (const [k, theme] of themes.entries()) {
-    await control.request('setSettings', { palette: theme === 'optchat' ? {} : { light: theme, dark: theme } });
+    await control.request('setSettings', { palette: theme === 'optchat' ? { light: null, dark: null } : { light: theme, dark: theme } });
     for (const dark of [false, true]) {
       const page = await open(['work', 'notes'], { dark });
       await page.getByText('which is the point of that test').last().waitFor();

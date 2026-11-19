@@ -1132,7 +1132,7 @@ test('a theme is picked in Appearance: a card for light and dark, a round for on
   writeFileSync(join(folder, 'dusk.json'), JSON.stringify({ version: 1, name: 'Dusk', appearance: 'dark', colors: { background: '#101820' } }));
   writeFileSync(join(folder, 'evil.json'), JSON.stringify({ version: 1, name: 'Evil', appearance: 'light', colors: { background: 'url(https://example.com/x)' } }));
   const client = await connect(server.url);
-  t.after(async () => { await client.request('setSettings', { theme: 'system', palette: {}, art: true }); client.close(); });
+  t.after(async () => { await client.request('setSettings', { theme: 'system', palette: { light: null, dark: null }, art: true }); client.close(); });
   const page = await open('tabs'), background = () => page.evaluate(() => getComputedStyle(document.body).backgroundColor);
   const variable = (name: string) => page.evaluate(name => document.documentElement.style.getPropertyValue(name), name);
   await page.getByRole('button', { name: 'Settings' }).click();

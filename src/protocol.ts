@@ -380,8 +380,9 @@ export const methods = {
   /** The app's settings. */
   settings: method(none, Settings),
   /** Changes the settings it names and leaves the others, and answers them all as they are kept. A `cwd` has to be a directory
-   * that exists (`~` is your home folder); `null` puts back the default. */
-  setSettings: method(Type.Object({ theme: Type.Optional(Theme), palette: Type.Optional(Palette), art: Type.Optional(Type.Boolean()), cwd: Type.Optional(Type.Union([Type.String(), Type.Null()])), awake: Type.Optional(Type.Boolean()), editor: Type.Optional(Type.String()) }), Settings),
+   * that exists (`~` is your home folder); `null` puts back the default. A `palette` names the theme of the appearances it
+   * names and leaves the other's. */
+  setSettings: method(Type.Object({ theme: Type.Optional(Theme), palette: Type.Optional(Type.Object({ light: Type.Optional(Type.Union([Type.String(), Type.Null()])), dark: Type.Optional(Type.Union([Type.String(), Type.Null()])) })), art: Type.Optional(Type.Boolean()), cwd: Type.Optional(Type.Union([Type.String(), Type.Null()])), awake: Type.Optional(Type.Boolean()), editor: Type.Optional(Type.String()) }), Settings),
   /** The theme files in the app's `themes` folder (`folder`), by name, each with its text or why it was not read. The page reads
    * them as it reads its own (`ui/themes.ts`): the server only hands them on. */
   themes: method(none, Type.Object({ folder: Type.String(), files: Type.Array(Type.Object({ file: Type.String(), text: Type.Optional(Type.String()), error: Type.Optional(Type.String()) })) })),

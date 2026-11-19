@@ -225,7 +225,7 @@
   @media (prefers-reduced-motion: no-preference) { animation: shimmer 2.4s linear infinite; }
 }
 
-/* A theme's drawing at the top of the sidebar (`Art.tsx`): T3 Code's, under the sidebar's top row, fading into the sidebar so
+/* A theme's drawing at the top of the sidebar (`Art.tsx`), under the sidebar's top row, fading into the sidebar so
    the windows under it read as they do without it. */
 @utility sidebar-art {
   mask-image: linear-gradient(to bottom, black 0%, black 55%, transparent 92%);

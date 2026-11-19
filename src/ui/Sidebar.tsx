@@ -14,7 +14,7 @@ export function Sidebar({ state, profile, selected, onPick }: { state: State; pr
   const windows = state.windows.filter(window => window.profile === profile), hints = useAltHeld();
   return (
     <nav aria-label="Windows" className="relative flex h-full w-(--sidebar-width) shrink-0 flex-col border-sidebar-border border-r bg-sidebar text-sidebar-foreground">
-      {/* A theme's drawing, under the top row: what is on it is white, as T3 Code has it, since the sky is dark in light and dark alike. */}
+      {/* A theme's drawing, under the top row: what is on it is white, since the sky is dark in light and dark alike. */}
       <Art />
       <div className="window-bar window-start max-md:window-corner relative flex h-(--topbar-height) shrink-0 items-center justify-between ps-4.5 pe-2.5">
         <span className="text-sidebar-muted-foreground text-xs art:text-white/75"><b className="font-semibold text-sidebar-foreground art:text-white">Opt</b>Chat</span>

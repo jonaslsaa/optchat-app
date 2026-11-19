@@ -1,7 +1,7 @@
 import type { Settings } from '../protocol.ts';
 
 /** Themes, with no DOM: a theme file as the page reads it, and which theme is drawn. The built-in ones are files in `themes/`,
- * read as yours are, and their palettes are T3 Code's (MIT, see THIRD_PARTY_NOTICES.md).
+ * read as yours are; where their palettes come from: THIRD_PARTY_NOTICES.md.
  *
  * A theme file is JSON: `{ "version": 1, "name": "Grove", "appearance": "light", "colors": { … }, "variants": { "dark": { … } } }`.
  * `colors` are for its `appearance`, and a variant is the same theme in the other one. A colour is named by the page's own
@@ -28,8 +28,12 @@ export interface Unread { id: string; error: string }
 const ART = ROLES.filter(role => role.startsWith('art-'));
 const isRole = (role: string): role is Role => (ROLES as readonly string[]).includes(role);
 /** A literal colour and nothing else: `#rgb` to `#rrggbbaa`, or `rgb()`, `hsl()`, `oklch()`, `oklab()`, `lab()`, `lch()` of
- * numbers. No other function, no `var()` or `url()`, nothing that ends the value. */
-const COLOR = /^(?:#(?:[\da-f]{3,4}|[\da-f]{6}|[\da-f]{8})|(?:rgba?|hsla?|oklch|oklab|lab|lch)\((?:[\d.\s,/%+-]|deg|none)*\))$/i;
+ * three numbers and maybe an alpha. No other function, no `var()` or `url()`, nothing that ends the value. In the page the
+ * browser has the last word too, so a colour it would not draw is refused rather than left a hole in the page. */
+const NUMBER = String.raw`(?:[+-]?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?(?:%|deg)?|none)`;
+const ARGUMENTS = String.raw`${NUMBER}(?:\s+${NUMBER}){2}(?:\s*/\s*${NUMBER})?|${NUMBER}(?:\s*,\s*${NUMBER}){2,3}`;
+const LITERAL = new RegExp(String.raw`^(?:#(?:[\da-f]{3,4}|[\da-f]{6}|[\da-f]{8})|(?:rgba?|hsla?|oklch|oklab|lab|lch)\(\s*(?:${ARGUMENTS})\s*\))$`, 'i');
+const isColor = (value: string) => value.length <= 100 && LITERAL.test(value) && (typeof CSS === 'undefined' || CSS.supports('color', value));
 const isObject = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value);
 const APPEARANCES: readonly unknown[] = ['light', 'dark'];
 const isAppearance = (value: unknown): value is Appearance => APPEARANCES.includes(value);
@@ -39,7 +43,7 @@ function colors(value: unknown, where: string): Colors {
   const read: Colors = {};
   for (const [role, color] of Object.entries(value)) {
     if (!isRole(role)) throw new Error(`"${role}" is no colour a theme sets.`);
-    if (typeof color !== 'string' || color.length > 100 || !COLOR.test(color.trim())) throw new Error(`"${role}" is no colour: write one as #2563eb or oklch(0.6 0.2 260).`);
+    if (typeof color !== 'string' || !isColor(color.trim())) throw new Error(`"${role}" is no colour: write one as #2563eb or oklch(0.6 0.2 260).`);
     read[role] = color.trim();
   }
   if (Object.keys(read).length === 0) throw new Error(`Its ${where} colours are empty.`);

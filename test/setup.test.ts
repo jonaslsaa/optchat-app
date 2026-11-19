@@ -44,7 +44,8 @@ test('the settings are kept in the app\'s own folder, reach every page, and name
   assert.deepEqual(await request('setSettings', { awake: false }), { theme: 'dark', cwd: elsewhere, art: true, awake: false });
   // The themes drawn in light and dark, and the sidebar's drawing, are kept as the rest are.
   assert.deepEqual(await request('setSettings', { palette: { dark: 'grove' }, art: false }), { theme: 'dark', palette: { dark: 'grove' }, cwd: elsewhere, art: false, awake: false });
-  assert.deepEqual(await request('setSettings', { palette: {}, art: true }), { theme: 'dark', cwd: elsewhere, art: true, awake: false });
+  assert.deepEqual(await request('setSettings', { palette: { light: 'iris' } }), { theme: 'dark', palette: { light: 'iris', dark: 'grove' }, cwd: elsewhere, art: false, awake: false });
+  assert.deepEqual(await request('setSettings', { palette: { light: null, dark: null }, art: true }), { theme: 'dark', cwd: elsewhere, art: true, awake: false });
   assert.deepEqual(JSON.parse(readFileSync(join(app, 'settings.json'), 'utf8')), { theme: 'dark', cwd: elsewhere, art: true, awake: false });
   assert.equal((await request('open', { profile: 'work', role: 'connected' })).window.cwd, elsewhere);
   // A folder that is not there is refused, and what was kept stays.

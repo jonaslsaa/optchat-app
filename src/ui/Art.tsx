@@ -1,8 +1,8 @@
 import { useId } from 'react';
 
 /** A theme's drawing at the top of the sidebar: a night sky with stars and clouds, in the theme's `art-` colours (`themes.ts`).
- * It is there only while the page has `data-art` (`theme.ts`), and is only a picture: nothing on it is read or pressed. T3 Code's
- * nightly sidebar art (MIT, see THIRD_PARTY_NOTICES.md). */
+ * It is there only while the page has `data-art` (`theme.ts`), and is only a picture: nothing on it is read or pressed. Where it
+ * comes from: THIRD_PARTY_NOTICES.md. */
 const STARS = [
   [14, 10, 0.6, 0.85], [38, 22, 0.4, 0.55], [58, 8, 0.5, 0.7], [84, 16, 0.4, 0.5], [104, 7, 0.6, 0.8], [126, 20, 0.4, 0.55],
   [148, 11, 0.5, 0.7], [170, 24, 0.4, 0.5], [192, 9, 0.6, 0.8], [214, 18, 0.4, 0.55], [236, 8, 0.5, 0.7], [258, 20, 0.45, 0.6],

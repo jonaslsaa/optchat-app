@@ -32,7 +32,7 @@ export function followTheme(app: App) {
   app.subscribe(() => {
     // Your own themes are known once the server has read them: till then a theme of yours is painted as it was kept.
     const { settings, themes } = app.state;
-    if (!settings || (!themes && Object.values(settings.palette ?? {}).some(id => id?.endsWith('.json')))) return;
+    if (!settings || (!themes && Object.values(settings.palette ?? {}).some(id => id?.toLowerCase().endsWith('.json')))) return;
     const all = [...BUILT_IN, ...themes?.files ?? []];
     const next: Look = { scheme: settings.theme, light: chosen(all, settings, 'light')?.light, dark: chosen(all, settings, 'dark')?.dark, art: settings.art };
     if (JSON.stringify(next) === JSON.stringify(look)) return;

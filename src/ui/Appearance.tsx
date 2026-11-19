@@ -7,8 +7,8 @@ import { BUILT_IN } from './theme.ts';
 import { chosen, OWN, OWN_NAME, type Appearance as Mode, type Colors, type Theme, type Unread } from './themes.ts';
 import { Button, cn, Switch } from './ui.tsx';
 
-/** The Appearance tab: light or dark, the theme drawn in each, the sidebar's drawing, and your own themes' folder. The tiles,
- * the cards and their pictures are T3 Code's theme library (MIT, see THIRD_PARTY_NOTICES.md), without its editor and import. */
+/** The Appearance tab: light or dark, the theme drawn in each, the sidebar's drawing, and your own themes' folder. Where the
+ * tiles, the cards and their pictures come from: THIRD_PARTY_NOTICES.md. */
 
 const MODES = ['light', 'dark'] as const;
 const SCHEMES = { system: 'System', light: 'Light', dark: 'Dark' } satisfies Record<Settings['theme'], string>;
@@ -66,9 +66,9 @@ function Round({ colors: c, mode }: { colors: Preview; mode: Mode }) {
 
 /** A theme to pick: a click on the card draws it in both appearances it has, one on a round only in that one. A ring and a sun
  * or a moon mark the appearance it is drawn in. */
-function Card({ id, name, theme, palette, drawn }: { id?: string; name: string; theme?: Theme; palette: Settings['palette']; drawn: (mode: Mode) => string | undefined }) {
+function Card({ id, name, theme, drawn }: { id?: string; name: string; theme?: Theme; drawn: (mode: Mode) => string | undefined }) {
   const modes = theme ? MODES.filter(mode => theme[mode]) : MODES, picked = (mode: Mode) => drawn(mode) === id;
-  const use = (modes: readonly Mode[]) => void app.saveSettings({ palette: { ...palette, ...Object.fromEntries(modes.map(mode => [mode, id])) } });
+  const use = (modes: readonly Mode[]) => void app.saveSettings({ palette: Object.fromEntries(modes.map(mode => [mode, id ?? null])) });
   const on = MODES.filter(picked).length === modes.length;
   return (
     <div data-theme={name} onClick={() => use(modes)} className={cn('cursor-pointer overflow-hidden rounded-xl border border-border/70 bg-card/60 transition-colors hover:bg-accent/40', on && 'bg-accent/60 ring-1 ring-ring ring-inset')}>
@@ -123,8 +123,8 @@ export function Appearance({ state, settings }: { state: State; settings: Settin
       </Section>
       <Section title="Theme" hint="A click on a card uses it in light and dark, a click on one of its rounds only in that one.">
         <div className="grid gap-2" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 12rem), 1fr))' }}>
-          <Card name={OWN_NAME} palette={settings.palette} drawn={mode => drawn(mode)?.id} />
-          {all.map(theme => 'name' in theme ? <Card key={theme.id} id={theme.id} name={theme.name} theme={theme} palette={settings.palette} drawn={mode => drawn(mode)?.id} /> : <Unreadable key={theme.id} theme={theme} />)}
+          <Card name={OWN_NAME} drawn={mode => drawn(mode)?.id} />
+          {all.map(theme => 'name' in theme ? <Card key={theme.id} id={theme.id} name={theme.name} theme={theme} drawn={mode => drawn(mode)?.id} /> : <Unreadable key={theme.id} theme={theme} />)}
         </div>
         <div className="mt-3 flex items-center justify-between gap-4 text-sm">
           <span className="text-muted-foreground">Your own themes are <a href="https://github.com/jonaslsaa/optchat-app/blob/main/docs/ui.md#themes" target="_blank" rel="noreferrer" className="underline underline-offset-2 hover:text-foreground">theme files</a> (.json) in the themes folder: each shows up here.</span>

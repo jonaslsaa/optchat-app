@@ -26,11 +26,13 @@ export function readSettings(directory: string): Settings {
 export const isDirectory = (path: string) => statSync(path, { throwIfNoEntry: false })?.isDirectory() ?? false;
 /** Keeps `kept` with what `change` names changed, written whole beside the old file and then put in its place, so a crash
  * leaves one or the other. A folder is kept as its whole path, and has to be there; an editor is one of `EDITORS`. */
-export function writeSettings(directory: string, kept: Settings, { theme = kept.theme, palette = kept.palette, art = kept.art, cwd: folder, awake = kept.awake, editor = kept.editor }: Params<'setSettings'>): Settings {
+export function writeSettings(directory: string, kept: Settings, { theme = kept.theme, palette: changed, art = kept.art, cwd: folder, awake = kept.awake, editor = kept.editor }: Params<'setSettings'>): Settings {
   const cwd = folder === undefined ? kept.cwd : folder === null ? undefined : whole(folder);
+  // A theme is named for one appearance and leaves the other's as it is; `null` is the app's own colours again.
+  const palette = Object.fromEntries(Object.entries({ ...kept.palette, ...changed }).filter((entry): entry is [string, string] => typeof entry[1] === 'string'));
   if (folder && cwd && !isDirectory(cwd)) throw new Error(`No such directory: ${cwd}`);
   if (editor !== undefined && !isEditor(editor)) throw new Error(`No editor ${editor}.`);
-  const settings: Settings = { theme, ...palette && Object.keys(palette).length > 0 && { palette }, art, ...cwd !== undefined && { cwd }, awake, ...editor !== undefined && { editor } }, file = join(directory, 'settings.json');
+  const settings: Settings = { theme, ...Object.keys(palette).length > 0 && { palette }, art, ...cwd !== undefined && { cwd }, awake, ...editor !== undefined && { editor } }, file = join(directory, 'settings.json');
   mkdirSync(directory, { recursive: true });
   // Two servers may share the folder: each writes a file of its own beside it.
   const written = `${file}.${process.pid}.new`;
@@ -48,7 +50,10 @@ export function readThemes(directory: string) {
   return {
     folder, files: names.slice(0, 100).map(file => {
       try {
-        if (statSync(join(folder, file)).size > 64 * 1024) return { file, error: 'It is larger than 64 KB.' };
+        const stat = statSync(join(folder, file));
+        // Not a pipe or a device, which a read would wait on forever.
+        if (!stat.isFile()) return { file, error: 'It is not a file.' };
+        if (stat.size > 64 * 1024) return { file, error: 'It is larger than 64 KB.' };
         return { file, text: readFileSync(join(folder, file), 'utf8') };
       } catch (error) { return { file, error: `It could not be read: ${error instanceof Error ? error.message : String(error)}` }; }
     }),

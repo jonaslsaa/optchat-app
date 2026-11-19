@@ -41,6 +41,7 @@ writeFileSync(join(home, 'chart.png'), png(120, [38, 99, 235]));
 seed(createProfile(home, 'pictured'), 1, Date.now(), PICTURED(join(home, 'chart.png')));
 createProfile(home, 'paced');
 createProfile(home, 'skills');
+createProfile(home, 'picking');
 // A chat to find in: a word in two cases, a line of code longer than the page is wide, and a long message of yours, which is
 // shown cut short, with a word at its end. And one with more messages than the chat reads at first.
 writeMemory(createProfile(home, 'finds'), 40, i => i === 3 ? 'Blåbær and BLÅBÆR' : i === 5 ? `\`\`\`\n${'x'.repeat(400)} farword\n\`\`\`` : i === 20 ? `${Array.from({ length: 40 }, (_, line) => `line ${line}`).join('\n')}\nthe needle` : `message ${i}`);
@@ -372,6 +373,32 @@ test('a / at the start of a message lists Pi\'s commands: typing finds one, the 
   await page.keyboard.press('Enter');
   await page.getByLabel('Messages waiting for the agent').getByText('/fix-tests').waitFor();
   assert.equal(await box.inputValue(), '');
+});
+
+test('an @ lists the files of the window\'s folder: a folder taken lists what is in it, and a file taken is in the message as Pi reads one', async () => {
+  const control = await connect(server.url);
+  await control.request('open', { profile: 'picking', cwd: home });
+  control.close();
+  const page = await open('picking'), box = page.getByRole('textbox', { name: 'Message' }), list = page.getByRole('listbox', { name: 'Files' });
+  await box.pressSequentially('look at @sr');
+  await list.waitFor({ timeout: 5000 }).catch(() => assert.fail('No list of files opened.'));
+  await list.locator('[data-at]', { hasText: /^src\// }).waitFor({ timeout: 5000 });
+  await page.keyboard.press('Enter');
+  assert.equal(await box.inputValue(), 'look at @src/');
+  await list.getByRole('option', { name: /^server\// }).waitFor({ timeout: 5000 });
+  await box.pressSequentially('server/p');
+  await list.locator('[data-at]', { hasText: /^pi\.ts/ }).waitFor({ timeout: 5000 });
+  await page.keyboard.press('Tab');
+  assert.equal(await box.inputValue(), 'look at @src/server/pi.ts ');
+  await list.waitFor({ state: 'detached' });
+  assert.equal(await focused(page), 'Message');
+  // Esc closes it, and the message stays as it is.
+  await box.pressSequentially('@');
+  await list.waitFor();
+  await page.keyboard.press('Escape');
+  await list.waitFor({ state: 'detached' });
+  assert.equal(await box.inputValue(), 'look at @src/server/pi.ts @');
+  await page.context().close();
 });
 
 test('while Pi is still asked for its commands, Enter sends nothing: half a name is not a message', async () => {

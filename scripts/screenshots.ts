@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import { appendFileSync, chmodSync, copyFileSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { chromium, type Browser, type Page } from 'playwright-core';
@@ -52,6 +53,15 @@ seed(picks, 4, NOW);
 keeps(picks, { provider: 'anthropic', model: 'claude-opus-5-5', thinking: 'high' }, { provider: 'openai', model: 'gpt-6-sol', thinking: 'medium' });
 seed(createProfile(home, 'work'), 95, NOW); // Ends with the turn that ran the tests.
 seed(createProfile(home, 'notes'), 2, NOW);
+// A chat that runs in a project of its own, a git repository, for the files an `@` lists.
+seed(createProfile(home, 'mentions'), 2, NOW);
+const project = join(home, 'optchat');
+for (const file of ['README.md', 'package.json', 'src/protocol.ts', 'src/client.ts', 'src/server/server.ts', 'src/server/windows.ts', 'src/ui/App.tsx', 'src/ui/Composer.tsx', 'src/ui/Commands.tsx', 'src/ui/commands.ts', 'src/ui/store.ts', 'test/windows.test.ts', 'docs/ui.md', 'dist/index.js']) {
+  mkdirSync(join(project, file, '..'), { recursive: true });
+  writeFileSync(join(project, file), '');
+}
+writeFileSync(join(project, '.gitignore'), 'dist/\n');
+execFileSync('git', ['init', '-q'], { cwd: project });
 seed(createProfile(home, 'importing'), 2, NOW); // Its import was paused: pi-optchat takes no message for it.
 seed(createProfile(home, 'slow'), 2, NOW); // Its Pi does not start in these pictures.
 // A chat of ten days with its summaries, for the memory view.
@@ -539,6 +549,24 @@ async function pictures(browser: Browser, control: Client) {
   await shot(slim2, '69-commands-narrow-dark');
   await slash.getByRole('textbox', { name: 'Message' }).pressSequentially('s');
   await shot(slash, '68-commands-typed');
+  // The files an `@` lists, of the folder the chat runs in: what is at its top, a folder narrowed to as it is typed, and the
+  // message once a file is taken. Light, and dark and narrow.
+  await control.request('open', { profile: 'mentions', cwd: project });
+  const at = await open(['mentions']), slimAt = await open(['mentions'], { width: 420, height: 800, dark: true });
+  for (const page of [at, slimAt]) {
+    await page.getByRole('textbox', { name: 'Message' }).pressSequentially('Why does @');
+    await page.getByRole('option', { name: /^src\// }).waitFor();
+  }
+  await shot(at, '260-mentions');
+  await shot(slimAt, '263-mentions-narrow-dark');
+  await at.getByRole('textbox', { name: 'Message' }).pressSequentially('src/ui/co');
+  await at.getByRole('option', { name: /^Composer\.tsx/ }).waitFor();
+  await at.waitForTimeout(300);
+  await shot(at, '261-mentions-folder');
+  for (const key of ['ArrowDown', 'ArrowDown', 'Enter']) await at.keyboard.press(key);
+  await at.getByRole('textbox', { name: 'Message' }).pressSequentially('lose its list on Esc?');
+  await at.getByRole('listbox', { name: 'Files' }).waitFor({ state: 'detached' });
+  await shot(at, '262-mentions-picked');
   // A line of a report selected, and the button that cites it; then two citations as chips over what is typed, as cards in
   // the message once it is sent, and the same message as the log has it, dark and narrow.
   const citing = await open(['cites']), cite = citing.getByRole('button', { name: 'Cite', exact: true });

@@ -12,6 +12,7 @@ import { Agents } from './agents.ts';
 import { inside, installed, picture, opening, preferred, EDITORS, type Installed, type Launch as Opened } from './files.ts';
 import { GitHub } from './github.ts';
 import { Imports } from './imports.ts';
+import { mentions } from './mentions.ts';
 import { reason } from './pi.ts';
 import { profileDirectory, Profiles } from './profiles.ts';
 import { appHome, isDirectory, readSettings, readThemes, writeSettings } from './settings.ts';
@@ -107,6 +108,7 @@ export async function startServer({ port = 0, origins = [], ui = join(import.met
       open(file, line);
       return {};
     },
+    mentions: async ({ window, query }) => { const at = folder(window); return { mentions: at === undefined ? [] : await mentions(at, query) }; },
     openInstructions: ({ profile }) => { open(join(profileDirectory(home, profile), 'AGENTS.md')); return {}; },
     editors: () => {
       const found = editors();

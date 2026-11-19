@@ -46,6 +46,7 @@ The client sends `{ id, method, params }` and gets `{ id, result }` or `{ id, er
 | `resumeAgents { profile }` | Resumes them through the Pi that has the profile, which is started first if none has, and started again first if it is the app's on an older pi-optchat with nothing to do ([Windows](#windows)) (pi-optchat's `resumeCutOff`). A Pi that hangs up on it (one in a terminal on a pi-optchat from before 0.12.2, or the app's while at work) is said to be what to start again. |
 | `restart { profile }` | Starts the app's Pi of a profile's main chat again, on the pi-optchat installed now. What it was doing stops, as on a quit. Refused for a chat a Pi outside the app has. |
 | `github { profile, limit?, fresh? }` | The issues and pull requests the profile's main chat named by their address on github.com, found in the log each time: the latest named first, `limit` (30) of them, with `more` for how many that leaves out. Each has its `repo`, `number`, `url` and `kind`, and from GitHub its `title`, `state` (`open`, `draft`, `merged`, `closed`), and for an open pull request its `checks` and `review`. GitHub is asked through the GitHub CLI after the answer, so `pending` says how many items are being asked about, and `gh` how the last asking went (`ok`, `missing`, `signed_out`, `failed` with a `message`). See [GitHub](#github). |
+| `mentions { window, query }` | The 20 files and folders under the folder the window runs in that match best what a message's `@` is followed by ([Files a message names](#files-a-message-names)). |
 | `isFile { window, path }`, `openFile { window, path, line? }` | Whether `path` is a file in the folder the window runs in, and opening it there in your editor ([Files the chat names](#files-the-chat-names)). |
 | `windows` | Every window and its state. |
 | `open { profile, role?, cwd? }` | The profile's main window (always the same one), or a new connected window. Starts nothing. `cwd` is where the window runs, set when it is first opened. |
@@ -200,6 +201,14 @@ A path in a reply (`src/ui/App.tsx:42`) is a link once the server says it is a f
 - **Never run.** The editor gets the whole path as one argument, with no shell. With no editor, the Mac opens the file as text (`open -t`): `open` on the file itself would run a `.command`, a script or an app.
 - **Only where it is told to.** `startServer` opens nothing unless it is given a `launcher`; the app, `npm start` and `npm run dev` give it, no test does.
 
-## From T3 Code
+## Files a message names
+
+An `@` in the composer lists files to name in the message (`mentions`, `src/server/mentions.ts`). The page sends the window and what is typed after the `@`, never a folder: the server takes the window's folder itself, as for the files the chat names.
+
+- **What is listed.** In a git repository, what `git ls-files --cached --others --exclude-standard` lists (so `.gitignore` is kept to), with the folders those files are in. Outside one, the folder walked a level at a time, without `node_modules` and dot-folders. Either way at most 25,000 entries and 3 seconds, so a home folder cannot hang the server, and nothing of it is synchronous. A listing is kept 30 seconds a folder, so each letter typed does not read the disk again; there is no watcher.
+- **A folder typed.** A query with a `/` lists the folder before its last `/` (a repository of its own there is git's) and matches what follows: past the walk's reach outside a repository, a file is found by typing its folders.
+- **Ranked** by its name, then its path: the whole name, one that begins with what is typed, a word of it that does, one that has it, and last one that has its letters in order; then the shallower and the first by name (`ranking.ts`).
+- **Only under the window's folder.** An absolute query, one from `~`, one with a `..` or a `\\` is refused. That is a limit too: Pi's terminal also lists `~/` and absolute paths, the app does not.
+
 
 The Pi handling follows [T3 Code](https://github.com/pingdotgg/t3code)'s Pi adapter in what it does, with none of its code: each Pi in its own process group, records split on line feeds only, prompts always sent with a queueing behaviour so one that lands as a run starts is queued instead of failing, `clear_queue` before `abort`, and numbered records for catching up.

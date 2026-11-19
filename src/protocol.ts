@@ -45,6 +45,9 @@ export type Command = Static<typeof Command>;
  * reason). */
 export const Offered = Type.Object({ provider: Type.String(), id: Type.String(), name: Type.String(), levels: Type.Array(Thinking) });
 export type Offered = Static<typeof Offered>;
+/** A file or a folder (`dir`) a message can name with `@`, by its path under the folder the window runs in. */
+export const Mention = Type.Object({ path: Type.String(), dir: Type.Boolean() });
+export type Mention = Static<typeof Mention>;
 
 /** A window is a conversation in the app, and one Pi process when it runs. `role` is its place in the app and never changes: the
  * profile's `main` chat, or a `connected` window beside it, whose conversation ends in a handoff to the main chat.
@@ -291,6 +294,10 @@ export const methods = {
   isFile: method(Type.Object({ window: Type.String(), path: Type.String({ maxLength: 1024 }) }), Type.Object({ file: Type.Boolean() })),
   /** Opens that file in your editor, at `line`. Refused for anything else. */
   openFile: method(Type.Object({ window: Type.String(), path: Type.String({ maxLength: 1024 }), line: Type.Optional(Type.Integer({ minimum: 1 })) }), none),
+  /** The files and folders under the folder the window runs in that a message's `@` can name: the 20 that match `query`
+   * best, which is what is typed after the `@`. A `query` with a `/` lists the folder before its last `/`. Refused for one that
+   * leaves the window's folder: absolute, from `~`, or with a `..`. */
+  mentions: method(Type.Object({ window: Type.String(), query: Type.String({ maxLength: 1024 }) }), Type.Object({ mentions: Type.Array(Mention) })),
   /** Every window the server knows. */
   windows: method(none, Type.Object({ windows: Type.Array(WindowState) })),
   /** A profile's main window (the same one each time), or a new connected window, which runs in `cwd` or else the folder in

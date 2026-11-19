@@ -604,6 +604,11 @@ export class App {
     if (!file) this.files.set(key, file = Promise.resolve().then(() => this.request('isFile', { window, path })).then(({ file }) => file, () => { this.files.delete(key); return false; }));
     return file;
   }
+  /** The files and folders of the window's folder a message's `@` can name, for what is typed after it; none when the server
+   * cannot say. */
+  async mentions(window: string, query: string) {
+    return (await this.client?.request('mentions', { window, query }).catch(() => undefined))?.mentions ?? [];
+  }
   async openFile(window: string, path: string, line?: number) { await this.ask('openFile', { window, path, line }); }
   async closeWindow(window: string) { await this.ask('close', { window }); }
   /** Answers a dialog, which then goes; one whose answer did not arrive stays to be answered again. */

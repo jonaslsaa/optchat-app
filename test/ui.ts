@@ -22,7 +22,7 @@ process.env.FAKE_PI_HOME = join(home, 'pi');
 mkdirSync(join(home, 'pi', 'pi-optchat'), { recursive: true });
 writeFileSync(join(home, 'pi', 'pi-optchat', 'package.json'), JSON.stringify({ name: 'pi-optchat', version: '0.12.2' }));
 writeFileSync(join(home, 'pi', 'state.json'), JSON.stringify({ version: '1.5.2', providers: ['anthropic', 'openai'], packages: { 'npm:pi-optchat': join(home, 'pi', 'pi-optchat') } }));
-for (const name of ['bar', 'cold', 'colder', 'chat', 'beside', 'sheet', 'memory', 'rows', 'menus', 'fields', 'asks', 'windows', 'importing', 'into', 'keys', 'spend', 'commands', 'arrows', 'mute', 'said', 'images', 'gallery', 'tabs', 'slow', 'inline', 'held', 'unread']) {
+for (const name of ['bar', 'cold', 'colder', 'chat', 'beside', 'sheet', 'memory', 'rows', 'menus', 'fields', 'asks', 'windows', 'importing', 'into', 'keys', 'spend', 'commands', 'arrows', 'mute', 'said', 'images', 'gallery', 'tabs', 'slow', 'inline', 'held', 'unread', 'finish']) {
   const profile = createProfile(home, name);
   if (['bar', 'cold', 'colder', 'memory', 'windows', 'keys', 'spend', 'arrows', 'unread'].includes(name)) { writeMemory(profile, 16); continue; }
   seed(profile, TEAM.length, Date.now(), TEAM);
@@ -733,6 +733,23 @@ test('the windows over a narrow chat are open for one pick: a window picked, a n
   assert.equal(await beside.count(), 0, 'a window made narrow has the windows closed');
   await page.setViewportSize(WIDE);
   await beside.waitFor({ timeout: 3000 }).catch(() => assert.fail('The windows did not come back beside the chat in a wide window.'));
+});
+
+test('a connected window\'s row offers one thing: Complete while its conversation is open, and to close it once that is handed off', async () => {
+  const page = await open('finish'), row = page.getByRole('navigation', { name: 'Windows' }).getByRole('listitem').nth(1);
+  /** The buttons at the end of the row, which show with the pointer on it. */
+  const offered = async () => { await row.hover(); return row.getByRole('button', { name: /^(Complete|Close window)$/ }).evaluateAll(buttons => buttons.map(button => button.getAttribute('aria-label'))); };
+  await page.getByRole('button', { name: 'New window' }).click();
+  await page.getByRole('heading', { name: 'New connected window' }).waitFor();
+  await page.getByRole('textbox', { name: 'Message' }).fill('hello there');
+  await page.keyboard.press('Enter');
+  await page.getByRole('button', { name: 'Complete', exact: true }).first().waitFor(); // The one in the window's top row, once it has said something.
+  assert.deepEqual(await offered(), ['Complete'], 'an open conversation is completed, not closed');
+  await row.getByRole('button', { name: 'Complete', exact: true }).click();
+  await page.getByText('Completed', { exact: true }).waitFor();
+  assert.deepEqual(await offered(), ['Close window'], 'a completed one has nothing left to hand off');
+  await row.getByRole('button', { name: 'Close window' }).click();
+  await row.waitFor({ state: 'detached' });
 });
 
 test('⌘F finds in the chat: what is typed is marked wherever it is written and followed as the chat grows, Enter goes from one to the next, Esc closes it and the run goes on, and the same text is searched in the memory from there', async () => {

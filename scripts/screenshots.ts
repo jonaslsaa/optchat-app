@@ -1,7 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import { appendFileSync, chmodSync, copyFileSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { chromium, type Browser, type Page } from 'playwright-core';
+import { chromium, type Browser, type Locator, type Page } from 'playwright-core';
 import { build } from 'vite';
 import { connect, type Client } from '../src/client.ts';
 import { startServer } from '../src/server/server.ts';
@@ -161,7 +161,7 @@ async function pictures(browser: Browser, control: Client) {
   }
   // A code block gets its colours once Shiki's chunks are fetched: the picture waits for the page to have nothing left to fetch,
   // and then for what moves (a row that opens, 200 ms) to have come to rest.
-  const shot = async (page: Page, name: string) => { await page.mouse.move(0, 0); await page.waitForLoadState('networkidle'); await page.waitForFunction(() => !document.querySelector('[aria-busy=true]')); await page.waitForTimeout(300); await page.screenshot({ path: join(out, `${name}.png`) }); console.log(join(out, `${name}.png`)); };
+  const shot = async (page: Page, name: string, hovered?: Locator) => { await (hovered ? hovered.hover() : page.mouse.move(0, 0)); await page.waitForLoadState('networkidle'); await page.waitForFunction(() => !document.querySelector('[aria-busy=true]')); await page.waitForTimeout(300); await page.screenshot({ path: join(out, `${name}.png`) }); console.log(join(out, `${name}.png`)); };
   const say = async (page: Page, text: string, key = 'Enter') => { await page.getByRole('textbox', { name: 'Message' }).fill(text); await page.keyboard.press(key); };
 
   const empty = await open(['empty']);
@@ -204,9 +204,13 @@ async function pictures(browser: Browser, control: Client) {
   await work.getByText('Next I would wire the agents panel.').waitFor();
   await work.getByRole('button', { name: 'Complete' }).first().waitFor();
   await shot(work, '08-connected-window');
-  await work.getByRole('button', { name: 'Complete' }).first().click();
+  // The window's row with the pointer on it: what its one button offers while the conversation is open, and once it is done.
+  const row = work.getByRole('navigation', { name: 'Windows' }).getByRole('listitem').nth(1);
+  await shot(work, '270-window-row-open', row);
+  await work.getByRole('main').getByRole('button', { name: 'Complete' }).click();
   await work.getByText('Completed', { exact: true }).waitFor();
   await shot(work, '09-completed-window');
+  await shot(work, '271-window-row-completed', row);
 
   await work.getByRole('button', { name: 'Open a profile' }).click();
   await work.getByRole('option', { name: 'notes' }).click();

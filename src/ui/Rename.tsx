@@ -9,7 +9,7 @@ import { cn } from './ui.tsx';
 export function Rename({ window, name, done, className }: { window: string; name: string; done: () => void; className?: string }) {
   const keeps = useRef(true);
   return (
-    <input autoFocus aria-label="Window name" defaultValue={name} maxLength={NAME} onFocus={event => event.currentTarget.select()} onClick={event => event.stopPropagation()}
+    <input data-renaming autoFocus aria-label="Window name" defaultValue={name} maxLength={NAME} onFocus={event => event.currentTarget.select()}
       className={cn('min-w-0 rounded-sm bg-background px-1 text-foreground text-sm outline-none ring-1 ring-ring', className)}
       onKeyDown={event => {
         event.stopPropagation();

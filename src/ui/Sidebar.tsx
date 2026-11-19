@@ -12,13 +12,18 @@ import { UpdateButton } from './Update.tsx';
 /** The profile's windows: its main chat on top, connected windows below, each with one button for what can be done to it, under a top row as high
  * as the chat's, where a new window is opened, and over the desktop app's update button. A row shows its ⌥ digit while ⌥ is
  * held. `onPick`: a window was picked or a new one asked for, which is what the sidebar was opened for where it lies over the
- * chat. A double-click on a connected window's name, or the desktop app's right-click Rename, renames it (`Rename`). The row and its states are T3 Code's sidebar thread row (MIT, see THIRD_PARTY_NOTICES.md). */
+ * chat. A double-click on a connected window's name, F2 on its row, or the desktop app's right-click Rename, renames it (`Rename`). The row and its states are T3 Code's sidebar thread row (MIT, see THIRD_PARTY_NOTICES.md). */
 export function Sidebar({ state, profile, selected, onPick }: { state: State; profile: string; selected: string; onPick: () => void }) {
   const windows = state.windows.filter(window => window.profile === profile), hints = useAltHeld(), [renaming, setRenaming] = useState<string>();
   useEffect(() => {
     const asked = (event: Event) => { if (event instanceof CustomEvent && typeof event.detail === 'string') setRenaming(event.detail); };
-    addEventListener(RENAME_EVENT, asked);
-    return () => removeEventListener(RENAME_EVENT, asked);
+    // Which row a right click was on, for the desktop app's menu to ask (main.ts): the page's own target, whatever it is zoomed to.
+    const clicked = ({ target }: MouseEvent) => {
+      const row = target instanceof Element ? target.closest<HTMLElement>('[data-rename]')?.dataset.rename : undefined;
+      if (row) document.documentElement.dataset.renames = row; else delete document.documentElement.dataset.renames;
+    };
+    addEventListener(RENAME_EVENT, asked); addEventListener('contextmenu', clicked, true);
+    return () => { removeEventListener(RENAME_EVENT, asked); removeEventListener('contextmenu', clicked, true); delete document.documentElement.dataset.renames; };
   }, []);
   return (
     <nav aria-label="Windows" className="relative flex h-full w-(--sidebar-width) shrink-0 flex-col border-sidebar-border border-r bg-sidebar text-sidebar-foreground">
@@ -35,6 +40,7 @@ export function Sidebar({ state, profile, selected, onPick }: { state: State; pr
           return (
             <li key={window.id} data-rename={connected ? window.id : undefined} className="group/row relative">
               <button type="button" aria-current={active || undefined} onClick={() => { onPick(); app.select(window.id); }}
+                aria-keyshortcuts={connected ? 'F2' : undefined} onKeyDown={event => { if (connected && event.key === 'F2') { event.preventDefault(); setRenaming(window.id); } }}
                 className={cn('flex h-9 w-full select-none items-center gap-2.5 overflow-hidden rounded-md px-2.5 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset',
                   active ? 'bg-sidebar-row-active light:ring-1 light:ring-sidebar-border/70 light:ring-inset' : 'hover:bg-sidebar-row-hover')}>
                 {!connected ? <MessagesSquareIcon className="size-4 shrink-0 text-sidebar-muted-foreground" />

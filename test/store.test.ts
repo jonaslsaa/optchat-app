@@ -525,6 +525,11 @@ test('a connected window renamed is called by its name on every page, an empty n
   const id = one.app.state.selected.work, called = (state: State) => title(state.windows.find(window => window.id === id)!, state);
   await one.app.rename(id, '  Release notes  ');
   assert.equal(called(await other.until(state => state.windows.some(window => window.name !== undefined))), 'Release notes');
+  // 128 characters at most, as pi-optchat cuts a run's title: a longer name is refused, and the one it had stays.
+  await one.app.rename(id, 'x'.repeat(129));
+  assert.match(one.app.state.error ?? '', /more than 128 characters/);
+  await one.app.rename(id, 'y'.repeat(128));
+  assert.equal(called(await other.until(state => state.windows.some(window => window.name?.startsWith('y')))), 'y'.repeat(128));
   await one.app.rename(id, ' ');
   assert.equal(called(await other.until(state => state.windows.every(window => window.name === undefined))), UNTITLED);
   await one.app.rename('work/main', 'Not mine');

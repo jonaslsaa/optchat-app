@@ -71,8 +71,8 @@ else {
     webContents.on('will-navigate', (event, url) => { if (destination(url, server.page) !== 'here') { event.preventDefault(); browse(url); } });
     webContents.setWindowOpenHandler(({ url }) => { browse(url); return { action: 'deny' }; });
     // A right click: Electron has no menu of its own. On a connected window's row it offers Rename, which only the page can
-    // tell (`data-rename` is the row's window), and which it does (RENAME_EVENT).
-    webContents.on('context-menu', (_event, params) => void webContents.executeJavaScript(`document.elementFromPoint(${params.x}, ${params.y})?.closest('[data-rename]')?.dataset.rename`).catch(() => undefined).then((row: unknown) => {
+    // tell (it notes the row its right click was on, so no point is mapped through the zoom), and which it does (RENAME_EVENT).
+    webContents.on('context-menu', (_event, params) => void webContents.executeJavaScript('document.documentElement.dataset.renames').catch(() => undefined).then((row: unknown) => {
       const rename = typeof row === 'string' ? () => void webContents.executeJavaScript(`dispatchEvent(new CustomEvent('${RENAME_EVENT}', { detail: ${JSON.stringify(row)} }))`).catch(() => {}) : undefined;
       Menu.buildFromTemplate(contextMenu(params, server.page, {
         replace: word => webContents.replaceMisspelling(word), copyLink: () => clipboard.writeText(params.linkURL), copyImage: () => webContents.copyImageAt(params.x, params.y), rename,

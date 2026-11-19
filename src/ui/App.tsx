@@ -115,9 +115,10 @@ function Profile({ state, profile, onSettings, onUsage, onNewProfile, onImport, 
               narrow page, where the row is full, only while that is for you to act on, and not while the app looks or downloads. */}
           {!sidebar && state.update && state.update.state !== 'idle' && <UpdateButton update={state.update} className={cn('-ms-1', (state.update.state === 'looking' || state.update.state === 'downloading') && 'max-md:hidden')} />}
           {state.tabs.length === 1 && <><ProfileName state={state} profile={profile} onNew={onNewProfile} onImport={onImport} /><span aria-hidden="true" className="-ms-1.5 text-muted-foreground/50 text-sm">/</span></>}
-          {/* A connected window's name is renamed with a double-click, as its row in the sidebar is. */}
-          {own && renaming ? <Rename window={window.id} name={name ?? ''} done={() => setRenaming(false)} className="h-7 w-64 font-medium" />
-            : <h1 onDoubleClick={own ? () => setRenaming(true) : undefined} className={cn('min-w-0 truncate font-medium text-sm', name === UNTITLED && 'text-muted-foreground')}>{name}</h1>}
+          {/* A connected window's name is renamed with a double-click, as its row in the sidebar is: so in the desktop app it is
+              not what drags the window, whose title bar would take the double-click. A box is for the window it was opened on. */}
+          {own && renaming ? <Rename key={window.id} window={window.id} name={name ?? ''} done={() => setRenaming(false)} className="h-7 w-64 font-medium" />
+            : <h1 onDoubleClick={own ? () => setRenaming(true) : undefined} className={cn('min-w-0 truncate font-medium text-sm', name === UNTITLED && 'text-muted-foreground', own && '[-webkit-app-region:no-drag]')}>{name}</h1>}
           {own && <span className="shrink-0 rounded-full border px-2 py-0.5 text-2xs text-muted-foreground">{window.completed ? 'Completed' : 'Connected window'}</span>}
           <span className="flex-1" />
           {!own && (

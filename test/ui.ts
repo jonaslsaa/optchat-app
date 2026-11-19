@@ -7,6 +7,7 @@ import { build } from 'vite';
 import { agents, CHANGES, FILES, FORMULAS, GONE, NAMED, PICTURED, remember, seed, SEEN, SEEN_IMAGE, TEAM } from '../scripts/seed.ts';
 import type { Launch } from '../src/server/files.ts';
 import { connect } from '../src/client.ts';
+import { RENAME_EVENT } from '../src/menu.ts';
 import { startServer } from '../src/server/server.ts';
 import { cited, named } from '../src/ui/cite.ts';
 import { describeOwner, lockProfile } from 'pi-optchat/files';
@@ -792,11 +793,23 @@ test('a connected window is renamed in place from its row or its title: Enter ke
   await goesOn(page, 'in the box a window is renamed in');
   assert.deepEqual(await called(), ['Release notes', 'Release notes']);
   await stops(page, 'once the box is gone');
-  await row.getByText('Release notes').dblclick();
+  // From the keyboard, F2 on the row.
+  await row.getByRole('button', { name: 'Release notes' }).focus();
+  await page.keyboard.press('F2');
   await box.fill('');
   await page.keyboard.press('Enter');
   await row.getByText('hello there').waitFor();
   assert.deepEqual(await called(), ['hello there', 'hello there']);
+  // Over a narrow chat, the desktop app's Rename (its event, as the shell sends it): Esc is the box's before it closes the windows.
+  const narrow = await open('renames', NARROW), over = narrow.getByRole('button', { name: 'Close the sidebar' });
+  await narrow.keyboard.press('ControlOrMeta+b');
+  await over.waitFor();
+  const id = await narrow.getByRole('navigation', { name: 'Windows' }).getByRole('listitem').nth(1).getAttribute('data-rename') ?? '';
+  await narrow.evaluate(([event, id]) => dispatchEvent(new CustomEvent(event, { detail: id })), [RENAME_EVENT, id]);
+  await narrow.getByRole('textbox', { name: 'Window name' }).fill('Not kept');
+  await narrow.keyboard.press('Escape');
+  assert.equal(await over.count(), 1, 'the windows are still open');
+  assert.equal(await narrow.getByRole('navigation', { name: 'Windows' }).getByText('hello there').count(), 1);
 });
 
 test('⌘F finds in the chat: what is typed is marked wherever it is written and followed as the chat grows, Enter goes from one to the next, Esc closes it and the run goes on, and the same text is searched in the memory from there', async () => {

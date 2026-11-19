@@ -2,7 +2,7 @@ import { app, BrowserWindow, clipboard, dialog, Menu, powerSaveBlocker, screen, 
 import { readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { MENU_EVENT, type MenuAction } from '../menu.ts';
+import { MENU_EVENT, RENAME_EVENT, type MenuAction } from '../menu.ts';
 import { startServer } from '../server/server.ts';
 import { launch } from '../server/files.ts';
 import { terminal } from '../server/setup.ts';
@@ -70,10 +70,14 @@ else {
     window.on('enter-full-screen', mark).on('leave-full-screen', mark);
     webContents.on('will-navigate', (event, url) => { if (destination(url, server.page) !== 'here') { event.preventDefault(); browse(url); } });
     webContents.setWindowOpenHandler(({ url }) => { browse(url); return { action: 'deny' }; });
-    // A right click: Electron has no menu of its own.
-    webContents.on('context-menu', (_event, params) => Menu.buildFromTemplate(contextMenu(params, server.page, {
-      replace: word => webContents.replaceMisspelling(word), copyLink: () => clipboard.writeText(params.linkURL), copyImage: () => webContents.copyImageAt(params.x, params.y),
-    })).popup({ window }));
+    // A right click: Electron has no menu of its own. On a connected window's row it offers Rename, which only the page can
+    // tell (`data-rename` is the row's window), and which it does (RENAME_EVENT).
+    webContents.on('context-menu', (_event, params) => void webContents.executeJavaScript(`document.elementFromPoint(${params.x}, ${params.y})?.closest('[data-rename]')?.dataset.rename`).catch(() => undefined).then((row: unknown) => {
+      const rename = typeof row === 'string' ? () => void webContents.executeJavaScript(`dispatchEvent(new CustomEvent('${RENAME_EVENT}', { detail: ${JSON.stringify(row)} }))`).catch(() => {}) : undefined;
+      Menu.buildFromTemplate(contextMenu(params, server.page, {
+        replace: word => webContents.replaceMisspelling(word), copyLink: () => clipboard.writeText(params.linkURL), copyImage: () => webContents.copyImageAt(params.x, params.y), rename,
+      })).popup({ window });
+    }));
     // A page whose process crashed is loaded again, a few times, in place of a blank window.
     const recover = recovery(), load = () => window.loadURL(server.page);
     webContents.on('render-process-gone', (_event, { reason }) => {

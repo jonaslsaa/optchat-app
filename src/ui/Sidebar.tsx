@@ -1,7 +1,10 @@
 import { CheckIcon, MessageSquareIcon, MessagesSquareIcon, SquarePenIcon, XIcon } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { RENAME_EVENT } from '../menu.ts';
 import { canComplete } from '../window.ts';
 import { Art } from './Art.tsx';
 import { label, useAltHeld } from './keys.ts';
+import { Rename } from './Rename.tsx';
 import { app, title, UNTITLED, type State } from './store.ts';
 import { Button, cn, Kbd, WindowDot } from './ui.tsx';
 import { UpdateButton } from './Update.tsx';
@@ -9,9 +12,14 @@ import { UpdateButton } from './Update.tsx';
 /** The profile's windows: its main chat on top, connected windows below, each with one button for what can be done to it, under a top row as high
  * as the chat's, where a new window is opened, and over the desktop app's update button. A row shows its ⌥ digit while ⌥ is
  * held. `onPick`: a window was picked or a new one asked for, which is what the sidebar was opened for where it lies over the
- * chat. The row and its states are T3 Code's sidebar thread row (MIT, see THIRD_PARTY_NOTICES.md). */
+ * chat. A double-click on a connected window's name, or the desktop app's right-click Rename, renames it (`Rename`). The row and its states are T3 Code's sidebar thread row (MIT, see THIRD_PARTY_NOTICES.md). */
 export function Sidebar({ state, profile, selected, onPick }: { state: State; profile: string; selected: string; onPick: () => void }) {
-  const windows = state.windows.filter(window => window.profile === profile), hints = useAltHeld();
+  const windows = state.windows.filter(window => window.profile === profile), hints = useAltHeld(), [renaming, setRenaming] = useState<string>();
+  useEffect(() => {
+    const asked = (event: Event) => { if (event instanceof CustomEvent && typeof event.detail === 'string') setRenaming(event.detail); };
+    addEventListener(RENAME_EVENT, asked);
+    return () => removeEventListener(RENAME_EVENT, asked);
+  }, []);
   return (
     <nav aria-label="Windows" className="relative flex h-full w-(--sidebar-width) shrink-0 flex-col border-sidebar-border border-r bg-sidebar text-sidebar-foreground">
       {/* A theme's drawing, under the top row: what is on it is white, since the sky is dark in light and dark alike. */}
@@ -25,7 +33,7 @@ export function Sidebar({ state, profile, selected, onPick }: { state: State; pr
         {windows.map((window, index) => {
           const active = window.id === selected, name = title(window, state), connected = window.role === 'connected';
           return (
-            <li key={window.id} className="group/row relative">
+            <li key={window.id} data-rename={connected ? window.id : undefined} className="group/row relative">
               <button type="button" aria-current={active || undefined} onClick={() => { onPick(); app.select(window.id); }}
                 className={cn('flex h-9 w-full select-none items-center gap-2.5 overflow-hidden rounded-md px-2.5 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset',
                   active ? 'bg-sidebar-row-active light:ring-1 light:ring-sidebar-border/70 light:ring-inset' : 'hover:bg-sidebar-row-hover')}>
@@ -36,13 +44,13 @@ export function Sidebar({ state, profile, selected, onPick }: { state: State; pr
                     is no pointer to hover with: Complete while it has a conversation to hand to the main chat, and close once it has
                     none, or while a Complete waits for its Pi, which may never answer. The row is never offered both. The title gives
                     it room, so it is cut short before it. */}
-                <span className={cn('min-w-0 flex-1 truncate text-sm', active ? 'font-medium text-foreground' : 'text-sidebar-foreground/80', (window.completed || name === UNTITLED) && 'text-sidebar-muted-foreground',
+                <span onDoubleClick={connected ? () => setRenaming(window.id) : undefined} className={cn('min-w-0 flex-1 truncate text-sm', active ? 'font-medium text-foreground' : 'text-sidebar-foreground/80', (window.completed || name === UNTITLED) && 'text-sidebar-muted-foreground',
                   connected && 'group-focus-within/row:pe-4 group-hover/row:pe-4 pointer-coarse:pe-4')}>{name}</span>
                 <span className={cn('flex h-6 shrink-0 items-center justify-end gap-1', connected && 'group-focus-within/row:invisible group-hover/row:invisible pointer-coarse:invisible')}>
                   <WindowDot windows={[window]} />{hints && index < 9 && <Kbd className="bg-transparent text-2xs text-sidebar-muted-foreground/70 max-md:hidden">{label(`alt+${index + 1}`)}</Kbd>}
                 </span>
               </button>
-              {connected && (
+              {renaming === window.id ? <Rename window={window.id} name={name} done={() => setRenaming(undefined)} className="absolute inset-y-1 right-1.5 left-8" /> : connected && (
                 <span className="absolute inset-y-0 right-1.5 hidden items-center group-focus-within/row:flex group-hover/row:flex pointer-coarse:flex">
                   {canComplete(window) && !state.completing.includes(window.id) ? <Button variant="ghost-muted" size="icon-xs" aria-label="Complete" title="Complete: hand this conversation to the main chat" onClick={() => void app.complete(window.id)}><CheckIcon /></Button>
                     : <Button variant="ghost-muted" size="icon-xs" aria-label="Close window" title="Close window" onClick={() => void app.closeWindow(window.id)}><XIcon /></Button>}

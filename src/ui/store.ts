@@ -78,9 +78,11 @@ export const UNTITLED = 'Untitled window';
 /** The profiles the bar over the page offers to resume: cut off, and not dismissed since. */
 export const cutOffShown = ({ cutOff, dismissed }: Pick<State, 'cutOff' | 'dismissed'>) =>
   cutOff.filter(({ profile, agents }) => agents.some(({ started }) => started > (Object.hasOwn(dismissed, profile) ? dismissed[profile] : -Infinity)));
-/** What a window is called: the main chat, or a connected window by the first message of the conversation it is in, once it has one. */
+/** What a window is called: the main chat, or a connected window by the name you gave it (`rename`), else by the first message of
+ * the conversation it is in, once it has one. */
 export function title(window: WindowState, state: State) {
   if (window.role === 'main') return 'Main chat';
+  if (window.name) return window.name;
   const first = current(window, [...state.sessions[window.id] ?? [], ...state.live[window.id]?.messages ?? []]).find(message => message.role === 'user');
   // A message that only cites something is called by what it cites, and one that runs a skill as it was typed.
   const said = yours(first ? words(first.content) : '');
@@ -595,6 +597,7 @@ export class App {
     const queued = await this.ask(method, { window });
     return queued ? [...queued.steering, ...queued.followUp] : [];
   }
+  async rename(window: string, name: string) { await this.ask('rename', { window, name }); }
   async complete(window: string) {
     if (this.state.completing.includes(window)) return; // Asked once already: a second would be refused, and end the wait.
     this.set({ completing: [...this.state.completing, window] });

@@ -514,3 +514,20 @@ test('a connected window is called by what its first message says, and by what t
   const called = (text: string) => title(window, { ...app.state, sessions: { [window.id]: [{ role: 'user', timestamp: 1, content: [{ type: 'text', text }] }] } });
   assert.deepEqual([called(citing([cite('the banner', { id: 9, n: 1 })], 'Which colour?\nThe hex.')), called(citing([cite('the banner\nof the release')], '').trim()), title(window, app.state)], ['Which colour?', 'the banner', UNTITLED]);
 });
+
+test('a connected window renamed is called by its name on every page, an empty name gives back the automatic one, and the main chat keeps its own', async t => {
+  const server = await startServer({ home: directory, cwd: directory, pi, token: 'rename' });
+  t.after(() => server.close());
+  const one = page(t), other = page(t);
+  await Promise.all([one.app.start(server.url), other.app.start(server.url)]);
+  await one.app.openProfile('work');
+  await one.app.newWindow('work');
+  const id = one.app.state.selected.work, called = (state: State) => title(state.windows.find(window => window.id === id)!, state);
+  await one.app.rename(id, '  Release notes  ');
+  assert.equal(called(await other.until(state => state.windows.some(window => window.name !== undefined))), 'Release notes');
+  await one.app.rename(id, ' ');
+  assert.equal(called(await other.until(state => state.windows.every(window => window.name === undefined))), UNTITLED);
+  await one.app.rename('work/main', 'Not mine');
+  assert.equal(one.app.state.error, 'The main chat keeps its name.');
+  assert.equal(title(one.app.state.windows.find(window => window.role === 'main')!, one.app.state), 'Main chat');
+});

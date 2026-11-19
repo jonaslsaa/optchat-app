@@ -207,6 +207,19 @@ async function pictures(browser: Browser, control: Client) {
   // The window's row with the pointer on it: what its one button offers while the conversation is open, and once it is done.
   const row = work.getByRole('navigation', { name: 'Windows' }).getByRole('listitem').nth(1);
   await shot(work, '270-window-row-open', row);
+  // The window renamed in place, from its row and from its title, and given back its own name after.
+  const named = work.getByRole('textbox', { name: 'Window name' });
+  await row.getByText('Give me a demo of this repository').dblclick();
+  await named.fill('Repository demo');
+  await shot(work, '273-window-rename-row');
+  await work.keyboard.press('Enter');
+  await row.getByText('Repository demo').waitFor();
+  await shot(work, '274-window-renamed');
+  await work.locator('main > header h1').dblclick();
+  await shot(work, '275-window-rename-title');
+  await named.fill('');
+  await work.keyboard.press('Enter');
+  await row.getByText('Give me a demo of this repository').waitFor();
   await work.getByRole('main').getByRole('button', { name: 'Complete' }).click();
   await work.getByText('Completed', { exact: true }).waitFor();
   await shot(work, '09-completed-window');

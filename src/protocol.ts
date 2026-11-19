@@ -81,11 +81,14 @@ export const GitHubItem = Type.Object({
 export type GitHubItem = Static<typeof GitHubItem>;
 
 /** The app's own settings, kept in its own folder (never in pi-optchat's). `cwd`: where new windows run; your home directory
- * when it is not set. `theme`: the page's colours, the system's by default. `awake`: whether the desktop app keeps the Mac
- * from sleeping while agents work, which it does until you turn it off; a browser cannot. `editor`: the one files open in, as
- * you picked it from those `editors` lists (an id of `EDITORS` in `server/files.ts`). */
+ * when it is not set. `theme`: light or dark, the system's by default. `palette`: the theme drawn in light and the one in dark,
+ * each by its id (`ui/themes.ts`), and the app's own colours where none is named. `art`: whether a theme that has a drawing
+ * for the top of the sidebar shows it. `awake`: whether the desktop app keeps the Mac from sleeping while agents work, which
+ * it does until you turn it off; a browser cannot. `editor`: the one files open in, as you picked it from those `editors`
+ * lists (an id of `EDITORS` in `server/files.ts`). */
 const Theme = Type.Enum(['system', 'light', 'dark']);
-export const Settings = Type.Object({ cwd: Type.Optional(Type.String()), theme: Theme, awake: Type.Boolean(), editor: Type.Optional(Type.String()) });
+const Palette = Type.Object({ light: Type.Optional(Type.String()), dark: Type.Optional(Type.String()) });
+export const Settings = Type.Object({ cwd: Type.Optional(Type.String()), theme: Theme, palette: Type.Optional(Palette), art: Type.Boolean(), awake: Type.Boolean(), editor: Type.Optional(Type.String()) });
 export type Settings = Static<typeof Settings>;
 
 /** One thing the app needs before it can run a chat. `ok`: there and new enough. `missing`: not there. `old`: there, and too
@@ -378,7 +381,12 @@ export const methods = {
   settings: method(none, Settings),
   /** Changes the settings it names and leaves the others, and answers them all as they are kept. A `cwd` has to be a directory
    * that exists (`~` is your home folder); `null` puts back the default. */
-  setSettings: method(Type.Object({ theme: Type.Optional(Theme), cwd: Type.Optional(Type.Union([Type.String(), Type.Null()])), awake: Type.Optional(Type.Boolean()), editor: Type.Optional(Type.String()) }), Settings),
+  setSettings: method(Type.Object({ theme: Type.Optional(Theme), palette: Type.Optional(Palette), art: Type.Optional(Type.Boolean()), cwd: Type.Optional(Type.Union([Type.String(), Type.Null()])), awake: Type.Optional(Type.Boolean()), editor: Type.Optional(Type.String()) }), Settings),
+  /** The theme files in the app's `themes` folder (`folder`), by name, each with its text or why it was not read. The page reads
+   * them as it reads its own (`ui/themes.ts`): the server only hands them on. */
+  themes: method(none, Type.Object({ folder: Type.String(), files: Type.Array(Type.Object({ file: Type.String(), text: Type.Optional(Type.String()), error: Type.Optional(Type.String()) })) })),
+  /** Opens the themes folder in the Finder, made first if it is not there. Refused by a server that opens nothing. */
+  openThemes: method(none, none),
   /** What the desktop app's updater is doing now. None where the app does not update itself: a server a browser is opened
    * on, or the app run from the checkout. */
   update: method(none, Type.Object({ update: Type.Optional(Updating) })),

@@ -1,6 +1,6 @@
 # Setup
 
-What stands between a new machine and a chat, and the three places the app deals with it: its own settings, the things a chat needs (Pi, pi-optchat, a model, a profile), and a profile that a Pi in a terminal already has open. All of it is in its own files: `src/server/settings.ts` and `src/server/setup.ts` in the server, `src/ui/Settings.tsx`, `Setup.tsx`, `Outside.tsx` and `theme.ts` in the page.
+What stands between a new machine and a chat, and the three places the app deals with it: its own settings, the things a chat needs (Pi, pi-optchat, a model, a profile), and a profile that a Pi in a terminal already has open. All of it is in its own files: `src/server/settings.ts` and `src/server/setup.ts` in the server, `src/ui/Settings.tsx`, `Setup.tsx`, `Outside.tsx` and `theme.ts` in the page (themes: [ui.md](ui.md#themes)).
 
 ## The app's own folder
 
@@ -15,6 +15,8 @@ Two servers on one machine share that folder. Each reads the settings when it st
 | Setting | What it does |
 | --- | --- |
 | `theme` | `system` (the default), `light` or `dark`. |
+| `palette` | The theme drawn in light and the one in dark, each by its file's name (`{ "light": "grove", "dark": "mine.json" }`); the app's own colours where it names none ([Themes](ui.md#themes)). |
+| `art` | Whether a theme's drawing is at the top of the sidebar: `true` until you turn it off. |
 | `awake` | Whether the desktop app keeps the Mac from sleeping while agents work ([desktop.md](desktop.md)): `true` until you turn it off. In a browser it does nothing, and the settings page does not show it. |
 | `cwd` | The folder a window's agent works in when the window is opened. Your home folder while it is not set. It has to exist when you set it, and is kept as its whole path (`~` is your home folder). If it is gone later, windows run in your home folder until you set another. |
 

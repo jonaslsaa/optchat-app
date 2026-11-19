@@ -33,6 +33,7 @@ More in [ui.md](ui.md#run-it) and [desktop.md](desktop.md#run-it).
 - **Tracking an issue or PR** (poll every five minutes, tell the main agent when it changes) comes after the first version.
 - **Importing another tool's history is pi-optchat's**, read and summarized by it in the profile's own Pi; the app finds what there is, lets you pick it and shows how it goes ([ui.md](ui.md#import), [server.md](server.md#imports)). The page names a conversation by its source and id, never by its file, and nothing is picked until you pick it: a large import keeps the compactor busy for a long time.
 - **A Pi on an older pi-optchat is started again only when nothing is at work**, at the moments an older one would fail or a newer one may have come (Resume, an install, Check again), never by a timer or a file watch; one at work gets a Restart line and keeps running until you press it ([server.md](server.md#windows)).
+- **A theme is a file**, the built-in ones too, read in the page and drawn over `index.css` with nothing else in it but literal colours; the app's own colours are no file, so a page that never picks a theme looks as it did. No editor and no import: a file is copied into the themes folder ([ui.md](ui.md#themes)).
 - **The same profile opens in the terminal or the app**, since the app drives the real `pi --mode rpc` with pi-optchat loaded and does no compaction or memory logic of its own.
 
 ## Build order

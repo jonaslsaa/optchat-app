@@ -225,9 +225,12 @@ async function pictures(browser: Browser, control: Client) {
   await settings.getByRole('button', { name: 'Settings' }).click();
   await settings.getByText('logged in: anthropic').waitFor();
   await shot(settings, '15-settings');
+  await settings.getByRole('tab', { name: 'Appearance' }).click();
   await settings.getByText('Dark', { exact: true }).click(); // Its label: the choice is made when the server has kept it.
   await settings.locator('html.dark').waitFor();
+  await settings.getByRole('tab', { name: 'General' }).click();
   await shot(settings, '16-settings-dark');
+  await settings.getByRole('tab', { name: 'Appearance' }).click();
   await settings.getByText('System', { exact: true }).click();
   await settings.getByRole('radio', { name: 'System', checked: true }).waitFor();
 
@@ -977,4 +980,35 @@ async function pictures(browser: Browser, control: Client) {
   await updates.getByRole('button', { name: 'Toggle the sidebar' }).click();
   await shot(updates, '137-update-sidebar-closed');
   await shot(await open(['work'], { width: 420, dark: true }), '138-update-narrow-dark');
+
+  // Themes, last too: the page's colours change for every page. The Appearance tab, with a file of yours that is no theme.
+  mkdirSync(join(home, 'app', 'themes'), { recursive: true });
+  writeFileSync(join(home, 'app', 'themes', 'sunset.json'), JSON.stringify({ version: 1, name: 'Sunset', appearance: 'dark', colors: { background: 'url(https://example.com/x.png)' } }));
+  for (const [name, dark] of [['240-appearance', false], ['241-appearance-dark', true]] as const) {
+    const page = await open(['work'], { dark, height: 1240 });
+    await page.getByRole('button', { name: 'Settings' }).click();
+    await page.getByRole('tab', { name: 'Appearance' }).click();
+    await page.getByText('Not a theme.').waitFor();
+    await shot(page, name);
+  }
+  // Each theme in light and dark, with its drawing at the sidebar's top over a list of windows, two profiles' tabs and the
+  // update button: the chat of 02, with seven connected windows more.
+  for (let n = 0; n < 7; n++) await control.request('open', { profile: 'work', role: 'connected' });
+  const themes = ['optchat', 'blossom', 'grove', 'ocean', 'ember', 'iris'];
+  for (const [k, theme] of themes.entries()) {
+    await control.request('setSettings', { palette: theme === 'optchat' ? {} : { light: theme, dark: theme } });
+    for (const dark of [false, true]) {
+      const page = await open(['work', 'notes'], { dark });
+      await page.getByText('which is the point of that test').last().waitFor();
+      if (theme !== 'optchat') await page.locator('html[data-art]').waitFor();
+      await shot(page, `${242 + 2 * k + Number(dark)}-theme-${theme}${dark ? '-dark' : ''}`);
+    }
+  }
+  // The drawing turned off, and a narrow page with the sidebar open.
+  await control.request('setSettings', { palette: { light: 'grove', dark: 'grove' }, art: false });
+  await shot(await open(['work']), '254-theme-grove-no-art');
+  await control.request('setSettings', { art: true });
+  const tiny = await open(['work'], { width: 420, height: 800, dark: true });
+  await tiny.getByRole('button', { name: 'Toggle the sidebar' }).click();
+  await shot(tiny, '255-theme-grove-narrow-dark');
 }

@@ -1086,16 +1086,18 @@ test('in the memory view a line is cited whole by its button, and the words sele
 });
 
 test('the settings are in tabs: the arrows go from one to the next, the page opens again on the last one, and Esc closes it while the run goes on', async () => {
-  const page = await open('tabs'), settings = page.getByRole('button', { name: 'Settings' }), theme = page.getByRole('radiogroup', { name: 'Theme' });
+  const page = await open('tabs'), settings = page.getByRole('button', { name: 'Settings' }), theme = page.getByRole('textbox', { name: 'Folder for new windows' });
   await run(page);
   await settings.click();
   await theme.waitFor();
   await page.getByRole('tab', { name: 'General', selected: true }).focus();
   await page.keyboard.press('ArrowRight');
+  await page.getByRole('radiogroup', { name: 'Color scheme' }).waitFor();
+  await page.keyboard.press('ArrowRight');
   await page.getByRole('textbox', { name: 'Max active agents' }).waitFor();
   assert.equal(await theme.count(), 0);
   assert.equal(await focused(page), 'Profile');
-  assert.deepEqual(await page.getByRole('tab').evaluateAll(tabs => tabs.map(tab => (tab as HTMLElement).tabIndex)), [-1, 0, -1]); // One stop for Tab.
+  assert.deepEqual(await page.getByRole('tab').evaluateAll(tabs => tabs.map(tab => (tab as HTMLElement).tabIndex)), [-1, -1, 0, -1]); // One stop for Tab.
   await page.keyboard.press('End');
   const instructions = page.getByRole('textbox', { name: 'Instructions' });
   await instructions.fill('Not saved yet.');
@@ -1122,6 +1124,50 @@ test('the settings are in tabs: the arrows go from one to the next, the page ope
   writeFileSync(optchat, JSON.stringify({ name: 'pi-optchat', version: '0.12.2' }));
   await again.click();
   await old.waitFor({ state: 'detached' });
+});
+
+test('a theme is picked in Appearance: a card for light and dark, a round for one; the sidebar art goes with it until it is turned off; a file of yours that is no theme says why', async t => {
+  const folder = join(home, 'app', 'themes');
+  mkdirSync(folder, { recursive: true });
+  writeFileSync(join(folder, 'dusk.json'), JSON.stringify({ version: 1, name: 'Dusk', appearance: 'dark', colors: { background: '#101820' } }));
+  writeFileSync(join(folder, 'evil.json'), JSON.stringify({ version: 1, name: 'Evil', appearance: 'light', colors: { background: 'url(https://example.com/x)' } }));
+  const client = await connect(server.url);
+  t.after(async () => { await client.request('setSettings', { theme: 'system', palette: {}, art: true }); client.close(); });
+  const page = await open('tabs'), background = () => page.evaluate(() => getComputedStyle(document.body).backgroundColor);
+  const variable = (name: string) => page.evaluate(name => document.documentElement.style.getPropertyValue(name), name);
+  await page.getByRole('button', { name: 'Settings' }).click();
+  await page.getByRole('tab', { name: 'Appearance' }).click();
+  await page.getByText('Light', { exact: true }).click();
+  const own = await background();
+  // A card is used in both appearances it has: Grove in light now, and in dark once the scheme is dark.
+  await page.getByRole('button', { name: 'Use Grove', exact: true }).click();
+  await page.getByRole('button', { name: 'Use Grove in light mode', pressed: true }).waitFor();
+  assert.equal(await variable('--background'), 'oklch(0.972369 0.005497 157.15)');
+  assert.notEqual(await background(), own);
+  // A round is used in its appearance only: Dusk in dark, and light stays Grove.
+  await page.getByRole('button', { name: 'Use Dusk in dark mode' }).click();
+  await page.getByRole('button', { name: 'Use Dusk in dark mode', pressed: true }).waitFor();
+  assert.equal(await variable('--background'), 'oklch(0.972369 0.005497 157.15)');
+  await page.getByText('Dark', { exact: true }).click();
+  await page.locator('html.dark').waitFor();
+  assert.equal(await variable('--background'), '#101820');
+  // What Dusk does not name is the app's own in dark.
+  assert.equal(await variable('--sidebar'), '');
+  // The file that is no theme is a card that says why, and is never drawn.
+  await page.getByText('Not a theme. "background" is no colour').waitFor();
+  assert.equal(await page.getByRole('button', { name: 'Use Evil' }).count(), 0);
+  // Grove has a night sky at the top of the sidebar; Dusk has none, and the switch takes Grove's away.
+  const art = page.locator('[data-art-drawing]');
+  await page.getByText('Light', { exact: true }).click();
+  await page.getByRole('button', { name: 'Close the settings' }).click();
+  await art.waitFor();
+  await page.getByRole('button', { name: 'Settings' }).click();
+  // Its thumb lies over it, in the label that turns it; it is off once the server has kept that.
+  await page.getByRole('switch', { name: 'Sidebar art' }).click({ force: true });
+  await page.getByRole('switch', { name: 'Sidebar art', checked: false }).waitFor();
+  await page.getByRole('button', { name: 'Close the settings' }).click();
+  await page.getByRole('navigation', { name: 'Windows' }).waitFor();
+  assert.equal(await art.isVisible(), false);
 });
 
 /** Waits for what the server does on its own, once the page has asked. */
@@ -1432,7 +1478,7 @@ test('with motion on, a reply that streamed at a pace is all there once it has e
 });
 
 test('the desktop app\'s menu bar asks the page for what its keys run: each is done once, from whatever page is in front, and also when it asks before the page is ready', async () => {
-  const page = await open('bar'), box = page.getByRole('textbox', { name: 'Message' }), theme = page.getByRole('radiogroup', { name: 'Theme' });
+  const page = await open('bar'), box = page.getByRole('textbox', { name: 'Message' }), theme = page.getByRole('textbox', { name: 'Folder for new windows' });
   const ask = (page: Page, action: string) => page.evaluate(action => { dispatchEvent(new CustomEvent('optchat-menu', { detail: action })); }, action);
   const client = await connect(server.url), memory = page.getByRole('heading', { name: 'Memory view' }), beside = page.getByRole('navigation', { name: 'Windows' });
   const connected = async () => (await client.request('windows', {})).windows.filter(window => window.profile === 'bar' && window.role === 'connected').length;
@@ -1759,13 +1805,13 @@ test('New Profile…: the menu and the list of profiles open a dialog that makes
 
     // From another page, the settings: the dialog lies over them, and the new profile's chat takes their place.
     await page.getByRole('button', { name: 'Settings' }).click();
-    await page.getByRole('radiogroup', { name: 'Theme' }).waitFor();
+    await page.getByRole('textbox', { name: 'Folder for new windows' }).waitFor();
     await ask(page, 'newProfile');
     await field.fill('third');
     await create.click();
     await bring.waitFor();
     await page.getByRole('tab', { name: 'third' }).and(page.locator('[aria-selected=true]')).waitFor();
-    assert.equal(await page.getByRole('radiogroup', { name: 'Theme' }).count(), 0);
+    assert.equal(await page.getByRole('textbox', { name: 'Folder for new windows' }).count(), 0);
     // "Choose what to import…" opens the Import page on the new profile, with the sources whose cards were ticked picked
     // there; Esc there is the page's, and closes it.
     for (const card of ['Claude Code', 'Codex']) await bring.getByRole('checkbox', { name: new RegExp(`^${card}\\s*\\d`) }).click();
@@ -1796,7 +1842,7 @@ test('New Profile…: the menu and the list of profiles open a dialog that makes
       const welcome = await (await browser.newContext({ viewport: WIDE, reducedMotion: 'reduce' })).newPage();
       await welcome.goto(bare.page);
       // Named in the settings, which have the first page's setup: they give way to the new chat and its second step.
-      const theme = welcome.getByRole('radiogroup', { name: 'Theme' });
+      const theme = welcome.getByRole('textbox', { name: 'Folder for new windows' });
       await welcome.getByRole('textbox', { name: 'Profile name' }).waitFor();
       await welcome.keyboard.press('ControlOrMeta+Comma');
       await theme.waitFor();

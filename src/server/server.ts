@@ -124,7 +124,7 @@ export async function startServer({ port = 0, origins = [], ui = join(import.met
     restart: async ({ profile }) => { await windows.restart(profile); return {}; },
     profiles: () => profiles.list(), createProfile: params => profiles.create(params), history: params => profiles.history(params), view: params => profiles.view(params), zoom: params => profiles.zoom(params), original: params => profiles.original(params), search: params => profiles.search(params),
     windows: () => windows.list(), open: params => windows.open(params), prompt: params => windows.prompt(params), dequeue: params => windows.dequeue(params), abort: params => windows.abort(params),
-    complete: params => windows.complete(params), close: params => windows.close(params), records: params => windows.records(params),
+    complete: params => windows.complete(params), close: params => windows.close(params), rename: params => windows.rename(params), records: params => windows.records(params),
     command: params => windows.command(params), answer: params => windows.answer(params), commands: params => windows.commands(params), models: params => windows.models(params), setModel: params => windows.setModel(params),
     importScan: params => imports.found(params), importUpload: params => imports.receive(params), importPreview: params => imports.preview(params),
     importStart: params => imports.start(params), importControl: params => imports.control(params), importStatus: params => imports.status(params),

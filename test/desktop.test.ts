@@ -96,6 +96,11 @@ test('a right click offers what can be done where it was made', () => {
   assert.deepEqual(shown({ mediaType: 'image', linkURL: 'https://example.com/' }).slice(0, 4), ['Copy Link', '-', 'Copy Image', '-']);
   for (const item of menu({ mediaType: 'image', linkURL: 'https://example.com/' }).slice(0, 3)) item.click?.(undefined as never, undefined, undefined as never);
   assert.deepEqual(did, ['replace word', 'link', 'image']);
+  // On a connected window's row: Rename first, and the text items as anywhere else.
+  const row = contextMenu({ misspelledWord: '', dictionarySuggestions: [], linkURL: '', mediaType: 'none', editFlags: flags }, page, { ...does, rename: () => did.push('rename') });
+  assert.deepEqual(row.map(item => item.label ?? item.role ?? '-'), ['Rename', '-', 'cut', 'copy', 'paste', 'selectAll']);
+  row[0].click?.(undefined as never, undefined, undefined as never);
+  assert.equal(did.at(-1), 'rename');
 });
 
 test('a quit waits until everything is stopped, and asks first only while agents work', async () => {

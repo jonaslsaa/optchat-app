@@ -91,7 +91,11 @@ export function useOverlay(open: boolean, close: () => void, root: RefObject<HTM
     if (!open) return;
     const away = (event: PointerEvent) => { if (event.target instanceof Node && !root.current?.contains(event.target)) close(); };
     // Any modal dialog, not the topmost: enough while no overlay lies in a modal that another modal lies over.
-    const pressed = (event: KeyboardEvent) => { if (!document.querySelector('dialog:modal') || root.current?.closest('dialog:modal')) escapes(event, () => { close(); opener.current?.focus(); }); };
+    const pressed = (event: KeyboardEvent) => {
+      // The box a window is renamed in (`Rename`) is nearer: its Esc puts the name back, and the next one closes this.
+      if (event.target instanceof Element && event.target.closest('[data-renaming]')) return;
+      if (!document.querySelector('dialog:modal') || root.current?.closest('dialog:modal')) escapes(event, () => { close(); opener.current?.focus(); });
+    };
     addEventListener('pointerdown', away); addEventListener('keydown', pressed, true);
     return () => { removeEventListener('pointerdown', away); removeEventListener('keydown', pressed, true); };
   }, [open]);

@@ -8,6 +8,8 @@ import { THINKING } from './models.ts';
  * imports nothing from Node. */
 
 const id = Type.Integer({ minimum: 0 });
+/** The longest name a window is given, as pi-optchat cuts a run's title. */
+export const NAME = 128;
 
 /** A message of a profile's log, as pi-optchat keeps it (its `Entry`): `user` (your words), `talk` (the agent's replies), `tool`
  * and `echo` (tool calls and results), `note`, `work` (subagent reports). One with an `origin` is imported history. */
@@ -62,13 +64,14 @@ export type Mention = Static<typeof Mention>;
  * which its Pi is given as it starts, or for the main chat the one it was last on, which pi-optchat keeps in the profile and
  * starts it on. With neither it is absent: the window starts on Pi's default, which `models` tells.
  * `stale`, on a main window: its Pi still runs the pi-optchat it started on, older than the one installed since (this version),
- * and was at work when the server looked, so it was not started again unasked (`restart`). */
+ * and was at work when the server looked, so it was not started again unasked (`restart`).
+ * `name`, on a connected window: what you called it (`rename`), which the page shows in place of its first message. */
 export const WindowState = Type.Object({
   id: Type.String(), profile: Type.String(), role: Type.Enum(['main', 'connected']), cwd: Type.String(),
   status: Type.Enum(['stopped', 'starting', 'idle', 'running', 'closed']), seq: id,
   completed: Type.Optional(Type.Boolean()), since: Type.Optional(Type.Number()), error: Type.Optional(Type.String()),
   outside: Type.Optional(Type.Union([Type.Object({ pid: Type.Integer(), host: Type.String(), cwd: Type.String() }), Type.Literal('unknown')])),
-  model: Type.Optional(ModelChoice), stale: Type.Optional(Type.String()),
+  model: Type.Optional(ModelChoice), stale: Type.Optional(Type.String()), name: Type.Optional(Type.String({ maxLength: NAME })),
 });
 export type WindowState = Static<typeof WindowState>;
 
@@ -321,6 +324,9 @@ export const methods = {
   /** Stops the window's Pi, letting it shut down cleanly. A main window stays in the list and starts again on its next prompt;
    * a connected window leaves it. */
   close: method(target, none),
+  /** Names a connected window, trimmed; an empty name gives it back its automatic one. The name lives in the server as long as
+   * the window does, and no Pi hears of it. The main chat has no name to give. */
+  rename: method(Type.Object({ window: Type.String(), name: Type.String({ maxLength: NAME }) }), none),
   /** For a client that connects late. `seq` is the number of the last record the window pushed. `records`: what it pushed
    * after number `after` and still keeps, which is everything since its latest run began. `complete` is false when there were
    * more before these: a main window's are in `history` by now, a connected window's only in its Pi (`command` with Pi's

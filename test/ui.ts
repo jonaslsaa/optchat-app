@@ -7,6 +7,7 @@ import { build } from 'vite';
 import { agents, CHANGES, FILES, FORMULAS, GONE, NAMED, PICTURED, remember, seed, SEEN, SEEN_IMAGE, TEAM } from '../scripts/seed.ts';
 import type { Launch } from '../src/server/files.ts';
 import { connect } from '../src/client.ts';
+import { RENAME_EVENT } from '../src/menu.ts';
 import { startServer } from '../src/server/server.ts';
 import { cited, named } from '../src/ui/cite.ts';
 import { describeOwner, lockProfile } from 'pi-optchat/files';
@@ -22,7 +23,7 @@ process.env.FAKE_PI_HOME = join(home, 'pi');
 mkdirSync(join(home, 'pi', 'pi-optchat'), { recursive: true });
 writeFileSync(join(home, 'pi', 'pi-optchat', 'package.json'), JSON.stringify({ name: 'pi-optchat', version: '0.12.2' }));
 writeFileSync(join(home, 'pi', 'state.json'), JSON.stringify({ version: '1.5.2', providers: ['anthropic', 'openai'], packages: { 'npm:pi-optchat': join(home, 'pi', 'pi-optchat') } }));
-for (const name of ['bar', 'cold', 'colder', 'chat', 'beside', 'sheet', 'memory', 'rows', 'menus', 'fields', 'asks', 'windows', 'importing', 'into', 'keys', 'spend', 'commands', 'arrows', 'mute', 'said', 'images', 'gallery', 'tabs', 'slow', 'inline', 'held', 'unread', 'finish']) {
+for (const name of ['bar', 'cold', 'colder', 'chat', 'beside', 'sheet', 'memory', 'rows', 'menus', 'fields', 'asks', 'windows', 'importing', 'into', 'keys', 'spend', 'commands', 'arrows', 'mute', 'said', 'images', 'gallery', 'tabs', 'slow', 'inline', 'held', 'unread', 'finish', 'renames']) {
   const profile = createProfile(home, name);
   if (['bar', 'cold', 'colder', 'memory', 'windows', 'keys', 'spend', 'arrows', 'unread'].includes(name)) { writeMemory(profile, 16); continue; }
   seed(profile, TEAM.length, Date.now(), TEAM);
@@ -765,6 +766,50 @@ test('a connected window\'s row offers one thing: Complete while its conversatio
   await stuck.waitFor({ state: 'detached' });
   await hung.waitForTimeout(300);
   assert.equal(await hung.getByRole('alert').count(), 0, 'no error for the Complete the close ended');
+});
+
+test('a connected window is renamed in place from its row or its title: Enter keeps the name, Esc what it was and the run goes on, and an empty name gives back the automatic one; the main chat keeps its own', async () => {
+  const page = await open('renames'), windows = page.getByRole('navigation', { name: 'Windows' }), row = windows.getByRole('listitem').nth(1);
+  const box = page.getByRole('textbox', { name: 'Window name' }), heading = page.locator('main > header h1');
+  const called = async () => [await row.innerText(), await heading.innerText()];
+  await windows.getByText('Main chat').dblclick();
+  assert.equal(await box.count(), 0, 'the main chat cannot be renamed');
+  await page.getByRole('button', { name: 'New window' }).click();
+  await page.getByRole('heading', { name: 'New connected window' }).waitFor();
+  await page.getByRole('textbox', { name: 'Message' }).fill('hello there');
+  await page.keyboard.press('Enter');
+  await row.getByText('hello there').waitFor();
+  await row.getByText('hello there').dblclick();
+  assert.equal(await focused(page), 'Window name');
+  await page.keyboard.press('ControlOrMeta+b'); // The app's shortcuts are not the box's.
+  await page.keyboard.type('Release notes');
+  await page.keyboard.press('Enter');
+  await row.getByText('Release notes').waitFor();
+  assert.deepEqual(await called(), ['Release notes', 'Release notes']);
+  // Esc in the box is the box's: the name stays and the window's run goes on.
+  await run(page);
+  await heading.dblclick();
+  await page.keyboard.type('Something else');
+  await goesOn(page, 'in the box a window is renamed in');
+  assert.deepEqual(await called(), ['Release notes', 'Release notes']);
+  await stops(page, 'once the box is gone');
+  // From the keyboard, F2 on the row.
+  await row.getByRole('button', { name: 'Release notes' }).focus();
+  await page.keyboard.press('F2');
+  await box.fill('');
+  await page.keyboard.press('Enter');
+  await row.getByText('hello there').waitFor();
+  assert.deepEqual(await called(), ['hello there', 'hello there']);
+  // Over a narrow chat, the desktop app's Rename (its event, as the shell sends it): Esc is the box's before it closes the windows.
+  const narrow = await open('renames', NARROW), over = narrow.getByRole('button', { name: 'Close the sidebar' });
+  await narrow.keyboard.press('ControlOrMeta+b');
+  await over.waitFor();
+  const id = await narrow.getByRole('navigation', { name: 'Windows' }).getByRole('listitem').nth(1).getAttribute('data-rename') ?? '';
+  await narrow.evaluate(([event, id]) => dispatchEvent(new CustomEvent(event, { detail: id })), [RENAME_EVENT, id]);
+  await narrow.getByRole('textbox', { name: 'Window name' }).fill('Not kept');
+  await narrow.keyboard.press('Escape');
+  assert.equal(await over.count(), 1, 'the windows are still open');
+  assert.equal(await narrow.getByRole('navigation', { name: 'Windows' }).getByText('hello there').count(), 1);
 });
 
 test('⌘F finds in the chat: what is typed is marked wherever it is written and followed as the chat grows, Enter goes from one to the next, Esc closes it and the run goes on, and the same text is searched in the memory from there', async () => {

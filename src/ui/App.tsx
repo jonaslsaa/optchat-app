@@ -13,6 +13,7 @@ import { InWindow } from './Markdown.tsx';
 import { MemoryView } from './Memory.tsx';
 import { NO_TREE } from './memory.ts';
 import { Outside } from './Outside.tsx';
+import { Rename } from './Rename.tsx';
 import { BESIDE, Panel, type Shown } from './Panel.tsx';
 import { NewProfileDialog, ProfileName, Tabs } from './Profiles.tsx';
 import { Settings, Welcome } from './Settings.tsx';
@@ -61,7 +62,7 @@ function Profile({ state, profile, onSettings, onUsage, onNewProfile, onImport, 
   const since = window?.since, run = useMemo(() => current({ since }, live.messages), [since, live.messages]);
   const before = useMemo(() => own ? spoken(current({ since }, session ?? [])) : logged(log?.entries ?? []), [own, since, session, log?.entries]);
   const items = useMemo(() => chat(before, { ...live, messages: run }), [before, run, live.streaming, live.sent]);
-  const name = window && title(window, state), composer = useRef<ComponentRef<typeof Composer>>(null);
+  const name = window && title(window, state), composer = useRef<ComponentRef<typeof Composer>>(null), [renaming, setRenaming] = useState(false);
   // What is cited, in the chat or in the memory view, goes into the message under it. A chat that a Pi outside the app has
   // takes no message.
   const cite = window?.outside ? undefined : (cite: Cite) => composer.current?.cite(cite);
@@ -114,7 +115,10 @@ function Profile({ state, profile, onSettings, onUsage, onNewProfile, onImport, 
               narrow page, where the row is full, only while that is for you to act on, and not while the app looks or downloads. */}
           {!sidebar && state.update && state.update.state !== 'idle' && <UpdateButton update={state.update} className={cn('-ms-1', (state.update.state === 'looking' || state.update.state === 'downloading') && 'max-md:hidden')} />}
           {state.tabs.length === 1 && <><ProfileName state={state} profile={profile} onNew={onNewProfile} onImport={onImport} /><span aria-hidden="true" className="-ms-1.5 text-muted-foreground/50 text-sm">/</span></>}
-          <h1 className={cn('min-w-0 truncate font-medium text-sm', name === UNTITLED && 'text-muted-foreground')}>{name}</h1>
+          {/* A connected window's name is renamed with a double-click, as its row in the sidebar is: so in the desktop app it is
+              not what drags the window, whose title bar would take the double-click. A box is for the window it was opened on. */}
+          {own && renaming ? <Rename key={window.id} window={window.id} name={name ?? ''} done={() => setRenaming(false)} className="h-7 w-64 font-medium" />
+            : <h1 onDoubleClick={own ? () => setRenaming(true) : undefined} className={cn('min-w-0 truncate font-medium text-sm', name === UNTITLED && 'text-muted-foreground', own && '[-webkit-app-region:no-drag]')}>{name}</h1>}
           {own && <span className="shrink-0 rounded-full border px-2 py-0.5 text-2xs text-muted-foreground">{window.completed ? 'Completed' : 'Connected window'}</span>}
           <span className="flex-1" />
           {!own && (

@@ -129,6 +129,13 @@ export class Windows {
     if (opened.closed && this.windows.delete(window)) { opened.state.status = 'closed'; this.changed(opened); }
     return {};
   }
+  rename({ window, name }: Params<'rename'>): Result<'rename'> {
+    const opened = this.get(window), { state } = opened, named = name.trim();
+    if (isMain(opened)) throw new Error('The main chat keeps its name.');
+    if (named) state.name = named; else delete state.name;
+    this.changed(opened);
+    return {};
+  }
   records({ window, after = 0 }: Params<'records'>): Result<'records'> {
     const { state, records, dropped, ui } = this.get(window);
     return { seq: state.seq, records: records.filter(r => r.seq > after), complete: after >= dropped, ui: [...ui.values()] };

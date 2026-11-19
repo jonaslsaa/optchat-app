@@ -43,8 +43,6 @@ interface Opened {
   stopping?: boolean;
   /** Who a start under way is for, each as whether it still wants the Pi. A start nobody wants any more spawns none. */
   wanted?: (() => boolean)[];
-  /** Its conversation is being handed off: Complete has not answered yet. */
-  completing?: boolean;
   /** The model picked for it while it had no Pi: its Pi is given it as it starts, and it is kept until a Pi has taken it. */
   pick?: ModelChoice;
   /** The pick that is being made, which the next one waits for. */
@@ -101,7 +99,10 @@ export class Windows {
     await opened.restarting?.catch(() => {}); // For the Pi it is started again as, not the one that is stopping.
     const pi = await this.started(opened);
     // It would steer the agent while it writes its handoff, and be part of neither conversation.
-    if (opened.completing) throw new Error('This conversation is being handed to the main chat. Send your message once it is.');
+    if (opened.state.completing) {
+      if (text.trim() === '/complete') return { disposition: 'handled' }; // Asked again: the one under way answers for both.
+      throw new Error('This conversation is being handed to the main chat. Send your message once it is.');
+    }
     // Always with a queueing behaviour, as T3 Code sends it: Pi then starts a run or queues the message, whichever is true by
     // the time it arrives, and a run that began meanwhile (a subagent's report) cannot make it fail.
     const send = () => pi.request({ type: 'prompt', message: text, ...images?.length && { images }, streamingBehavior: whenBusy });
@@ -118,8 +119,10 @@ export class Windows {
   }
   async complete({ window }: Params<'complete'>): Promise<Result<'complete'>> {
     const opened = this.get(window);
-    if (opened.completing || !canComplete(opened.state)) throw new Error('Complete hands a connected conversation to the main chat. This window has none to hand off.');
-    await this.handingOff(opened, () => this.running(window).request({ type: 'prompt', message: '/complete' }));
+    if (opened.state.completing) return {}; // Asked again: the one under way answers for both.
+    if (!canComplete(opened.state)) throw new Error('Complete hands a connected conversation to the main chat. This window has none to hand off.');
+    // One closed while it waited fails for that, which says nothing new.
+    await this.handingOff(opened, () => this.running(window).request({ type: 'prompt', message: '/complete' })).catch((error: unknown) => { if (!opened.closed) throw error; });
     return {};
   }
   async close({ window }: Params<'close'>): Promise<Result<'close'>> {
@@ -212,10 +215,10 @@ export class Windows {
     await Promise.all(windows.filter(isMain).map(opened => this.stop(opened)));
   }
 
-  /** Sends pi-optchat's `/complete`. Until Pi has answered it, the window takes no other message. */
+  /** Sends pi-optchat's `/complete`. Until Pi has answered it, the window takes no other message, and says it is `completing`. */
   private async handingOff<T>(opened: Opened, send: () => Promise<T>) {
-    opened.completing = true;
-    try { return await send(); } finally { opened.completing = false; }
+    opened.state.completing = true; this.changed(opened);
+    try { return await send(); } finally { delete opened.state.completing; this.changed(opened); }
   }
   /** The profile's main window, made the first time it is asked for, or a new connected window. */
   private window(profile: string, role: WindowState['role'] = 'main', cwd = this.options.cwd()) {

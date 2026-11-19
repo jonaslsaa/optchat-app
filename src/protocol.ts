@@ -63,13 +63,15 @@ export type Mention = Static<typeof Mention>;
  * `model` is what its agent runs on: its Pi's own word once that runs. Before, it is the model you picked for the window,
  * which its Pi is given as it starts, or for the main chat the one it was last on, which pi-optchat keeps in the profile and
  * starts it on. With neither it is absent: the window starts on Pi's default, which `models` tells.
+ * `completing`: a connected window's Complete is under way, however it was asked (a button, or `/complete` typed): from the
+ * moment it is sent until its Pi has answered, which pi-optchat does once the handoff is written and handed over.
  * `stale`, on a main window: its Pi still runs the pi-optchat it started on, older than the one installed since (this version),
  * and was at work when the server looked, so it was not started again unasked (`restart`).
  * `name`, on a connected window: what you called it (`rename`), which the page shows in place of its first message. */
 export const WindowState = Type.Object({
   id: Type.String(), profile: Type.String(), role: Type.Enum(['main', 'connected']), cwd: Type.String(),
   status: Type.Enum(['stopped', 'starting', 'idle', 'running', 'closed']), seq: id,
-  completed: Type.Optional(Type.Boolean()), since: Type.Optional(Type.Number()), error: Type.Optional(Type.String()),
+  completed: Type.Optional(Type.Boolean()), completing: Type.Optional(Type.Boolean()), since: Type.Optional(Type.Number()), error: Type.Optional(Type.String()),
   outside: Type.Optional(Type.Union([Type.Object({ pid: Type.Integer(), host: Type.String(), cwd: Type.String() }), Type.Literal('unknown')])),
   model: Type.Optional(ModelChoice), stale: Type.Optional(Type.String()), name: Type.Optional(Type.String({ maxLength: NAME })),
 });
@@ -319,7 +321,8 @@ export const methods = {
    * (`dequeue`), which would otherwise start the next run. */
   abort: method(target, Queue),
   /** Ends a connected window's conversation and hands it to the main chat (pi-optchat's `/complete`). Answers once the handoff
-   * is written, which takes a turn of the window's agent; until then the window takes no prompt. */
+   * is written, which takes a turn of the window's agent; until then the window takes no prompt, and a Complete asked again (or
+   * a `/complete` prompt) answers at once with no error. One the window's close ends answers with none either. */
   complete: method(target, none),
   /** Stops the window's Pi, letting it shut down cleanly. A main window stays in the list and starts again on its next prompt;
    * a connected window leaves it. */

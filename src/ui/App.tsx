@@ -20,10 +20,10 @@ import { Settings, Welcome } from './Settings.tsx';
 import { missing } from './Setup.tsx';
 import { Sidebar } from './Sidebar.tsx';
 import { UpdateButton } from './Update.tsx';
-import { app, mainOf, title, UNTITLED, useApp, type State } from './store.ts';
+import { app, mainOf, shelved, title, UNTITLED, useApp, type State } from './store.ts';
 import { Timeline } from './Timeline.tsx';
 import { chat, idle, logged, spoken } from './transcript.ts';
-import { Button, Choice, cn, useMedia } from './ui.tsx';
+import { Button, Choice, cn, Spinner, useMedia } from './ui.tsx';
 import { UsagePage } from './Usage.tsx';
 import { ImportLine, ImportPage, useImport } from './Import.tsx';
 import { underway, type Source } from './imports.ts';
@@ -54,8 +54,10 @@ function Profile({ state, profile, onSettings, onUsage, onNewProfile, onImport, 
   const [panel, setPanel] = useState<Shown>(), openAgent = useCallback((agent?: string) => setPanel({ agent }), []);
   // The main chat as the agent reads its memory, in the chat's place. A message sent from there is answered in the chat.
   const [remembering, setMemory] = useState(false), toChat = useCallback(() => setMemory(false), []);
-  const windows = state.windows.filter(window => window.profile === profile), ids = windows.map(window => window.id).join(' ');
+  const windows = state.windows.filter(window => window.profile === profile);
   const window = windows.find(w => w.id === state.selected[profile]) ?? windows.find(w => w.id === mainOf(profile));
+  // ⌥ and a digit pick the rows the sidebar shows, in its order.
+  const ids = shelved(windows, state.shelves, window?.id ?? '').rows.map(window => window.id).join(' ');
   const live = (window && state.live[window.id]) ?? NOTHING, log = state.logs[profile], session = window && state.sessions[window.id];
   // The main chat is the profile's log. A connected window's conversation is only in its Pi until it is handed off.
   const own = window?.role === 'connected', memory = remembering && !own;
@@ -124,7 +126,8 @@ function Profile({ state, profile, onSettings, onUsage, onNewProfile, onImport, 
           {!own && (
             <Choice label="What the page shows" name={`shows-${profile}`} title={`Chat or memory view (${label('alt+m')})`} options={SHOWS} value={memory} onChange={setMemory} />
           )}
-          {canComplete(window) && <Button variant="outline" title="Complete: hand this conversation to the main chat" onClick={() => void app.complete(window.id)}><CheckIcon />Complete</Button>}
+          {window.completing ? <Button variant="outline" disabled><Spinner />Handing off…</Button>
+            : canComplete(window) && <Button variant="outline" title="Complete: hand this conversation to the main chat" onClick={() => void app.complete(window.id)}><CheckIcon />Complete</Button>}
           {!own && (
             <Button ref={panelButton} variant="ghost-muted" size="icon-sm" aria-label="Agents and GitHub" title={agentsWork ? 'Agents and GitHub: agents are working' : 'Agents and GitHub'} aria-pressed={panel !== undefined}
               className="aria-pressed:bg-accent aria-pressed:text-foreground" onClick={() => setPanel(panel ? undefined : {})}>

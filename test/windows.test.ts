@@ -213,6 +213,20 @@ test('a message sent during a run is queued, and abort hands back what was still
   assert.equal((await request('windows', {})).windows[0].status, 'idle');
 });
 
+test('a Complete under way is said in the window until its Pi answers, and asked again, by button or typed, it is no error', async t => {
+  const { request } = await setup(t);
+  const { window } = await request('open', { profile: 'work', role: 'connected' });
+  await request('prompt', { window: window.id, text: 'hello, and hold Complete' });
+  const completing = async () => (await request('windows', {})).windows.find(({ id }) => id === window.id)?.completing;
+  const first = request('complete', { window: window.id });
+  while (!await completing()) await sleep(10);
+  assert.deepEqual(await request('complete', { window: window.id }), {});
+  assert.deepEqual(await request('prompt', { window: window.id, text: '/complete' }), { disposition: 'handled' });
+  // Closed while it waits, the window ends the Complete with no error of its own.
+  await request('close', { window: window.id });
+  assert.deepEqual(await first, {});
+});
+
 test('a connected window starts the profile\'s owner first, joins it, and Complete hands it off', async t => {
   const { request, status, record } = await setup(t);
   const { window } = await request('open', { profile: 'work', role: 'connected' });

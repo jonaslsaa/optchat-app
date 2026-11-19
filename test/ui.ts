@@ -759,6 +759,8 @@ test('a connected window\'s row offers one thing: Complete while its conversatio
   await hung.getByRole('main').getByRole('button', { name: 'Complete' }).waitFor();
   await stuck.hover();
   await stuck.getByRole('button', { name: 'Complete', exact: true }).click();
+  await hung.getByRole('main').getByRole('button', { name: 'Complete' }).click(); // Asked again from the top row, it still waits.
+  await stuck.hover();
   await stuck.getByRole('button', { name: 'Close window' }).click();
   await stuck.waitFor({ state: 'detached' });
   await hung.waitForTimeout(300);

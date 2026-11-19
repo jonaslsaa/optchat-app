@@ -596,6 +596,7 @@ export class App {
     return queued ? [...queued.steering, ...queued.followUp] : [];
   }
   async complete(window: string) {
+    if (this.state.completing.includes(window)) return; // Asked once already: a second would be refused, and end the wait.
     this.set({ completing: [...this.state.completing, window] });
     // One closed while it waited fails for that, which says nothing new.
     try { await this.request('complete', { window }); } catch (error) { if (this.state.completing.includes(window)) this.set({ error: reason(error) }); }

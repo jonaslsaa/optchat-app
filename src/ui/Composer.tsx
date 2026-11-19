@@ -1,9 +1,9 @@
 import { CircleAlertIcon, CornerUpRightIcon, ImagePlusIcon, ListPlusIcon, QuoteIcon, XIcon } from 'lucide-react';
-import { useEffect, useImperativeHandle, useMemo, useRef, useState, type Ref } from 'react';
+import { useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState, type Ref } from 'react';
 import type { PiRecord, WindowState } from '../protocol.ts';
 import { CiteCard, SkillChip } from './Cite.tsx';
 import { called, cited, citing, joined, yours, type Cite } from './cite.ts';
-import { useCommands } from './Commands.tsx';
+import { useCommands, useMentions } from './Commands.tsx';
 import { address, image, KINDS, sorted } from './images.ts';
 import { escapes, label, matches, useShortcuts } from './keys.ts';
 import { Model } from './Model.tsx';
@@ -107,7 +107,7 @@ export function Composer({ state, window, live, chat, onSend, ref }: { state: St
   // The message as it would be sent: what is typed, under what it cites. The box holds the one, and the chips are the other.
   const [draft, setDraft] = useState(() => app.draft(window.id)), [sending, setSending] = useState(false), { cites, text } = useMemo(() => cited(draft), [draft]);
   const images = state.attached[window.id] ?? [], [refused, setRefused] = useState<string>(), [reading, setReading] = useState(0);
-  const area = useRef<HTMLTextAreaElement>(null), picker = useRef<HTMLInputElement>(null);
+  const area = useRef<HTMLTextAreaElement>(null), picker = useRef<HTMLInputElement>(null), root = useRef<HTMLDivElement>(null), [caret, setCaret] = useState(0);
   const running = window.status === 'running', queued = [...live.queued.steering, ...live.queued.followUp];
   // It is kept as it is typed (`app.draft`): while you look at another window, and when the page is opened again.
   const keep = (message: string) => { setDraft(message); app.keep(window.id, message); }, change = (typed: string) => keep(citing(cites, typed));
@@ -121,8 +121,13 @@ export function Composer({ state, window, live, chat, onSend, ref }: { state: St
     app.attach(window.id, [...attached(), ...added]);
   };
   useEffect(() => area.current?.focus(), [window.id]);
+  // An `@` where the caret is lists files, and the list of commands is then shut.
+  const mentions = useMentions(window, text, caret, (typed, at) => { change(typed); setCaret(at); }, area, root);
+  // A text the box is given (↑, a message sent back) has the caret where the box puts it, at its end: an `@` is read there, and
+  // not where the caret was in the text before.
+  useLayoutEffect(() => { if (area.current) setCaret(area.current.selectionStart); }, [text]);
   // A message that cites begins with what it cites, which is no command to Pi: a `/` is then a letter, and lists nothing.
-  const commands = useCommands(state, window, cites.length ? '' : text, change, area);
+  const commands = useCommands(state, window, cites.length || mentions.active ? '' : text, change, area, root);
   // What was cited in the chat or in the memory view is one more chip, and the keys are where the message is typed.
   useImperativeHandle(ref, () => ({ cite: cite => { keep(citing([...cites, cite], text)); area.current?.focus(); } }));
   const empty = !text.trim() && !images.length && !cites.length;
@@ -186,18 +191,19 @@ export function Composer({ state, window, live, chat, onSend, ref }: { state: St
             </ul>
           )}
           {refused && <p role="alert" className="px-4 pt-3 text-error-foreground text-xs">{refused}</p>}
-          <div ref={commands.root} className="relative px-4 pt-3.5 pb-2">
-            {commands.menu}
+          <div ref={root} className="relative px-4 pt-3.5 pb-2">
+            {commands.menu}{mentions.menu}
             <textarea
-              ref={area} value={text} rows={1} aria-label="Message" {...commands.field}
+              ref={area} value={text} rows={1} aria-label="Message" {...mentions.active ? mentions.field : commands.field}
               placeholder={running ? 'Steer the agent, or queue a message for later' : window.role === 'main' ? 'Message the main chat' : window.completed ? 'A message starts a new connected window' : 'Message this window'}
-              onChange={event => change(event.target.value)}
+              onChange={event => { change(event.target.value); setCaret(event.target.selectionStart); }}
+              onSelect={event => setCaret(event.currentTarget.selectionStart)}
               // A file that was copied is attached, and its name, which Finder copies with it, is not typed. Copied cells are
               // text, a table and a picture of them: there the text is what is pasted.
               onPaste={event => { const { files, types } = event.clipboardData; if (files.length && !(types.includes('text/plain') && types.includes('text/html'))) { event.preventDefault(); void add(files); } }}
               onKeyDown={event => {
-                // The list a `/` opens gets its keys first: the arrows, Tab and Enter.
-                if (commands.keyed(event)) return;
+                // The list a `/` or an `@` opens gets its keys first: the arrows, Tab and Enter.
+                if (mentions.keyed(event) || commands.keyed(event)) return;
                 // Backspace in an empty box takes the last citation off, as it would the letter before the caret.
                 if (event.key === 'Backspace' && !text && cites.length) { event.preventDefault(); keep(citing(cites.slice(0, -1), '')); return; }
                 // ⌥↑ takes the messages still waiting back into the box, to be edited and sent again; the run goes on.

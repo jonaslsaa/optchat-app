@@ -750,6 +750,19 @@ test('a connected window\'s row offers one thing: Complete while its conversatio
   assert.deepEqual(await offered(), ['Close window'], 'a completed one has nothing left to hand off');
   await row.getByRole('button', { name: 'Close window' }).click();
   await row.waitFor({ state: 'detached' });
+  // A Pi that never answers Complete is closed from there all the same, and the Complete that failed for it says nothing.
+  const hung = await open('finish'), stuck = hung.getByRole('navigation', { name: 'Windows' }).getByRole('listitem').nth(1);
+  await hung.getByRole('button', { name: 'New window' }).click();
+  await hung.getByRole('heading', { name: 'New connected window' }).waitFor();
+  await hung.getByRole('textbox', { name: 'Message' }).fill('hello there, and hold Complete');
+  await hung.keyboard.press('Enter');
+  await hung.getByRole('main').getByRole('button', { name: 'Complete' }).waitFor();
+  await stuck.hover();
+  await stuck.getByRole('button', { name: 'Complete', exact: true }).click();
+  await stuck.getByRole('button', { name: 'Close window' }).click();
+  await stuck.waitFor({ state: 'detached' });
+  await hung.waitForTimeout(300);
+  assert.equal(await hung.getByRole('alert').count(), 0, 'no error for the Complete the close ended');
 });
 
 test('⌘F finds in the chat: what is typed is marked wherever it is written and followed as the chat grows, Enter goes from one to the next, Esc closes it and the run goes on, and the same text is searched in the memory from there', async () => {

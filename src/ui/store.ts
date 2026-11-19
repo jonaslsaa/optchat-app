@@ -67,6 +67,8 @@ export interface State {
    * latest start among those you dismissed: only an agent started after it brings the profile's line back. */
   cutOff: Result<'cutOff'>['profiles'];
   dismissed: Record<string, number>;
+  /** The windows whose Complete was asked for here and has no answer yet: a Pi that never gives one is closed from there. */
+  completing: string[];
 }
 type Provider = Params<'signIn'>['provider'];
 const PAGE = 200, SAVED = 'optchat-app', DRAFTS = 'optchat-app-drafts', DISMISSED = 'optchat-app-cut-off', SIGN_IN_ASKS = 100;
@@ -89,7 +91,7 @@ export function title(window: WindowState, state: State) {
 const reason = (error: unknown) => error instanceof Error ? error.message : String(error);
 
 export class App {
-  state: State = { connection: 'connecting', profiles: [], tabs: [], windows: [], selected: {}, logs: {}, live: {}, sessions: {}, agents: {}, github: {}, models: {}, commands: {}, chats: {}, memory: {}, config: {}, usage: {}, attached: {}, cutOff: [], dismissed: {}, scans: {}, imports: {}, imported: {} };
+  state: State = { connection: 'connecting', profiles: [], tabs: [], windows: [], selected: {}, logs: {}, live: {}, sessions: {}, agents: {}, github: {}, models: {}, commands: {}, chats: {}, memory: {}, config: {}, usage: {}, attached: {}, cutOff: [], dismissed: {}, scans: {}, imports: {}, imported: {}, completing: [] };
   private client?: Client;
   private retrying?: ReturnType<typeof setTimeout>;
   private closed = false;
@@ -593,7 +595,12 @@ export class App {
     const queued = await this.ask(method, { window });
     return queued ? [...queued.steering, ...queued.followUp] : [];
   }
-  async complete(window: string) { await this.ask('complete', { window }); }
+  async complete(window: string) {
+    this.set({ completing: [...this.state.completing, window] });
+    // One closed while it waited fails for that, which says nothing new.
+    try { await this.request('complete', { window }); } catch (error) { if (this.state.completing.includes(window)) this.set({ error: reason(error) }); }
+    this.set({ completing: this.state.completing.filter(id => id !== window) });
+  }
   private files = new Map<string, Promise<boolean>>();
   /** Whether a path the chat named is a file in the window's folder: asked once a path and window, so a component can wait on
    * it with `use`. A file made since is a link once the page is opened again. */
@@ -610,7 +617,10 @@ export class App {
     return (await this.client?.request('mentions', { window, query }).catch(() => undefined))?.mentions ?? [];
   }
   async openFile(window: string, path: string, line?: number) { await this.ask('openFile', { window, path, line }); }
-  async closeWindow(window: string) { await this.ask('close', { window }); }
+  async closeWindow(window: string) {
+    this.set({ completing: this.state.completing.filter(id => id !== window) });
+    await this.ask('close', { window });
+  }
   /** Answers a dialog, which then goes; one whose answer did not arrive stays to be answered again. */
   async answer(window: string, response: Omit<Params<'answer'>, 'window'>) {
     if (await this.ask('answer', { window, ...response })) this.expire(window, response.id);

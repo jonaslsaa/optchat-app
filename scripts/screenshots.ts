@@ -1043,4 +1043,16 @@ async function pictures(browser: Browser, control: Client) {
   const tiny = await open(['work'], { width: 420, height: 800, dark: true });
   await tiny.getByRole('button', { name: 'Toggle the sidebar' }).click();
   await shot(tiny, '255-theme-grove-narrow-dark');
+  // A Complete its Pi never answers: the row offers to close the window instead. Last, as it leaves a handoff in that chat.
+  await control.request('setSettings', { palette: { light: null, dark: null } });
+  const hung = await open(['empty']), waiting = hung.getByRole('navigation', { name: 'Windows' }).getByRole('listitem').nth(1);
+  await hung.getByRole('button', { name: 'New window' }).click();
+  await say(hung, 'Give me a demo of this repository, and hold Complete');
+  await hung.getByRole('main').getByRole('button', { name: 'Complete' }).waitFor();
+  await waiting.hover();
+  await waiting.getByRole('button', { name: 'Complete', exact: true }).click();
+  await shot(hung, '272-window-row-completing', waiting);
+  await hung.getByRole('button', { name: 'Close window' }).click();
+  await waiting.waitFor({ state: 'detached' });
+  await hung.close();
 }

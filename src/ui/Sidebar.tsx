@@ -34,7 +34,8 @@ export function Sidebar({ state, profile, selected, onPick }: { state: State; pr
                   : <MessageSquareIcon className="size-4 shrink-0 text-sidebar-muted-foreground" />}
                 {/* A connected window's row has one button at its end while the pointer or the focus is on it, and always where there
                     is no pointer to hover with: Complete while it has a conversation to hand to the main chat, and close once it has
-                    none, so the row is never offered both. The title gives it room, so it is cut short before it. */}
+                    none, or while a Complete waits for its Pi, which may never answer. The row is never offered both. The title gives
+                    it room, so it is cut short before it. */}
                 <span className={cn('min-w-0 flex-1 truncate text-sm', active ? 'font-medium text-foreground' : 'text-sidebar-foreground/80', (window.completed || name === UNTITLED) && 'text-sidebar-muted-foreground',
                   connected && 'group-focus-within/row:pe-4 group-hover/row:pe-4 pointer-coarse:pe-4')}>{name}</span>
                 <span className={cn('flex h-6 shrink-0 items-center justify-end gap-1', connected && 'group-focus-within/row:invisible group-hover/row:invisible pointer-coarse:invisible')}>
@@ -43,7 +44,7 @@ export function Sidebar({ state, profile, selected, onPick }: { state: State; pr
               </button>
               {connected && (
                 <span className="absolute inset-y-0 right-1.5 hidden items-center group-focus-within/row:flex group-hover/row:flex pointer-coarse:flex">
-                  {canComplete(window) ? <Button variant="ghost-muted" size="icon-xs" aria-label="Complete" title="Complete: hand this conversation to the main chat" onClick={() => void app.complete(window.id)}><CheckIcon /></Button>
+                  {canComplete(window) && !state.completing.includes(window.id) ? <Button variant="ghost-muted" size="icon-xs" aria-label="Complete" title="Complete: hand this conversation to the main chat" onClick={() => void app.complete(window.id)}><CheckIcon /></Button>
                     : <Button variant="ghost-muted" size="icon-xs" aria-label="Close window" title="Close window" onClick={() => void app.closeWindow(window.id)}><XIcon /></Button>}
                 </span>
               )}

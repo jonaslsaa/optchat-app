@@ -1,5 +1,5 @@
 import { CircleAlertIcon, CornerUpRightIcon, ImagePlusIcon, ListPlusIcon, QuoteIcon, XIcon } from 'lucide-react';
-import { useEffect, useImperativeHandle, useMemo, useRef, useState, type Ref } from 'react';
+import { useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState, type Ref } from 'react';
 import type { PiRecord, WindowState } from '../protocol.ts';
 import { CiteCard, SkillChip } from './Cite.tsx';
 import { called, cited, citing, joined, yours, type Cite } from './cite.ts';
@@ -123,6 +123,9 @@ export function Composer({ state, window, live, chat, onSend, ref }: { state: St
   useEffect(() => area.current?.focus(), [window.id]);
   // An `@` where the caret is lists files, and the list of commands is then shut.
   const mentions = useMentions(window, text, caret, (typed, at) => { change(typed); setCaret(at); }, area, root);
+  // A text the box is given (↑, a message sent back) has the caret where the box puts it, at its end: an `@` is read there, and
+  // not where the caret was in the text before.
+  useLayoutEffect(() => { if (area.current) setCaret(area.current.selectionStart); }, [text]);
   // A message that cites begins with what it cites, which is no command to Pi: a `/` is then a letter, and lists nothing.
   const commands = useCommands(state, window, cites.length || mentions.active ? '' : text, change, area, root);
   // What was cited in the chat or in the memory view is one more chip, and the keys are where the message is typed.

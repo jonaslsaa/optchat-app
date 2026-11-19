@@ -24,6 +24,12 @@ test('in a git repository the files are git\'s, with what .gitignore leaves out 
   assert.deepEqual(await paths(repo, 'src/ui/'), ['src/ui/Commands.tsx', 'src/ui/Composer.tsx']);
 });
 
+test('a name that begins with what is typed comes before one that only has it in it, however much longer it is', async () => {
+  const folder = mkdtempSync(join(home, 'ranked-'));
+  put(folder, ['xcomp.ts', 'component-controller.ts']);
+  assert.deepEqual(await paths(folder, 'comp'), ['component-controller.ts', 'xcomp.ts']);
+});
+
 test('outside a repository the folder is walked without node_modules and dot-folders, to the cap', async () => {
   const plain = mkdtempSync(join(home, 'plain-'));
   put(plain, ['notes.md', 'node_modules/left/index.js', '.cache/x', 'deep/er/file.ts', '.env']);
@@ -32,6 +38,13 @@ test('outside a repository the folder is walked without node_modules and dot-fol
   put(many, Array.from({ length: CAP + 50 }, (_, k) => `f${k}`));
   assert.equal((await listing(many)).length, CAP);
   assert.equal((await mentions(many, 'f1')).length, 20);
+});
+
+test('in a git repository with more files than the cap, the cap holds too', async () => {
+  const repo = mkdtempSync(join(home, 'big-'));
+  put(repo, Array.from({ length: CAP + 50 }, (_, k) => `f${k}`));
+  execFileSync('git', ['init', '-q'], { cwd: repo });
+  assert.equal((await listing(repo)).length, CAP);
 });
 
 test('nothing outside the window\'s folder is listed: no absolute path, no ~, no ..', async () => {
@@ -47,12 +60,17 @@ test('an @ is read at the caret, at the start or after a space, and a path with 
   assert.deepEqual(at('look at @src and more', 12), { start: 8, query: 'src', quoted: false });
   assert.deepEqual(at('one\n@a'), { start: 4, query: 'a', quoted: false });
   assert.deepEqual(at('see @"my fi'), { start: 4, query: 'my fi', quoted: true });
+  // A quote earlier in the message is no part of it.
+  assert.deepEqual(at('the 12" one and @"my d'), { start: 16, query: 'my d', quoted: true });
+  assert.deepEqual(at('x @a @b'), { start: 5, query: 'b', quoted: false });
   for (const text of ['jonas@kahoot.com', 'a @b c', '@"done" ', '/skill'])
     assert.equal(at(text), undefined, text);
 
   const typed = 'see @co please';
   assert.deepEqual(mention(typed, 7, at(typed, 7)!, { path: 'src/ui/Composer.tsx', dir: false }), { text: 'see @src/ui/Composer.tsx  please', caret: 25 });
   assert.deepEqual(mention('@sr', 3, at('@sr')!, { path: 'src', dir: true }), { text: '@src/', caret: 5 });
+  // Picked with the caret inside a path, the whole path is the one picked.
+  assert.deepEqual(mention('@src/ui and', 4, at('@src/ui and', 4)!, { path: 'src/server.ts', dir: false }), { text: '@src/server.ts  and', caret: 15 });
   assert.deepEqual(mention('@my', 3, at('@my')!, { path: 'my file.txt', dir: false }), { text: '@"my file.txt" ', caret: 15 });
   // A quoted folder keeps the caret before its closing quote, for the file in it.
   assert.deepEqual(mention('@"my d"', 6, at('@"my d"', 6)!, { path: 'my dir', dir: true }), { text: '@"my dir/"', caret: 9 });

@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import { readdir } from 'node:fs/promises';
+import { opendir } from 'node:fs/promises';
 import { isAbsolute, join, resolve } from 'node:path';
 import type { Mention } from '../protocol.ts';
 import { scoreQueryMatch } from './ranking.ts';
@@ -19,10 +19,11 @@ export async function mentions(cwd: string, query: string): Promise<Mention[]> {
   const slash = query.lastIndexOf('/') + 1, base = query.slice(0, slash), typed = query.slice(slash).toLowerCase();
   const found = (await listing(resolve(cwd, base))).flatMap(({ path, dir }) => {
     const depth = path.split('/').length, value = path.toLowerCase(), name = value.slice(value.lastIndexOf('/') + 1);
-    // With nothing typed after the folder, what is in it, its folders first; else the best name, then the best path.
+    // With nothing typed after the folder, what is in it, its folders first. Else by how the name matches, then how the path
+    // does: a match of the name's beats any of only the path's but its letters in order.
     const score = !typed ? depth * 2 + (dir ? 0 : 1) : Math.min(
-      scoreQueryMatch({ value: name, query: typed, markers: ['-', '_', '.', ' '], exact: 0, prefix: 2, boundary: 4, includes: 6, fuzzy: 100 }) ?? Infinity,
-      scoreQueryMatch({ value, query: typed, markers: ['/', '-', '_', '.', ' '], exact: 1, prefix: 3, boundary: 5, includes: 7, fuzzy: 200 }) ?? Infinity);
+      scoreQueryMatch({ value: name, query: typed, markers: ['-', '_', '.', ' '], exact: 0, prefix: 2, boundary: 3, includes: 4, fuzzy: 8 }) ?? Infinity,
+      scoreQueryMatch({ value, query: typed, markers: ['/', '-', '_', '.', ' '], exact: 1, prefix: 5, boundary: 6, includes: 7, fuzzy: 9 }) ?? Infinity);
     return score < Infinity ? [{ path: base + path, dir, score, depth }] : [];
   });
   return found.toSorted((a, b) => a.score - b.score || a.depth - b.depth || a.path.localeCompare(b.path)).slice(0, SHOWN).map(({ path, dir }) => ({ path, dir }));
@@ -66,13 +67,16 @@ function tracked(folder: string) {
 async function walked(folder: string) {
   const found: Mention[] = [], until = Date.now() + TIME, folders = [''];
   for (let k = 0; k < folders.length && found.length < CAP && Date.now() < until; k++) {
-    const entries = await readdir(join(folder, folders[k]), { withFileTypes: true }).catch(() => []);
-    for (const entry of entries.slice(0, CAP - found.length)) {
-      const dir = entry.isDirectory(), path = folders[k] ? `${folders[k]}/${entry.name}` : entry.name;
-      if (dir && (entry.name.startsWith('.') || entry.name === 'node_modules')) continue;
-      found.push({ path, dir });
-      if (dir) folders.push(path);
-    }
+    // A folder is read an entry at a time, so one of millions is not read whole: the cap and the time hold within it too.
+    try {
+      for await (const entry of await opendir(join(folder, folders[k]))) {
+        if (found.length >= CAP || Date.now() >= until) break;
+        const dir = entry.isDirectory(), path = folders[k] ? `${folders[k]}/${entry.name}` : entry.name;
+        if (dir && (entry.name.startsWith('.') || entry.name === 'node_modules')) continue;
+        found.push({ path, dir });
+        if (dir) folders.push(path);
+      }
+    } catch { /* A folder that cannot be read lists nothing. */ }
   }
   return found;
 }

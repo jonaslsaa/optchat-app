@@ -41,7 +41,8 @@ writeFileSync(join(home, 'chart.png'), png(120, [38, 99, 235]));
 seed(createProfile(home, 'pictured'), 1, Date.now(), PICTURED(join(home, 'chart.png')));
 createProfile(home, 'paced');
 createProfile(home, 'skills');
-createProfile(home, 'picking');
+// Two things you said, the older with an `@` part of the way in, for ↑ to bring back.
+writeMemory(createProfile(home, 'picking'), 4, i => ['please open @src/ser now', 'Done.', 'ok and what is next?', 'Done.'][i]);
 // A chat to find in: a word in two cases, a line of code longer than the page is wide, and a long message of yours, which is
 // shown cut short, with a word at its end. And one with more messages than the chat reads at first.
 writeMemory(createProfile(home, 'finds'), 40, i => i === 3 ? 'Blåbær and BLÅBÆR' : i === 5 ? `\`\`\`\n${'x'.repeat(400)} farword\n\`\`\`` : i === 20 ? `${Array.from({ length: 40 }, (_, line) => `line ${line}`).join('\n')}\nthe needle` : `message ${i}`);
@@ -398,6 +399,12 @@ test('an @ lists the files of the window\'s folder: a folder taken lists what is
   await page.keyboard.press('Escape');
   await list.waitFor({ state: 'detached' });
   assert.equal(await box.inputValue(), 'look at @src/server/pi.ts @');
+  // What ↑ brings back has the caret at its end, which is where an `@` is read: not at the end of the message before it.
+  await box.fill('');
+  for (const key of ['ArrowUp', 'ArrowUp']) await page.keyboard.press(key);
+  assert.equal(await box.inputValue(), 'please open @src/ser now');
+  await page.waitForTimeout(400);
+  assert.equal(await list.count(), 0, 'An @ the caret is not at opened its list.');
   await page.context().close();
 });
 

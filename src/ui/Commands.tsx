@@ -70,7 +70,8 @@ export function useMentions(window: WindowState, text: string, caret: number, ch
   const rows = at && found ? found.mentions : [], open = !!at && shut !== at.start && rows.length > 0, index = moved && moved.query === query ? Math.min(moved.at, rows.length - 1) : 0;
   useOverlay(open, () => setShut(latest.current?.start), root, area);
   const pick = (row: Mention) => {
-    if (!at) return;
+    // A row of the last letter's list is not taken, by a click or a key: the next list is on its way.
+    if (!at || found?.query !== query) return;
     const next = mention(text, caret, at, row);
     area.current?.focus();
     if (next.text === text) { area.current?.setSelectionRange(next.caret, next.caret); return; }
@@ -88,7 +89,7 @@ export function useMentions(window: WindowState, text: string, caret: number, ch
     if (!open || query === undefined || !plain || event.nativeEvent.isComposing) return false;
     if (key === 'ArrowDown' || key === 'ArrowUp') setMoved({ query, at: stepped(key, index, rows.length) });
     // Until the list is that of what is typed now, Tab and Enter wait: a row of the last letter's is not taken, nor the message sent.
-    else if (key === 'Tab' || key === 'Enter') { if (row && found?.query === query) pick(row); }
+    else if (key === 'Tab' || key === 'Enter') { if (row) pick(row); }
     else return false;
     event.preventDefault();
     return true;
@@ -98,7 +99,7 @@ export function useMentions(window: WindowState, text: string, caret: number, ch
       <Options id={id} label="Files" rows={rows} at={index} onPick={pick} empty={null}>
         {row => {
           const slash = row.path.lastIndexOf('/'), Icon = row.dir ? FolderIcon : FileIcon;
-          return <><Icon className="size-3.5 shrink-0 text-muted-foreground" /><span className="shrink-0">{row.path.slice(slash + 1)}{row.dir && '/'}</span><span className="min-w-0 truncate text-muted-foreground text-xs">{row.path.slice(0, Math.max(0, slash))}</span></>;
+          return <><Icon className="size-3.5 shrink-0 text-muted-foreground" /><span className="min-w-0 shrink truncate">{row.path.slice(slash + 1)}{row.dir && '/'}</span><span className="min-w-0 truncate text-muted-foreground text-xs">{row.path.slice(0, Math.max(0, slash))}</span></>;
         }}
       </Options>
     </Popup>

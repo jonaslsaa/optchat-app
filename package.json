@@ -1,6 +1,6 @@
 {
   "name": "optchat-app",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "private": true,
   "license": "MIT",
   "type": "module",
@@ -27,7 +27,7 @@
   "dependencies": {
     "katex": "^0.19.1",
     "lucide-react": "^1.72.0",
-    "pi-optchat": "^0.12.2",
+    "pi-optchat": "^0.12.3",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
     "react-markdown": "^10.1.0",

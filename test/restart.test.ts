@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { spawn } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
@@ -67,13 +67,39 @@ test('a Pi at work on an older pi-optchat is not stopped: it is marked, and star
   const before = await pid();
   pull('0.12.2');
   await request('setup', { fresh: true }); // The setup's "Check again".
-  assert.partialDeepStrictEqual(await window(), { status: 'running', stale: '0.12.2' });
+  assert.partialDeepStrictEqual(await window(), { status: 'running', stale: 'pi-optchat 0.12.2' });
   assert.equal(await pid(), before);
 
   // A message sent while it starts again reaches the new Pi.
   assert.deepEqual(await Promise.all([request('restart', { profile: 'working' }), request('prompt', { window: main, text: 'hello' })]), [{}, { disposition: 'started' }]);
   assert.equal((await window())?.stale, undefined);
   assert.notEqual(await pid(), before);
+});
+
+test('a patch the app\'s own Pi installs by itself leaves its chat at work running, marked, until it is restarted', async t => {
+  // The app's own Pi, 1.5.2, with pi-optchat from a checkout; 1.5.3 is out on npm.
+  const app = mkdtempSync(join(home, 'app-')), checkout = join(app, 'pi-optchat'), npm = { command: process.execPath, args: [join(import.meta.dirname, 'fake-npm.ts')] };
+  execFileSync(npm.command, [...npm.args, 'install', '--prefix', join(app, 'pi'), 'pi@latest']);
+  mkdirSync(checkout);
+  writeFileSync(join(checkout, 'package.json'), JSON.stringify({ name: 'pi-optchat', version: '0.12.2' }));
+  writeFileSync(join(app, 'pi', 'home', 'state.json'), JSON.stringify({ version: '1.5.2', providers: [], packages: { [checkout]: checkout } }));
+  process.env.FAKE_NPM_PUBLISHED = '1.5.2,1.5.3';
+  t.after(() => { delete process.env.FAKE_NPM_PUBLISHED; });
+  createProfile(home, 'patched');
+  // What the newest Pi is, is learned once the chat is at work.
+  const newest = Promise.withResolvers<string | undefined>();
+  const server = await startServer({ home, app, cwd: app, pi: { command: join(home, 'no-such-pi'), args: [] }, npm, latest: () => newest.promise }), { request, close } = await connect(server.url);
+  t.after(async () => { close(); await server.close(); });
+  const main = 'patched/main', window = async () => (await request('windows', {})).windows.find(window => window.id === main);
+  const pid = async () => { const { data } = await request('command', { window: main, command: { type: 'get_state' } }); assert(typeof data === 'object' && data !== null && 'pid' in data); return data.pid; };
+  await request('open', { profile: 'patched' });
+  await request('prompt', { window: main, text: 'wait for me' });
+  const before = await pid();
+  newest.resolve('1.5.3');
+  for (let tries = 0; (await window())?.stale === undefined && tries < 250; tries++) await sleep(20);
+  assert.partialDeepStrictEqual(await window(), { status: 'running', stale: 'Pi 1.5.3' });
+  assert.equal(await pid(), before);
+  assert.partialDeepStrictEqual((await request('setup', {})).pi, { version: '1.5.3' });
 });
 
 test('an agent at work keeps its Pi from being started again too, while one on the pi-optchat installed is left alone', async t => {
@@ -91,7 +117,7 @@ test('an agent at work keeps its Pi from being started again too, while one on t
   writeRun(directory, { id: 'bbbbbbbb', state: 'paused', started: 3000 });
   pull('0.12.3');
   await request('setup', { fresh: true });
-  assert.partialDeepStrictEqual(await window(), { status: 'idle', stale: '0.12.3' });
+  assert.partialDeepStrictEqual(await window(), { status: 'idle', stale: 'pi-optchat 0.12.3' });
   assert.equal(await pid(), before);
 });
 

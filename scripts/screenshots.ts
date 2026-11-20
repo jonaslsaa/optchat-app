@@ -128,11 +128,12 @@ writeFileSync(join(home, 'pi', 'pi-optchat', 'package.json'), JSON.stringify({ n
 writeFileSync(join(home, 'pi', 'state.json'), JSON.stringify({ version: '1.5.2', providers: ['anthropic', 'openai', 'openai-codex', 'github-copilot', 'lab'], packages: { 'npm:pi-optchat': join(home, 'pi', 'pi-optchat') } }));
 
 await build({ logLevel: 'warn' });
-// The editors it finds are these, whatever this machine has.
-const server = await startServer({ home, app: join(home, 'app'), cwd: home, histories: join(home, 'mac'), pi, gh, now: () => NOW + 42_000, editors: () => new Map([['cursor', '/c'], ['vscode', '/v'], ['zed', '/z'], ['finder', '/usr/bin/open']]) });
+// The editors it finds are these, whatever this machine has. A newer minor of Pi is out, which the setup tells of.
+const latest = async () => '1.6.0';
+const server = await startServer({ home, app: join(home, 'app'), cwd: home, histories: join(home, 'mac'), pi, gh, latest, now: () => NOW + 42_000, editors: () => new Map([['cursor', '/c'], ['vscode', '/v'], ['zed', '/z'], ['finder', '/usr/bin/open']]) });
 // A machine with nothing on it yet: no Pi, no profile.
 mkdirSync(join(home, 'new'));
-const fresh = await startServer({ home: join(home, 'new'), app: join(home, 'new', 'app'), cwd: home, histories: join(home, 'mac'), pi: { command: join(home, 'no-such-pi'), args: [] }, npm: { command: process.execPath, args: [join(import.meta.dirname, '../test/fake-npm.ts')] },
+const fresh = await startServer({ home: join(home, 'new'), app: join(home, 'new', 'app'), cwd: home, histories: join(home, 'mac'), pi: { command: join(home, 'no-such-pi'), args: [] }, npm: { command: process.execPath, args: [join(import.meta.dirname, '../test/fake-npm.ts')] }, latest,
   opener: { command: process.execPath, args: ['-e', ''] } }); // In place of the terminal a sign-in opens: nothing.
 let control: Client | undefined, browser: Browser | undefined;
 // Whatever happens, nothing is left running: the browser, and the servers with their fake Pis.
@@ -1089,4 +1090,15 @@ async function pictures(browser: Browser, control: Client) {
     await waiting.waitFor({ state: 'detached' });
     await hung.close();
   }
+  // A patch of the app's own Pi that it tried by itself, and that failed: a grey line, and the Pi there still runs.
+  const patching = join(home, 'patching'), npm = { command: process.execPath, args: [join(import.meta.dirname, '../test/fake-npm.ts')] };
+  mkdirSync(join(patching, 'home'), { recursive: true });
+  execFileSync(npm.command, [...npm.args, 'install', '--prefix', join(patching, 'app', 'pi'), 'pi@latest']);
+  process.env.FAKE_NPM_FAILS = '1';
+  const patched = await startServer({ home: join(patching, 'home'), app: join(patching, 'app'), cwd: home, pi: { command: join(home, 'no-such-pi'), args: [] }, npm, latest: async () => '1.5.3' });
+  try {
+    const page = await open([], { at: patched.page, ready: '' });
+    await page.getByText(/Pi did not update itself/).waitFor();
+    await shot(page, '280-setup-patch-failed-quietly');
+  } finally { delete process.env.FAKE_NPM_FAILS; await patched.close(); }
 }

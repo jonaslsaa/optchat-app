@@ -2,8 +2,8 @@ import { XIcon } from 'lucide-react';
 import { useState } from 'react';
 import { app, cutOffShown, type State } from './store.ts';
 
-/** A line for each profile whose Pi runs an older pi-optchat than is installed and was at work when the server found that, so
- * it was not started again unasked (`stale`): Restart does it, and stops what it was doing. */
+/** A line for each profile whose Pi runs an older Pi or pi-optchat than is installed and was at work when the server found
+ * that, so it was not started again unasked (`stale`): Restart does it, and stops what it was doing. */
 export function Stale({ state }: { state: State }) {
   return state.windows.flatMap(({ profile, stale }) => stale === undefined ? [] : [<StaleLine key={profile} profile={profile} installed={stale} />]);
 }
@@ -12,8 +12,8 @@ function StaleLine({ profile, installed }: { profile: string; installed: string 
   const restart = async () => { setRestarting(true); try { await app.restartPi(profile); } finally { setRestarting(false); } };
   return (
     <p role="status" className="notice enter flex shrink-0 items-center justify-center gap-2 bg-warning-surface px-4 py-1.5 text-warning-foreground text-xs">
-      <span className="min-w-0 truncate"><span className="font-medium">{profile}</span> · Pi runs an older pi-optchat than the {installed} installed.</span>
-      <button type="button" aria-label={`Restart the Pi of ${profile}`} title="Stops what it is doing, and starts it again on the new pi-optchat" disabled={restarting} onClick={() => void restart()} className="shrink-0 rounded-sm font-medium underline underline-offset-2 disabled:no-underline disabled:opacity-60">
+      <span className="min-w-0 truncate"><span className="font-medium">{profile}</span> · Its Pi started before {installed} was installed.</span>
+      <button type="button" aria-label={`Restart the Pi of ${profile}`} title={`Stops what it is doing, and starts it again on ${installed}`} disabled={restarting} onClick={() => void restart()} className="shrink-0 rounded-sm font-medium underline underline-offset-2 disabled:no-underline disabled:opacity-60">
         {restarting ? 'Restarting…' : 'Restart'}
       </button>
     </p>

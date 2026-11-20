@@ -38,6 +38,9 @@ export interface ServerOptions extends Partial<Pick<WindowsOptions, 'home' | 'gr
   npm?: Launch;
   /** What opens a file in a terminal of its own, for Pi's sign-in. Without it the server opens none. */
   opener?: Launch;
+  /** How the newest Pi that is out is learned (`newestPi` in `setup.ts`). Without it the server neither tells of a newer Pi nor
+   * installs a patch of its own Pi, so no test asks the network. */
+  latest?: () => Promise<string | undefined>;
   /** What time it is, for what a profile used "Today": the clock's, unless said. */
   now?: () => number;
   /** What starts your editor on a file the chat named (`launch` in `files.ts`). Without it the server opens none, so nothing a
@@ -67,7 +70,7 @@ const loopback = (url: string) => { try { return LOOPBACK.includes(new URL(url).
 /** Starts the app's server on this machine only: the protocol of `protocol.ts` on a WebSocket at `/ws`, a profile's images at
  * `/images/<profile>/<name>`, a picture on this machine a reply shows at `/file?path=<path>&token=<token>` (`picture`), and the
  * UI's page everywhere else. `close` stops every Pi it started and waits for them. */
-export async function startServer({ port = 0, origins = [], ui = join(import.meta.dirname, '../../dist/ui'), home = dataHome(), app = appHome(), cwd, pi, flags = [], npm, gh, opener, launcher, editors = () => installed(), update, histories, grace = 15_000, now = Date.now, token = randomBytes(32).toString('base64url') }: ServerOptions) {
+export async function startServer({ port = 0, origins = [], ui = join(import.meta.dirname, '../../dist/ui'), home = dataHome(), app = appHome(), cwd, pi, flags = [], npm, gh, opener, latest, launcher, editors = () => installed(), update, histories, grace = 15_000, now = Date.now, token = randomBytes(32).toString('base64url') }: ServerOptions) {
   ui = resolve(ui);
   home = resolve(home); // Pi runs in each window's directory, and has to find the same profiles from there.
   app = resolve(app); // And npm runs in the app's folder, where a path that is not whole would be another folder.
@@ -76,9 +79,9 @@ export async function startServer({ port = 0, origins = [], ui = join(import.met
   const send = (socket: WebSocket, message: ServerMessage) => { if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify(message)); };
   const push = (push: Push) => { for (const socket of sockets.clients) send(socket, push); };
   let settings = readSettings(app), updating: Updating | undefined;
-  const setup = new Setup({ app, cwd, pi, npm, opener, push: setup => push({ push: 'setup', setup }), installed: () => void everywhere() });
+  const setup = new Setup({ app, cwd, pi, npm, opener, push: setup => push({ push: 'setup', setup }), installed: () => void everywhere(), latest });
   // A window runs in the folder the settings name, unless that folder is gone since it was kept.
-  const windows = new Windows({ home, grace, push, cwd: () => settings.cwd && isDirectory(settings.cwd) ? settings.cwd : cwd, pi: async () => { const { command, args } = await setup.launch(); return { command, args: [...args, ...flags] }; }, optchat: () => setup.optchatVersion(), catalog: () => setup.catalog() });
+  const windows = new Windows({ home, grace, push, cwd: () => settings.cwd && isDirectory(settings.cwd) ? settings.cwd : cwd, pi: async () => { const { command, args } = await setup.launch(); return { command, args: [...args, ...flags] }; }, versions: () => setup.versions(), catalog: () => setup.catalog() });
   const imports = new Imports({ home, histories, app, owned: profile => windows.owned(profile) });
   // A Pi of the app's on a pi-optchat older than the one installed now is started again while nothing is at work in its
   // profile (`Windows.current`): before what an older one may not know (resuming agents), and once

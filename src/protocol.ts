@@ -65,8 +65,8 @@ export type Mention = Static<typeof Mention>;
  * starts it on. With neither it is absent: the window starts on Pi's default, which `models` tells.
  * `completing`: a connected window's Complete is under way, however it was asked (a button, or `/complete` typed): from the
  * moment it is sent until its Pi has answered, which pi-optchat does once the handoff is written and handed over.
- * `stale`, on a main window: its Pi still runs the pi-optchat it started on, older than the one installed since (this version),
- * and was at work when the server looked, so it was not started again unasked (`restart`).
+ * `stale`, on a main window: its Pi still runs the Pi or pi-optchat it started on, older than the one installed since (named
+ * with its version, as `Pi 1.5.3`), and was at work when the server looked, so it was not started again unasked (`restart`).
  * `name`, on a connected window: what you called it (`rename`), which the page shows in place of its first message. */
 export const WindowState = Type.Object({
   id: Type.String(), profile: Type.String(), role: Type.Enum(['main', 'connected']), cwd: Type.String(),
@@ -114,14 +114,15 @@ const Installed = Type.Enum(['pi', 'optchat']);
  * A sign-in is only ever started for one of these. */
 const Account = Type.Enum(['anthropic', 'openai-codex', 'github-copilot']);
 /** What the app needs, and whether it is there: Pi (`shell`: for the Pi the app installed
- * into its own folder, the line that puts it on your PATH), pi-optchat in that Pi, and a model provider that is logged in
+ * into its own folder, the line that puts it on your PATH; `latest`: a newer Pi that is out, which `message` tells of), pi-optchat in that Pi, and a model provider that is logged in
  * (`providers`: those that are; `terminal`: the app can open a terminal here for Pi's sign-in, `signIn`). `job` is an install the app is running, or the last one it ran: `line` is the latest line it
- * printed, and `output` the end of everything it printed once it has failed. */
+ * printed, and `output` the end of everything it printed once it has failed; `auto`: no one asked for it, as a patch release
+ * of its own Pi the app installs by itself. */
 export const Setup = Type.Object({
-  pi: Type.Intersect([Need, Type.Object({ shell: Type.Optional(Type.String()) })]),
+  pi: Type.Intersect([Need, Type.Object({ shell: Type.Optional(Type.String()), latest: Type.Optional(Type.String()) })]),
   optchat: Need,
   login: Type.Intersect([Need, Type.Object({ providers: Type.Array(Type.String()), terminal: Type.Optional(Type.Boolean()) })]),
-  job: Type.Optional(Type.Object({ what: Installed, state: Type.Enum(['running', 'done', 'failed']), line: Type.String(), output: Type.Optional(Type.String()) })),
+  job: Type.Optional(Type.Object({ what: Installed, state: Type.Enum(['running', 'done', 'failed']), line: Type.String(), output: Type.Optional(Type.String()), auto: Type.Optional(Type.Boolean()) })),
 });
 export type Setup = Static<typeof Setup>;
 

@@ -26,11 +26,13 @@ async function setup(t: TestContext, options: Partial<ServerOptions> = {}, pi?: 
   const pushed: Setup[] = [], waiting = new Set<() => void>();
   const client = await connect(server.url, (push: Push) => { if (push.push === 'setup') pushed.push(push.setup); for (const check of waiting) check(); });
   t.after(async () => { client.close(); await server.close(); });
-  const ended = () => new Promise<Setup>(resolve => {
-    const check = () => { const last = pushed.at(-1); if (last?.job && last.job.state !== 'running') { waiting.delete(check); resolve(last); } };
+  /** The first setup pushed, from the last one on, that `wanted` is. */
+  const heard = (wanted: (setup: Setup) => boolean) => new Promise<Setup>(resolve => {
+    const check = () => { const last = pushed.at(-1); if (last && wanted(last)) { waiting.delete(check); resolve(last); } };
     waiting.add(check); check();
   });
-  return { app, folder, pushed, ended, request: client.request };
+  const ended = () => heard(({ job }) => job !== undefined && job.state !== 'running');
+  return { app, folder, pushed, heard, ended, request: client.request };
 }
 
 test('the settings are kept in the app\'s own folder, reach every page, and name where new windows run', async t => {
@@ -153,7 +155,6 @@ test('the app\'s own Pi stays the app\'s to update once its folder is on your PA
   assert.partialDeepStrictEqual(pi, { state: 'ok', path: join(bin, 'pi') });
   assert.equal(pi.shell, undefined);
 
-  mkdirSync(join(app, 'pi', 'home'));
   writeFileSync(join(app, 'pi', 'home', 'state.json'), JSON.stringify({ version: '1.4.0', providers: [], packages: {} }));
   assert.partialDeepStrictEqual((await request('setup', { fresh: true })).pi, { state: 'old', installable: true });
 });
@@ -256,4 +257,67 @@ test('an install that says all is well and leaves nothing there has failed', asy
   assert.equal(pi.state, 'missing');
   assert.partialDeepStrictEqual(job, { what: 'pi', state: 'failed' });
   assert.match(job?.line ?? '', /ran to its end, but what it was to install is not there/);
+});
+
+test('a newer Pi that is out is told of beside a Pi of yours, and nothing is said while that cannot be learned', async t => {
+  let latest: string | undefined; // Offline: nothing is learned.
+  const { folder, request } = await setup(t, { latest: async () => latest }, { version: '1.5.2', providers: [], packages: {} });
+  assert.partialDeepStrictEqual((await request('setup', {})).pi, { state: 'ok', version: '1.5.2' });
+  assert.equal((await request('setup', { fresh: true })).pi.message, undefined);
+  latest = '1.6.0';
+  const { pi, job } = await request('setup', { fresh: true });
+  // It stays fine, says what is out and which command updates it, and is not the app's to update.
+  assert.partialDeepStrictEqual(pi, { state: 'ok', version: '1.5.2', latest: '1.6.0', message: '1.6.0 is available. Update it in a terminal:' });
+  assert.match(pi.command ?? '', / update self$/);
+  assert.equal(pi.installable, undefined);
+  assert.equal(job, undefined);
+  // Gone offline since, the app keeps what it last heard.
+  latest = undefined;
+  assert.equal((await request('setup', { fresh: true })).pi.latest, '1.6.0');
+  assert.equal(JSON.parse(readFileSync(join(folder, 'state.json'), 'utf8')).version, '1.5.2');
+});
+
+test('a Pi of yours is never updated by itself, not for a patch either: Pi\'s updater cannot be held to one', async t => {
+  for (const latest of ['1.5.3', '1.6.0']) {
+    const { folder, heard } = await setup(t, { latest: async () => latest }, { version: '1.5.2', providers: [], packages: {}, latest });
+    assert.equal((await heard(({ pi }) => pi.latest === latest)).job, undefined);
+    assert.equal(JSON.parse(readFileSync(join(folder, 'state.json'), 'utf8')).version, '1.5.2');
+  }
+});
+
+test('the app\'s own Pi takes a patch by itself from npm, a failed one is said quietly, and a new minor waits for Update', async t => {
+  const app = mkdtempSync(join(home, 'app-')), npm = node('fake-npm.ts');
+  execFileSync(npm.command, [...npm.args, 'install', '--prefix', join(app, 'pi'), 'pi@latest']); // Pi 1.5.2, put there before.
+  process.env.FAKE_NPM_PUBLISHED = '1.5.2,1.5.3';
+  process.env.FAKE_NPM_FAILS = '1';
+  t.after(() => { delete process.env.FAKE_NPM_PUBLISHED; delete process.env.FAKE_NPM_FAILS; });
+  const offline = await setup(t, { app, pi: nowhere, latest: async () => '1.5.3' });
+  const failed = await offline.ended();
+  assert.partialDeepStrictEqual(failed, { pi: { state: 'ok', version: '1.5.2' }, job: { what: 'pi', state: 'failed', auto: true } });
+  assert.match(failed.job?.line ?? '', /^Pi did not update itself, and 1\.5\.2 still runs: /);
+
+  delete process.env.FAKE_NPM_FAILS;
+  const { pushed, ended } = await setup(t, { app, pi: nowhere, latest: async () => '1.5.3' });
+  assert.partialDeepStrictEqual(await ended(), { pi: { state: 'ok', version: '1.5.3' }, job: { state: 'done', auto: true } });
+  assert.match(pushed[0].job?.line ?? '', /@~1\.5\.2'$/);
+
+  // A chat opened while a patch installs waits for it, and starts on the new Pi.
+  process.env.FAKE_NPM_PUBLISHED = '1.5.2,1.5.3,1.5.4';
+  process.env.FAKE_NPM_DELAY = '1000';
+  t.after(() => { delete process.env.FAKE_NPM_DELAY; });
+  const opening = await setup(t, { app, pi: nowhere, latest: async () => '1.5.4' });
+  await opening.heard(({ job }) => job?.state === 'running');
+  const { window } = await opening.request('open', { profile: 'work' });
+  assert.deepEqual(await opening.request('prompt', { window: window.id, text: 'hello' }), { disposition: 'started' });
+  assert.partialDeepStrictEqual(await opening.request('setup', {}), { pi: { version: '1.5.4' }, job: { state: 'done' } });
+  delete process.env.FAKE_NPM_DELAY;
+
+  // A new minor is the app's to install, when asked.
+  process.env.FAKE_NPM_PUBLISHED = '1.5.2,1.5.4,1.6.0';
+  const asked = await setup(t, { app, pi: nowhere, latest: async () => '1.6.0' });
+  const told = await asked.heard(({ pi }) => pi.latest !== undefined);
+  assert.partialDeepStrictEqual(told, { pi: { state: 'ok', version: '1.5.4', installable: true, message: '1.6.0 is available.' } });
+  assert.equal(told.job, undefined);
+  await asked.request('install', { what: 'pi' });
+  assert.partialDeepStrictEqual(await asked.ended(), { pi: { state: 'ok', version: '1.6.0' }, job: { state: 'done' } });
 });

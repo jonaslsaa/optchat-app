@@ -33,8 +33,9 @@ if (process.cwd() === realpathSync(homedir())) { console.error('The fake Pi was 
 /** Pi outside a chat, as the app's setup asks it: its version, its packages (`list`, `install`, `update`), and the models it has
  * credentials for. FAKE_PI_HOME stands for Pi's own folder: `state.json` there says which Pi this is, and `install` puts a
  * package under it as Pi does. Without it this is Pi 1.5.2 with no packages and no login. */
-/** `broken`: Pi cannot read its own logins, and says `invalid` when asked about one. */
-interface Installed { version: string; providers: string[]; packages: Record<string, string>; broken?: boolean }
+/** `broken`: Pi cannot read its own logins, and says `invalid` when asked about one. `latest`: the newest Pi that is out, which
+ * `update self` installs, as Pi's own updater does. */
+interface Installed { version: string; providers: string[]; packages: Record<string, string>; broken?: boolean; latest?: string }
 const folder = process.env.FAKE_PI_HOME, kept = folder && join(folder, 'state.json');
 const installed: Installed = { version: '1.5.2', providers: [], packages: {}, ...kept && existsSync(kept) && JSON.parse(readFileSync(kept, 'utf8')) };
 /** Models as Pi lists them (`get_available_models`), a few of each provider it knows, with the fields the app reads; a
@@ -65,7 +66,7 @@ if (verb === 'auth' && source === 'check') {
   process.exit(ready ? 0 : 1);
 }
 if ((verb === 'install' || verb === 'update') && folder && kept) {
-  if (source === 'self') installed.version = '1.5.2';
+  if (source === 'self') installed.version = installed.latest ?? '1.5.2';
   else {
     const name = source.replace('npm:', ''), path = join(folder, 'npm', 'node_modules', name);
     console.log(`Installing ${source}...\n`);

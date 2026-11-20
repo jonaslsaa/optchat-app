@@ -76,10 +76,11 @@ export function Setup({ state, onMade }: { state: State; onMade?: (profile: stri
   const [checking, setChecking] = useState(false);
   const check = () => { setChecking(true); void Promise.all([app.checkSetup(true), app.findProfiles()]).finally(() => setChecking(false)); };
   // Only what is the app's to change has a button; the rest says which command does it.
-  const install = (what: What, need?: Need) => need?.installable && <Button variant="outline" disabled={busy} onClick={() => void app.install(what)}>{need.state === 'old' ? 'Update' : 'Install'}</Button>;
+  const install = (what: What, need?: Need) => need?.installable && <Button variant="outline" disabled={busy} onClick={() => void app.install(what)}>{need.state === 'missing' ? 'Install' : 'Update'}</Button>;
+  // An update no one asked for that failed is said quietly: the Pi there still runs.
   const progress = (what: What) => job?.what === what && job.state !== 'done' && (
     <div role="status" className="mt-1.5 text-xs">
-      <p className={cn('flex items-center gap-1.5', job.state === 'failed' ? 'text-error-foreground' : 'text-muted-foreground')}>{busy && <Spinner className="size-3 shrink-0" />}<span className="min-w-0 truncate">{job.line}</span></p>
+      <p className={cn('flex items-center gap-1.5', job.state === 'failed' && !job.auto ? 'text-error-foreground' : 'text-muted-foreground')}>{busy && <Spinner className="size-3 shrink-0" />}<span className="min-w-0 truncate">{job.line}</span></p>
       {job.output && <details className="mt-1"><summary className="cursor-pointer text-muted-foreground">What it printed</summary><pre className="mt-1 max-h-48 overflow-auto rounded-md border bg-muted/50 p-2 font-mono text-2xs whitespace-pre-wrap">{job.output}</pre></details>}
     </div>
   );

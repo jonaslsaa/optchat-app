@@ -34,13 +34,13 @@ Two servers on one machine share that folder. Each reads the settings when it st
 
 A fourth line in the page is the first profile. You name it there and `createProfile { name }` makes it, by pi-optchat's `createProfile` (from `pi-optchat/files`): pi-optchat says what a name may be, refuses one that is taken, and writes the profile's settings and instructions as it does in a terminal. The profile opens at once; it needs no Pi to be made. A name that will not do is refused under the field, in pi-optchat's words. Every later profile is made the same way, from New profile… ([ui.md](ui.md)). Until there is one, the setup is the first thing the page shows; after that it is part of the settings, and a notice at the top says when something is missing.
 
-The server looks once and keeps what it found: the page, an install and a window's Pi all read that one look. **Check again** looks afresh, and so does a prompt that finds no Pi, since you may have installed one in a terminal meanwhile. After an install and on **Check again**, a chat whose Pi runs an older pi-optchat than is now installed is started again on the new one, or offered a Restart if it is at work ([server.md](server.md#windows)).
+The server looks once and keeps what it found: the page, an install and a window's Pi all read that one look. **Check again** looks afresh, and so does a prompt that finds no Pi, since you may have installed one in a terminal meanwhile. After an install and on **Check again**, a chat whose Pi runs an older Pi or pi-optchat than is now installed is started again on the new one, or offered a Restart if it is at work ([server.md](server.md#windows)).
 
 ### What the app changes, and what it never does
 
 The app changes only what is its own: the Pi in its own folder, and a pi-optchat that Pi installed from npm. Those have an **Install** or **Update** button (`installable` in the protocol), and `install` refuses anything else.
 
-- **A Pi of yours is never changed**, whether it is fine, too old, or broken. One that is too old gets no button: the page shows the command that updates it (`pi update self`) for you to run. One that does not run is passed over as if it were not there.
+- **A Pi of yours is never changed**, whether it is fine, too old, or broken, and not for a patch release either ([Updates of Pi](#updates-of-pi)). One that is too old, or has a newer Pi out, gets no button: the page shows the command that updates it (`pi update self`) for you to run. One that does not run is passed over as if it were not there.
 - **A pi-optchat that is a folder of yours** (a checkout) is never installed over or updated.
 
 ### Installing Pi
@@ -59,6 +59,18 @@ npm install --prefix ~/.optchat-app/pi --ignore-scripts @earendil-works/pi-codin
 An install runs without a terminal, one at a time. Its latest line is pushed to the page once a second. When it has ended the server looks again, and the install worked if what it was for is there now, whatever the command said of itself. When it failed, the page shows the first line that says so and the end of what it printed. Closing the server ends an install that is running; the next one puts right what it left.
 
 The shape is T3 Code's (its provider checks and its update runner): a state per thing with one message that names the command, and an install that reports its latest line. What T3 Code does not do is install Pi or a Pi package; that part is this app's own.
+
+### Updates of Pi
+
+The server asks what the newest Pi is where Pi itself asks, `https://pi.dev/api/latest-version` (what makes a Pi in a terminal say "Update Available", and what `pi update` installs; Pi has no command that only says it). It asks as it starts, once a day after, and on **Check again**, and keeps the answer; one that does not come in five seconds, or while `PI_OFFLINE` is set (as for Pi), leaves what it last heard, and before the first nothing is said. A server started from code asks only when it is given how (`latest`, which the app, `npm start` and `npm run dev` pass), so no test asks the network.
+
+- **A newer Pi is told of, quietly.** Beside a Pi that is otherwise fine the page says, in grey, "1.6.0 is available" (`latest`), and the Pi keeps its check. The app's own Pi gets **Update**, which installs `@latest` as **Install** does. A Pi of yours gets the command that updates it, for you to run.
+- **A patch of the app's own Pi installs by itself.** As the server starts and once a day, when the newest Pi has the same first two numbers as the app's own and a higher third (1.5.2 to 1.5.3), the app installs it again with npm at `~1.5.2`, the newest 1.5, unless an install is running then. Once a new minor is out, a patch of the old one is not installed by itself.
+- **A chat waits for an install of Pi.** A window's Pi that is started while one runs (the patch runs just as the app starts, when the page opens the main chat) starts once it has ended, on the Pi that is there then, never on files npm is swapping.
+- **A new minor or major never installs by itself**, and nothing does for a Pi of yours: it has only the grey line, until you press **Update** or run the command. Pi's own updater, `pi update self`, takes no version: it installs the newest Pi in the way you installed it (Pi's managed install in `~/.pi/agent/install`, a global npm, or the command in `PI_SELF_UPDATE_COMMAND`), so the app cannot hold it to a patch without writing into Pi's folders itself or guessing how it was installed.
+- **A failed one is quiet.** It is one grey line under Pi ("Pi did not update itself, and 1.5.2 still runs: …"), with what it printed, and no notice: the Pi there keeps working, and the next day it is tried again.
+- **Chats move to the new Pi as after any install**: a main chat with nothing to do is started again on it, and one at work keeps its Pi and gets **Restart** ([server.md](server.md#windows)).
+- Pi refreshes its model catalogs by itself every time a window's Pi starts (in RPC mode, in the background), so the app does not run `pi update --models`.
 
 ### Logging in
 

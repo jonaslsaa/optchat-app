@@ -34,6 +34,9 @@ export interface SetupOptions {
   push: (setup: State) => void;
   /** Called once an install or update has put what it was for in place. */
   installed?: () => void;
+  /** The newest Pi that is out (`newestPi`), asked as the server starts, once a day, and on "Check again". Without it the app
+   * neither tells of a newer Pi nor installs one by itself, so no test asks the network. It is asked once `watch` is called. */
+  latest?: () => Promise<string | undefined>;
 }
 
 /** A Pi that runs. `managed`: it is the one the app installed, so the app's to update. `listed`: it was found on your PATH. */
@@ -52,6 +55,19 @@ const Manifest = Type.Object({ name: Type.Literal('pi-optchat'), version: Type.S
 const manifest = (path: string) => {
   try { const read: unknown = JSON.parse(readFileSync(join(path, 'package.json'), 'utf8')); return Value.Check(Manifest, read) ? read : undefined; } catch { return undefined; }
 };
+/** The first two of a version's numbers: a release that changes only the third is a patch of it. */
+const minor = (version: string) => /^(\d+\.\d+)\./.exec(version)?.[1];
+const LATEST = Type.Object({ version: Type.String({ pattern: '^\\d+\\.\\d+\\.\\d+' }) });
+/** The newest Pi, from where Pi itself asks (its terminal's "Update Available", and `pi update`), so the app says what Pi says and
+ * `pi update self` installs what the app saw. Nothing when that is not answered in five seconds, and nothing asked while Pi
+ * is told to stay offline (`PI_OFFLINE`, as Pi does). */
+export async function newestPi(): Promise<string | undefined> {
+  if (process.env.PI_OFFLINE) return undefined;
+  try {
+    const response = await fetch('https://pi.dev/api/latest-version', { headers: { accept: 'application/json' }, signal: AbortSignal.timeout(5000) }), read: unknown = await response.json();
+    return response.ok && Value.Check(LATEST, read) ? read.version : undefined;
+  } catch { return undefined; }
+}
 const same = (a: string, b: string) => { try { return realpathSync(a) === realpathSync(b); } catch { return false; } };
 const runs = (file: string) => { try { accessSync(file, constants.X_OK); return statSync(file).isFile(); } catch { return false; } };
 /** The file a command is, as a whole path, so that it is the same file wherever it is run from: a window runs in its own
@@ -95,24 +111,43 @@ function run({ command, args }: Launch, more: readonly string[], { cwd, timeout,
 export const terminal = (): Launch | undefined => process.platform === 'darwin' ? { command: '/usr/bin/open', args: [] } : undefined;
 
 export class Setup {
-  private readonly options: Required<Omit<SetupOptions, 'opener' | 'installed'>> & Pick<SetupOptions, 'opener' | 'installed'>;
+  private readonly options: Required<Omit<SetupOptions, 'opener' | 'installed' | 'latest'>> & Pick<SetupOptions, 'opener' | 'installed' | 'latest'>;
   /** The Pi the app installed, if it has. */
   private readonly managed: Launch;
   private checked?: Promise<Checked>;
   private job?: State['job'];
+  /** An install of Pi that is running: until it ends, its files may be half swapped. */
+  private installing?: Promise<void>;
   private pushing?: ReturnType<typeof setTimeout>;
   private readonly closing = new AbortController();
-  constructor({ app, cwd, push, opener, installed, pi = { command: 'pi', args: [] }, npm = { command: 'npm', args: [] } }: SetupOptions) {
-    this.options = { app, cwd, push, pi, npm, opener, installed };
+  /** The newest Pi that is out, as last asked; `daily` asks again. */
+  private newest?: string;
+  private daily?: ReturnType<typeof setInterval>;
+  constructor({ app, cwd, push, opener, installed, latest, pi = { command: 'pi', args: [] }, npm = { command: 'npm', args: [] } }: SetupOptions) {
+    this.options = { app, cwd, push, pi, npm, opener, installed, latest };
     this.managed = { command: join(app, 'pi', 'node_modules', '.bin', 'pi'), args: [] };
   }
-  /** The Pi a window runs: yours if you have one, else the one the app installed. */
+  /** Asks what the newest Pi is now and once a day after (`patch`), if the setup was told how. */
+  watch() {
+    if (!this.options.latest || this.daily || this.closing.signal.aborted) return;
+    void this.patch();
+    this.daily = setInterval(() => void this.patch(), 24 * 60 * 60_000);
+    this.daily.unref();
+  }
+  /** The Pi a window runs: yours if you have one, else the one the app installed. A window waits for an install of Pi that is
+   * running, as the patch the app installs by itself as it starts, so it starts on the Pi that is there afterwards. */
   async launch(): Promise<Launch> {
+    await this.installing;
     let { found } = await this.look();
     // It may have been installed since, in a terminal: the page hears of what a second look finds.
     if (!found) { ({ found } = await this.look(true)); void this.push(); }
     if (!found) throw new Error('Pi is not installed. Open the settings to install it.');
     return found;
+  }
+  /** The versions of Pi and pi-optchat a Pi started now runs: Pi's as last checked, which an install here checks again. */
+  async versions() {
+    const [{ found }, optchat] = await Promise.all([this.look(), this.optchatVersion()]);
+    return { pi: found?.version, optchat };
   }
   /** The version of pi-optchat a Pi started now loads: read from its folder as it is now, since a pull in a checkout changes it
    * with nothing to say so. Which folder that is, is as last checked; a version other than the one found then is a reason to
@@ -124,23 +159,43 @@ export class Setup {
   }
   /** What is there, as last checked; `fresh` checks again. */
   async state({ fresh = false }: Params<'setup'> = {}): Promise<State> {
-    return { ...(await this.look(fresh)).state, ...this.job && { job: this.job } };
+    if (fresh) await Promise.all([this.learn(), this.look(true)]);
+    return { ...(await this.current()).state, ...this.job && { job: this.job } };
   }
-  /** Starts an install, or an update of what is too old. One runs at a time, and only of what is the app's to change: a Pi
-   * goes into the app's own folder with npm, running no package's scripts, and pi-optchat is installed by the Pi that has it. */
+  /** Starts an install, or an update of what is too old (or, for the app's own Pi, of one with a newer Pi out). One runs at a
+   * time, and only of what is the app's to change: a Pi goes into the app's own folder with npm, running no package's scripts,
+   * and pi-optchat is installed by the Pi that has it. */
   async install({ what }: Params<'install'>) {
-    const { found, state } = await this.look(), need = what === 'pi' ? state.pi : state.optchat, { npm } = this.options;
-    const launch = what === 'pi' ? { ...npm, command: where(npm.command) ?? npm.command } : found;
+    const { found, state } = await this.current(), need = what === 'pi' ? state.pi : state.optchat;
+    const launch = what === 'pi' ? this.npm() : found;
     if (this.job?.state === 'running') throw new Error('An install is already running.');
-    if (need.state === 'ok') throw new Error('It is installed already, and new enough.');
+    if (need.state === 'ok' && !need.installable) throw new Error('It is installed already, and new enough.');
     if (!need.installable || !launch) throw new Error(need.message ?? 'Install Pi first.');
-    const args = what === 'pi' ? ['install', '--prefix', join(this.options.app, 'pi'), '--ignore-scripts', '--no-audit', '--no-fund', `${PI_PACKAGE}@latest`]
-      : [need.state === 'old' ? 'update' : 'install', OPTCHAT];
+    const args = what === 'pi' ? this.into('latest') : [need.state === 'old' ? 'update' : 'install', OPTCHAT];
     mkdirSync(this.options.app, { recursive: true });
-    void this.work(what, launch, args);
+    this.start(what, launch, args, { from: what === 'pi' ? found?.version : undefined });
   }
-  private async work(what: Params<'install'>['what'], launch: Launch, args: string[]) {
-    this.job = { what, state: 'running', line: `Running: ${shown(launch, args)}` };
+  /** The npm that installs Pi into the app's folder, by its whole path, and what it is told to install there. */
+  private npm() { const { npm } = this.options; return { ...npm, command: where(npm.command) ?? npm.command }; }
+  private into(range: string) { return ['install', '--prefix', join(this.options.app, 'pi'), '--ignore-scripts', '--no-audit', '--no-fund', `${PI_PACKAGE}@${range}`]; }
+  /** Asks what the newest Pi is. One that is not answered leaves what was last heard: the app may be offline a while. */
+  private async learn() { if (this.options.latest) this.newest = await this.options.latest() ?? this.newest; }
+  /** Asks what the newest Pi is, and if it is a patch release of the app's own Pi (1.5.2 to 1.5.3), installs it by itself
+   * with npm, at the newest patch of the version it has (`~`). A new minor or major is never installed unasked: the page tells
+   * of it. Nor is a Pi of yours: Pi's updater (`pi update self`) takes no version, so it cannot be held to a patch. */
+  private async patch() {
+    await this.learn();
+    const { found } = await this.look(), { newest } = this;
+    if (!found?.managed || !newest || !older(found.version, newest) || minor(found.version) !== minor(newest) || this.job?.state === 'running') return void this.push();
+    this.start('pi', this.npm(), this.into(`~${found.version}`), { from: found.version, auto: true });
+  }
+  private start(...job: Parameters<Setup['work']>) {
+    const working: Promise<void> = this.work(...job).finally(() => { if (this.installing === working) this.installing = undefined; });
+    if (job[0] === 'pi') this.installing = working;
+  }
+  /** Runs an install, which worked if what it was for is there afterwards: for an update of Pi (`from`), a Pi other than that. */
+  private async work(what: Params<'install'>['what'], launch: Launch, args: readonly string[], { from, auto }: { from?: string; auto?: boolean } = {}) {
+    this.job = { what, state: 'running', line: `Running: ${shown(launch, args)}`, ...auto && { auto } };
     void this.push();
     let failed: string | undefined, last = '';
     const { code, missing, output } = await run(launch, args, {
@@ -156,9 +211,11 @@ export class Setup {
     if (this.closing.signal.aborted) return;
     // It worked if what it was for is there now, whatever the command said of itself.
     const { state } = await this.look(true), name = basename(launch.command);
-    this.job = (what === 'pi' ? state.pi : state.optchat).state === 'ok' ? { what, state: 'done', line: 'Done.' } : {
-      what, state: 'failed', output,
-      line: (missing ? `${launch.command} was not found on this machine.` : code === 0 ? `${name} ran to its end, but what it was to install is not there.` : `${name} ended with code ${code}: ${failed ?? last}`).slice(0, 300),
+    const need = what === 'pi' ? state.pi : state.optchat, why = missing ? `${launch.command} was not found on this machine.` : code === 0 ? `${name} ran to its end, but what it was to install is not there.` : `${name} ended with code ${code}: ${failed ?? last}`;
+    this.job = need.state === 'ok' && (from === undefined || need.version !== from) ? { what, state: 'done', line: 'Done.', ...auto && { auto } } : {
+      what, state: 'failed', output, ...auto && { auto },
+      // One that no one asked for says so, and which Pi there still runs, if one does.
+      line: (auto ? `Pi did not update itself${need.state === 'ok' ? `, and ${need.version} still runs` : ''}: ${why}` : why).slice(0, 300),
     };
     void this.push();
     if (this.job.state === 'done') this.options.installed?.();
@@ -194,13 +251,23 @@ export class Setup {
     throw new Error(`Pi could not say whether it is signed in. Try in a terminal: ${folder ? `PI_CODING_AGENT_DIR=${word(folder)} ` : ''}${shown(pi, check)}`);
   }
   /** Ends what is running: the server is closing. What an install left half done, the next one puts right. */
-  close() { this.closing.abort(); clearTimeout(this.pushing); }
+  close() { this.closing.abort(); clearTimeout(this.pushing); clearInterval(this.daily); }
   private async push() {
     clearTimeout(this.pushing);
     this.pushing = undefined;
     this.options.push(await this.state());
   }
 
+  /** The last look, and a newer Pi that is out where the Pi found is otherwise fine: the app's own has an Update, and for a Pi of
+   * yours the command that updates it is shown. Its version stays as fine as it was. */
+  private async current(): Promise<Checked> {
+    const { found, state } = await this.look(), { newest } = this;
+    if (!found || state.pi.state !== 'ok' || !newest || !older(found.version, newest)) return { found, state };
+    const note = found.managed ? { installable: true, message: `${newest} is available.` } : { message: `${newest} is available. Update it in a terminal:`, command: shown(this.named(found), ['update', 'self']) };
+    return { found, state: { ...state, pi: { ...state.pi, latest: newest, ...note } } };
+  }
+  /** In a terminal, a Pi on your PATH goes by its name; the app's own, while it is not on it, by where it is. */
+  private named({ listed, path, args }: Found): Launch { return { command: listed ? this.options.pi.command : path, args }; }
   /** What is there: as last looked, or looked for again. One look at a time, each after the one before it, so what the page
    * is told last is what was found last. */
   private look(fresh = false) {
@@ -224,15 +291,14 @@ export class Setup {
   private async check(): Promise<Checked> {
     const found = await this.find(), unknown = { state: 'unknown' as const };
     if (!found) return { state: { pi: { state: 'missing', installable: true, message: 'Not installed. The app can install it into its own folder, where it changes nothing else on this machine.' }, optchat: unknown, login: { ...unknown, providers: [] } } };
-    // In a terminal, a Pi on your PATH goes by its name; the app's own, while it is not on it, by where it is.
-    const { path, managed, listed, version } = found, named = { command: listed ? this.options.pi.command : path, args: found.args };
+    const { path, managed, listed, version } = found, named = this.named(found);
     const pi: State['pi'] = {
       version, path,
       // Its folder as it is, whatever is in its name, then the PATH there was.
       ...!listed && { shell: `export PATH=${word(dirname(path))}:"$PATH"` },
       ...!older(version, MINIMUM_PI) ? { state: 'ok' }
         : managed ? { state: 'old', installable: true, message: `Older than ${MINIMUM_PI}, which this app is tested with.` }
-        : { state: 'old', message: `Older than ${MINIMUM_PI}, which this app is tested with. It is a Pi of yours, so the app leaves it alone: update it in a terminal.`, command: shown(named, ['update', 'self']) },
+        : { state: 'old', message: `Older than ${MINIMUM_PI}, which this app is tested with. It is a Pi of yours: update it in a terminal.`, command: shown(named, ['update', 'self']) },
     };
     const [optchat, offered] = await Promise.all([this.optchat(found, named), this.models(found)]), terminal = this.options.opener !== undefined;
     const providers = [...new Set(offered?.map(model => model.provider))].sort();

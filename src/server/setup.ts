@@ -116,6 +116,8 @@ export class Setup {
   private readonly managed: Launch;
   private checked?: Promise<Checked>;
   private job?: State['job'];
+  /** An install of Pi that is running: until it ends, its files may be half swapped. */
+  private installing?: Promise<void>;
   private pushing?: ReturnType<typeof setTimeout>;
   private readonly closing = new AbortController();
   /** The newest Pi that is out, as last asked; `daily` asks again. */
@@ -132,8 +134,10 @@ export class Setup {
     this.daily = setInterval(() => void this.patch(), 24 * 60 * 60_000);
     this.daily.unref();
   }
-  /** The Pi a window runs: yours if you have one, else the one the app installed. */
+  /** The Pi a window runs: yours if you have one, else the one the app installed. A window waits for an install of Pi that is
+   * running, as the patch the app installs by itself as it starts, so it starts on the Pi that is there afterwards. */
   async launch(): Promise<Launch> {
+    await this.installing;
     let { found } = await this.look();
     // It may have been installed since, in a terminal: the page hears of what a second look finds.
     if (!found) { ({ found } = await this.look(true)); void this.push(); }
@@ -169,7 +173,7 @@ export class Setup {
     if (!need.installable || !launch) throw new Error(need.message ?? 'Install Pi first.');
     const args = what === 'pi' ? this.into('latest') : [need.state === 'old' ? 'update' : 'install', OPTCHAT];
     mkdirSync(this.options.app, { recursive: true });
-    void this.work(what, launch, args, { from: what === 'pi' ? found?.version : undefined });
+    this.start(what, launch, args, { from: what === 'pi' ? found?.version : undefined });
   }
   /** The npm that installs Pi into the app's folder, by its whole path, and what it is told to install there. */
   private npm() { const { npm } = this.options; return { ...npm, command: where(npm.command) ?? npm.command }; }
@@ -183,7 +187,11 @@ export class Setup {
     await this.learn();
     const { found } = await this.look(), { newest } = this;
     if (!found?.managed || !newest || !older(found.version, newest) || minor(found.version) !== minor(newest) || this.job?.state === 'running') return void this.push();
-    void this.work('pi', this.npm(), this.into(`~${found.version}`), { from: found.version, auto: true });
+    this.start('pi', this.npm(), this.into(`~${found.version}`), { from: found.version, auto: true });
+  }
+  private start(...job: Parameters<Setup['work']>) {
+    const working: Promise<void> = this.work(...job).finally(() => { if (this.installing === working) this.installing = undefined; });
+    if (job[0] === 'pi') this.installing = working;
   }
   /** Runs an install, which worked if what it was for is there afterwards: for an update of Pi (`from`), a Pi other than that. */
   private async work(what: Params<'install'>['what'], launch: Launch, args: readonly string[], { from, auto }: { from?: string; auto?: boolean } = {}) {

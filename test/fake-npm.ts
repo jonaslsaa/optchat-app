@@ -7,6 +7,8 @@ import { join } from 'node:path';
  * install nothing and say all is well. */
 const prefix = process.argv[process.argv.indexOf('--prefix') + 1], bin = join(prefix, 'node_modules', '.bin');
 const quoted = (text: string) => `'${text.replaceAll("'", `'\\''`)}'`;
+// FAKE_NPM_DELAY: an install that takes that many milliseconds, as one over a network does.
+await new Promise(resolve => setTimeout(resolve, Number(process.env.FAKE_NPM_DELAY ?? 0)));
 if (process.env.FAKE_NPM_FAILS === 'quietly') { console.log('\nup to date in 1s'); process.exit(0); }
 if (process.env.FAKE_NPM_FAILS) {
   console.error('npm error code ENOTFOUND\nnpm error network request to https://registry.npmjs.org/ failed\nnpm error A complete log of this run can be found in: /somewhere');

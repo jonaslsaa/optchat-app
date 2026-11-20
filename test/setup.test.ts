@@ -301,11 +301,22 @@ test('the app\'s own Pi takes a patch by itself from npm, a failed one is said q
   assert.partialDeepStrictEqual(await ended(), { pi: { state: 'ok', version: '1.5.3' }, job: { state: 'done', auto: true } });
   assert.match(pushed[0].job?.line ?? '', /@~1\.5\.2'$/);
 
+  // A chat opened while a patch installs waits for it, and starts on the new Pi.
+  process.env.FAKE_NPM_PUBLISHED = '1.5.2,1.5.3,1.5.4';
+  process.env.FAKE_NPM_DELAY = '1000';
+  t.after(() => { delete process.env.FAKE_NPM_DELAY; });
+  const opening = await setup(t, { app, pi: nowhere, latest: async () => '1.5.4' });
+  await opening.heard(({ job }) => job?.state === 'running');
+  const { window } = await opening.request('open', { profile: 'work' });
+  assert.deepEqual(await opening.request('prompt', { window: window.id, text: 'hello' }), { disposition: 'started' });
+  assert.partialDeepStrictEqual(await opening.request('setup', {}), { pi: { version: '1.5.4' }, job: { state: 'done' } });
+  delete process.env.FAKE_NPM_DELAY;
+
   // A new minor is the app's to install, when asked.
-  process.env.FAKE_NPM_PUBLISHED = '1.5.2,1.5.3,1.6.0';
+  process.env.FAKE_NPM_PUBLISHED = '1.5.2,1.5.4,1.6.0';
   const asked = await setup(t, { app, pi: nowhere, latest: async () => '1.6.0' });
   const told = await asked.heard(({ pi }) => pi.latest !== undefined);
-  assert.partialDeepStrictEqual(told, { pi: { state: 'ok', version: '1.5.3', installable: true, message: '1.6.0 is available.' } });
+  assert.partialDeepStrictEqual(told, { pi: { state: 'ok', version: '1.5.4', installable: true, message: '1.6.0 is available.' } });
   assert.equal(told.job, undefined);
   await asked.request('install', { what: 'pi' });
   assert.partialDeepStrictEqual(await asked.ended(), { pi: { state: 'ok', version: '1.6.0' }, job: { state: 'done' } });

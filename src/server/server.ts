@@ -218,6 +218,7 @@ export async function startServer({ port = 0, origins = [], ui = join(import.met
     });
   });
   await new Promise<void>((resolve, reject) => { server.once('error', reject); server.listen(port, '127.0.0.1', resolve); });
+  setup.watch(); // Only a server that is listening keeps Pi up to date: one whose port was taken is let go of.
   const address = server.address() as AddressInfo;
   return {
     port: address.port, url: `ws://127.0.0.1:${address.port}/ws?token=${token}`, page: `http://127.0.0.1:${address.port}/#${token}`,

@@ -35,7 +35,7 @@ export interface SetupOptions {
   /** Called once an install or update has put what it was for in place. */
   installed?: () => void;
   /** The newest Pi that is out (`newestPi`), asked as the server starts, once a day, and on "Check again". Without it the app
-   * neither tells of a newer Pi nor installs one by itself, so no test asks the network. */
+   * neither tells of a newer Pi nor installs one by itself, so no test asks the network. It is asked once `watch` is called. */
   latest?: () => Promise<string | undefined>;
 }
 
@@ -120,11 +120,14 @@ export class Setup {
   private readonly closing = new AbortController();
   /** The newest Pi that is out, as last asked; `daily` asks again. */
   private newest?: string;
-  private readonly daily?: ReturnType<typeof setInterval>;
+  private daily?: ReturnType<typeof setInterval>;
   constructor({ app, cwd, push, opener, installed, latest, pi = { command: 'pi', args: [] }, npm = { command: 'npm', args: [] } }: SetupOptions) {
     this.options = { app, cwd, push, pi, npm, opener, installed, latest };
     this.managed = { command: join(app, 'pi', 'node_modules', '.bin', 'pi'), args: [] };
-    if (!latest) return;
+  }
+  /** Asks what the newest Pi is now and once a day after (`patch`), if the setup was told how. */
+  watch() {
+    if (!this.options.latest || this.daily || this.closing.signal.aborted) return;
     void this.patch();
     this.daily = setInterval(() => void this.patch(), 24 * 60 * 60_000);
     this.daily.unref();
@@ -165,6 +168,7 @@ export class Setup {
     if (need.state === 'ok' && !need.installable) throw new Error('It is installed already, and new enough.');
     if (!need.installable || !launch) throw new Error(need.message ?? 'Install Pi first.');
     const args = what === 'pi' ? this.into('latest') : [need.state === 'old' ? 'update' : 'install', OPTCHAT];
+    mkdirSync(this.options.app, { recursive: true });
     void this.work(what, launch, args, { from: what === 'pi' ? found?.version : undefined });
   }
   /** The npm that installs Pi into the app's folder, by its whole path, and what it is told to install there. */
@@ -183,7 +187,6 @@ export class Setup {
   }
   /** Runs an install, which worked if what it was for is there afterwards: for an update of Pi (`from`), a Pi other than that. */
   private async work(what: Params<'install'>['what'], launch: Launch, args: readonly string[], { from, auto }: { from?: string; auto?: boolean } = {}) {
-    mkdirSync(this.options.app, { recursive: true });
     this.job = { what, state: 'running', line: `Running: ${shown(launch, args)}`, ...auto && { auto } };
     void this.push();
     let failed: string | undefined, last = '';
@@ -203,8 +206,8 @@ export class Setup {
     const need = what === 'pi' ? state.pi : state.optchat, why = missing ? `${launch.command} was not found on this machine.` : code === 0 ? `${name} ran to its end, but what it was to install is not there.` : `${name} ended with code ${code}: ${failed ?? last}`;
     this.job = need.state === 'ok' && (from === undefined || need.version !== from) ? { what, state: 'done', line: 'Done.', ...auto && { auto } } : {
       what, state: 'failed', output, ...auto && { auto },
-      // One that no one asked for says so, and that the Pi there still runs.
-      line: (auto ? `Pi did not update itself, and ${from} still runs: ${why}` : why).slice(0, 300),
+      // One that no one asked for says so, and which Pi there still runs, if one does.
+      line: (auto ? `Pi did not update itself${need.state === 'ok' ? `, and ${need.version} still runs` : ''}: ${why}` : why).slice(0, 300),
     };
     void this.push();
     if (this.job.state === 'done') this.options.installed?.();

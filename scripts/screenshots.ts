@@ -754,7 +754,8 @@ async function pictures(browser: Browser, control: Client) {
     await shot(page, button);
     await page.getByRole('button', { name: 'Open in…' }).click();
     await page.getByRole('listbox', { name: 'Editors' }).waitFor();
-    await shot(page, list);
+    // An editor under the pointer: its row's corners follow the list's.
+    await shot(page, list, page.getByRole('listbox', { name: 'Editors' }).getByRole('button').first());
   }
   // A tool call that returned a picture, opened: light and dark, and the picture large.
   mkdirSync(join(seen, 'images'));
@@ -874,7 +875,7 @@ async function pictures(browser: Browser, control: Client) {
   // already, and the dialog narrow and dark. Nothing is made.
   const naming = await open(['work'], { width: 900, height: 520 });
   await naming.getByRole('button', { name: 'Open a profile' }).click();
-  await shot(naming, '141-profiles-list');
+  await shot(naming, '141-profiles-list', naming.getByRole('button', { name: 'Import history…' }));
   await naming.getByRole('button', { name: 'New profile…' }).click();
   await naming.getByRole('textbox', { name: 'Profile name' }).fill('research');
   await shot(naming, '142-new-profile');

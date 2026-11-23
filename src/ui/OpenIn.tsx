@@ -30,7 +30,7 @@ export function OpenIn({ onOpen }: { onOpen: (editor?: string) => void }) {
         <ul role="listbox" aria-label="Editors" onKeyDown={walk} className="enter enter-grow absolute bottom-full left-0 z-50 mb-1 max-h-80 w-48 origin-bottom-left overflow-auto rounded-lg border bg-popover p-1 text-popover-foreground shadow-lg">
           {found.editors.map(({ id, label }) => (
             <li key={id} role="option" aria-selected={id === found.current}>
-              <button type="button" autoFocus={id === (found.current ?? found.editors[0]?.id)} onClick={() => pick(id)} className="flex h-8 w-full items-center gap-2 rounded-md px-2 text-left text-sm hover:bg-accent focus-visible:bg-accent focus-visible:outline-none">
+              <button type="button" autoFocus={id === (found.current ?? found.editors[0]?.id)} onClick={() => pick(id)} className="flex h-8 w-full items-center gap-2 rounded-[3px] px-2 text-left text-sm hover:bg-accent focus-visible:bg-accent focus-visible:outline-none">
                 <span className="min-w-0 flex-1 truncate">{label}</span>{id === found.current && <CheckIcon className="size-3.5 text-muted-foreground" />}
               </button>
             </li>

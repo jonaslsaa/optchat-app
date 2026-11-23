@@ -67,26 +67,26 @@ function Said({ notice: { text, kind }, onDismiss }: { notice: Notice; onDismiss
   );
 }
 
+/** A waiting message's cite card sits 5px in from the dashed border it meets, so its 10px corners follow the bubble's 16px
+ * ones (16 = 10 + 5 + the 1px border); the text keeps its padding. */
+const QUEUED_BLEED = '-mx-[7px] first:-mt-[3px] last:-mb-[3px]';
 /** Your messages an agent has not read yet, under its chat: the last `later` of them wait for its run to end. Where ⌥↑ takes
  * them back into the box (`editable`), the first says so. */
 export function Queued({ messages, later = 0, editable = false }: { messages: readonly string[]; later?: number; editable?: boolean }) {
   if (!messages.length) return null;
   return (
     <ol aria-label="Messages waiting for the agent" className="flex flex-col items-end gap-2 pb-1">
-      {messages.map(yours).map(({ skill, cites, text }, index) => {
-        const alone = cites.length > 0 && !text && !skill;
-        return (
+      {messages.map(yours).map(({ skill, cites, text }, index) => (
         <li key={index} className="flex min-w-0 max-w-[80%] flex-col items-end gap-0.5">
           <span className="me-1 flex items-center gap-1 text-muted-foreground text-xs leading-none">
             {index < messages.length - later ? <><CornerUpRightIcon className="size-3" />Steer · waiting to be read</> : <><ListPlusIcon className="size-3" />Queued for after this run</>}
             {editable && !index && <> · <Kbd>{label('alt+↑')}</Kbd> edit</>}
           </span>
-          <div className={cn('flex min-w-0 flex-col gap-1.5 rounded-2xl border border-muted-foreground/40 border-dashed text-muted-foreground text-sm [overflow-wrap:anywhere]', alone ? 'p-[5px]' : 'px-3 py-2')}>
-            {skill && <SkillChip skill={skill} />}{cites.length > 0 && <CiteGroup cites={cites} queued alone={alone} />}{(text || !cites.length && !skill) && <p className="whitespace-pre-wrap">{text || 'Image'}</p>}
+          <div className="flex min-w-0 flex-col gap-1.5 rounded-2xl border border-muted-foreground/40 border-dashed px-3 py-2 text-muted-foreground text-sm [overflow-wrap:anywhere]">
+            {skill && <SkillChip skill={skill} />}{cites.length > 0 && <CiteGroup cites={cites} queued className={QUEUED_BLEED} />}{(text || !cites.length && !skill) && <p className="whitespace-pre-wrap">{text || 'Image'}</p>}
           </div>
         </li>
-        );
-      })}
+      ))}
     </ol>
   );
 }

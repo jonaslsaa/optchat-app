@@ -173,7 +173,7 @@ export function CiteCommentPopover({ item, anchor, above = false, showQuote = fa
         if (next instanceof Element && next.closest('[data-cite-action]')) return;
         commit(false);
       }}
-      className="enter enter-grow fixed z-50 w-[min(20rem,calc(100vw-1.5rem))] rounded-[14px] border bg-popover text-popover-foreground shadow-[0_16px_40px_-18px_rgb(0_0_0/55%)] dark:shadow-[0_18px_44px_-18px_rgb(0_0_0/80%)]">
+      className="enter enter-grow fixed z-50 w-[min(20rem,calc(100vw-1.5rem))] rounded-[15px] border bg-popover text-popover-foreground shadow-[0_16px_40px_-18px_rgb(0_0_0/55%)] dark:shadow-[0_18px_44px_-18px_rgb(0_0_0/80%)]">
       {showQuote && quote && (
         <p className="mx-3 mt-3 line-clamp-2 whitespace-pre-wrap border-primary border-s-2 ps-2.5 text-[0.78rem] text-muted-foreground leading-snug [overflow-wrap:anywhere]">{quote}</p>
       )}
@@ -191,7 +191,7 @@ export function CiteCommentPopover({ item, anchor, above = false, showQuote = fa
         className={cn('field-sizing-content block max-h-40 min-h-[3.1em] w-full resize-none overflow-y-auto bg-transparent px-3 pb-1.5 text-foreground text-sm leading-relaxed outline-none placeholder:text-placeholder', showQuote && quote ? 'pt-2' : 'pt-2.5')}
       />
       {tooLong && <p role="status" className="px-3 pb-1.5 text-destructive-foreground text-xs">Comments can contain up to {COMMENT_CAP.toLocaleString()} characters.</p>}
-      <div className="flex items-center gap-2.5 border-t py-1.5 ps-3 pe-2 text-muted-foreground text-xs">
+      <div className="flex items-center gap-2.5 border-t py-1.5 ps-3 pe-1.5 text-muted-foreground text-xs">
         {showQuote ? <><span><Kbd className={KEY}>{label('enter')}</Kbd> save</span><span><Kbd className={KEY}>Esc</Kbd> cancel</span></>
           : <><span><Kbd className={KEY}>{label('enter')}</Kbd> cite</span><span><Kbd className={KEY}>{label('mod+enter')}</Kbd> cite &amp; send</span></>}
         <Button size="xs" className="ms-auto" disabled={tooLong} onPointerDown={event => event.preventDefault()} onClick={submit}>{tooLong ? 'Shorten comment' : 'Save'}</Button>
@@ -242,10 +242,10 @@ function Cited({ cite, lines, under, onOpen }: { cite: Cite; lines: 1 | 2; under
 /** What a message cites, as one card at the top of it: made like the chip it was in the composer (the page's surface, a hairline,
  * squarer corners), a quote each, and over several of them a quiet line that says how many. One that waits in a queue is not
  * the chat's yet: its card is see-through, and its places open nothing. */
-export function CiteGroup({ cites, onOpen, queued = false, alone = false, className }: { cites: readonly Cite[]; onOpen?: (at: Place) => void; queued?: boolean; alone?: boolean; className?: string }) {
+export function CiteGroup({ cites, onOpen, queued = false, className }: { cites: readonly Cite[]; onOpen?: (at: Place) => void; queued?: boolean; className?: string }) {
   const many = cites.length > 1;
   return (
-    <div data-cites className={cn('min-w-0 text-start shadow-[inset_0_0_0_1px_var(--cite-line)]', alone ? 'rounded-[11px]' : 'rounded-[10px]', queued ? 'bg-transparent' : 'bg-cite-card', className)}>
+    <div data-cites className={cn('min-w-0 text-start shadow-[inset_0_0_0_1px_var(--cite-line)] rounded-[10px]', queued ? 'bg-transparent' : 'bg-cite-card', className)}>
       {many && <p data-no-find className="flex items-center gap-1.5 px-3 pt-2 font-medium text-muted-foreground text-xs leading-snug"><QuoteIcon className="size-3 text-cite-ink" />Citing {cites.length}</p>}
       {cites.map((cite, at) => <Cited key={`${at}:${cite.text}`} cite={cite} lines={many ? 1 : 2} under={at ? 'cite' : many ? 'head' : undefined} onOpen={queued ? undefined : onOpen} />)}
     </div>

@@ -81,7 +81,7 @@ export function ProfilePicker({ state, label, className, children, onNew, onImpo
         <ul role="listbox" aria-label="Profiles" onKeyDown={walk} className="enter enter-grow absolute top-full left-0 z-50 mt-1 max-h-80 w-56 origin-top-left overflow-auto rounded-lg border bg-popover p-1 text-popover-foreground shadow-lg">
           {state.profiles.map(name => (
             <li key={name} role="option" aria-selected={name === state.profile}>
-              <button type="button" autoFocus={name === state.profile} onClick={() => { setOpen(false); void app.openProfile(name); }} className="flex h-8 w-full items-center gap-2 rounded-md px-2 text-left text-sm hover:bg-accent focus-visible:bg-accent focus-visible:outline-none">
+              <button type="button" autoFocus={name === state.profile} onClick={() => { setOpen(false); void app.openProfile(name); }} className="flex h-8 w-full items-center gap-2 rounded-[3px] px-2 text-left text-sm hover:bg-accent focus-visible:bg-accent focus-visible:outline-none">
                 <span className="min-w-0 flex-1 truncate">{name}</span>{name === state.profile && <CheckIcon className="size-3.5 text-muted-foreground" />}
               </button>
             </li>
@@ -89,11 +89,11 @@ export function ProfilePicker({ state, label, className, children, onNew, onImpo
           {/* Always in sight, under however many profiles the list scrolls through. The focus goes back to the button first,
               which is where it is again once the dialog or the Import page is closed. */}
           <li role="presentation" className="sticky -bottom-1 mt-1 border-t bg-popover py-1">
-            <button type="button" onClick={() => { setOpen(false); opener.current?.focus(); onNew(); }} className="flex h-8 w-full items-center gap-2 rounded-md px-2 text-left text-muted-foreground text-sm hover:bg-accent hover:text-foreground focus-visible:bg-accent focus-visible:text-foreground focus-visible:outline-none">
+            <button type="button" onClick={() => { setOpen(false); opener.current?.focus(); onNew(); }} className="flex h-8 w-full items-center gap-2 rounded-[3px] px-2 text-left text-muted-foreground text-sm hover:bg-accent hover:text-foreground focus-visible:bg-accent focus-visible:text-foreground focus-visible:outline-none">
               <PlusIcon className="size-3.5" />New profile…
             </button>
             {state.profile && (
-              <button type="button" title={`Import another tool's history into ${state.profile}`} onClick={() => { setOpen(false); opener.current?.focus(); onImport(); }} className="flex h-8 w-full items-center gap-2 rounded-md px-2 text-left text-muted-foreground text-sm hover:bg-accent hover:text-foreground focus-visible:bg-accent focus-visible:text-foreground focus-visible:outline-none">
+              <button type="button" title={`Import another tool's history into ${state.profile}`} onClick={() => { setOpen(false); opener.current?.focus(); onImport(); }} className="flex h-8 w-full items-center gap-2 rounded-[3px] px-2 text-left text-muted-foreground text-sm hover:bg-accent hover:text-foreground focus-visible:bg-accent focus-visible:text-foreground focus-visible:outline-none">
                 <HistoryIcon className="size-3.5" /><span className="min-w-0 truncate">Import history…</span>
               </button>
             )}

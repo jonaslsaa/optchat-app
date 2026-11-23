@@ -1212,6 +1212,13 @@ test('what is selected in a reply, a report or a message is cited in the message
   assert.deepEqual(await page.locator('[data-cited]').allInnerTexts(), ['Started two agents. I\'ll tell you when they report.', 'Nothing is replayed twice']);
   assert.deepEqual([await page.getByText(/^Memory · /).count(), await page.locator('[data-cited][role=button]').count(), await page.getByText('Citing 2').count()], [0, 0, 1]);
   assert.ok(!(await page.locator('main').innerText()).includes('<cite'), 'the chat shows a citation as it is written');
+  // The card's corner follows the bubble's: its radius and its gap to the bubble's edges make the bubble's radius.
+  const corners = await page.locator('[data-cites]').last().evaluate(card => {
+    const bubble = card.parentElement!, [inner, outer] = [card, bubble].map(element => element.getBoundingClientRect());
+    const radius = (element: Element) => parseFloat(getComputedStyle(element).borderTopLeftRadius);
+    return [radius(card) + inner.left - outer.left, radius(card) + inner.top - outer.top, radius(bubble)];
+  });
+  assert.deepEqual(corners, [corners[2], corners[2], 16], 'the cite card is concentric with its bubble');
   // ⌘F finds what a card says, as it finds it in the report: a card is pressed, and its words are the chat's all the same.
   await page.keyboard.press('ControlOrMeta+f');
   await page.keyboard.type('replayed twice');

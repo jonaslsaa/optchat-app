@@ -193,6 +193,11 @@ async function pictures(browser: Browser, control: Client) {
   await work.keyboard.press('Alt+ArrowUp');
   await work.getByLabel('Messages waiting for the agent').waitFor({ state: 'detached' });
   await shot(work, '05b-queued-taken-back');
+  // ⌘ held while it runs: the button queues what is in the box.
+  await work.keyboard.down('ControlOrMeta');
+  await work.getByRole('button', { name: 'Queue the message for after this run' }).waitFor();
+  await shot(work, '05c-queue-held');
+  await work.keyboard.up('ControlOrMeta');
   await work.getByRole('textbox', { name: 'Message' }).fill('');
   await say(work, 'Also check the tests before you finish');
   await work.getByText('waiting to be read').waitFor();

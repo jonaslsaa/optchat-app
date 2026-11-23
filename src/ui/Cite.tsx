@@ -74,10 +74,8 @@ export function CiteCommentPopover({ item, anchor, above = false, showQuote = fa
   draft.current = comment;
   const tooLong = comment.length > COMMENT_CAP;
 
-  // Focus the textarea at the end of any existing comment, and measure the popover once painted so clamping uses its real height.
+  // Focus the textarea at the end of any existing comment when opened.
   useLayoutEffect(() => {
-    const element = box.current;
-    if (element) setPos(placePopover(anchor, element.offsetWidth, element.offsetHeight, above));
     const input = area.current;
     if (!input) return;
     input.focus({ preventScroll: true });
@@ -85,41 +83,62 @@ export function CiteCommentPopover({ item, anchor, above = false, showQuote = fa
     input.scrollTop = input.scrollHeight;
   }, [anchor, above]);
 
-  // Clicking outside commits any edited comment (without stealing focus from what was clicked), unless over the cap.
-  // Esc is heard on capture so the chat's run is not stopped while this popover is open.
-  const actions = useRef({ onSave, onCancel });
+  // Re-clamp when the popover grows (multiline input, length warning) or the window resizes, without disturbing focus/caret.
+  useLayoutEffect(() => {
+    const element = box.current;
+    if (!element) return;
+    const measure = () => setPos(placePopover(anchor, element.offsetWidth, element.offsetHeight, above));
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    addEventListener('resize', measure);
+    return () => { observer.disconnect(); removeEventListener('resize', measure); };
+  }, [anchor, above]);
+
+  // Clicking outside, tabbing out, or wheel-scrolling outside commits any edited comment (without stealing focus), unless over
+  // the cap. Esc is heard on capture so the chat's run is not stopped while this popover is open.
+  const settled = useRef(false), actions = useRef({ onSave, onCancel });
   actions.current = { onSave, onCancel };
+  const commit = (focus: boolean) => {
+    if (settled.current || draft.current.length > COMMENT_CAP) return;
+    settled.current = true;
+    actions.current.onSave(draft.current, focus);
+  };
+  const cancel = () => {
+    if (settled.current) return;
+    settled.current = true;
+    actions.current.onCancel();
+  };
   useEffect(() => {
-    // Clicking the composer textarea commits the draft without stealing focus, while clicking another control (like a chip's
-    // own edit button or remove button) also commits cleanly before that button's click runs.
-    const away = (event: PointerEvent) => {
-      if (event.target instanceof Node && box.current?.contains(event.target)) return;
-      const text = draft.current;
-      if (text.length > COMMENT_CAP) return;
-      actions.current.onSave(text, false);
-    };
+    const outside = (target: EventTarget | null) => !(target instanceof Node && box.current?.contains(target));
+    const away = (event: PointerEvent) => { if (outside(event.target)) commit(false); };
+    const wheeled = (event: WheelEvent) => { if (outside(event.target)) commit(false); };
     const pressed = (event: KeyboardEvent) => {
       if (event.isComposing || event.keyCode === 229) return;
-      escapes(event, () => actions.current.onCancel());
-    };
-    const scrolled = (event: Event) => {
-      if (event.target instanceof Node && box.current?.contains(event.target)) return;
-      if (draft.current.length > COMMENT_CAP) return;
-      actions.current.onSave(draft.current, false);
+      escapes(event, cancel);
     };
     addEventListener('pointerdown', away, true);
+    addEventListener('wheel', wheeled, { capture: true, passive: true });
     addEventListener('keydown', pressed, true);
-    addEventListener('scroll', scrolled, true);
-    return () => { removeEventListener('pointerdown', away, true); removeEventListener('keydown', pressed, true); removeEventListener('scroll', scrolled, true); };
+    return () => {
+      removeEventListener('pointerdown', away, true);
+      removeEventListener('wheel', wheeled, true);
+      removeEventListener('keydown', pressed, true);
+    };
   }, []);
 
-  const submit = () => { if (!tooLong) onSave(comment, true); };
-  const submitAndSend = () => { if (!tooLong) onSaveAndSend(comment); };
+  const submit = () => commit(true);
+  const submitAndSend = () => {
+    if (settled.current || tooLong) return;
+    settled.current = true;
+    onSaveAndSend(comment);
+  };
   const quote = item.text || (item.at ? `Memory · ${named(item.at)}` : '');
 
   return createPortal(
     <div ref={box} role="dialog" aria-label="Comment on citation" style={{ left: pos.left, top: pos.top }}
       onPointerDown={event => event.stopPropagation()}
+      onBlur={event => { if (event.relatedTarget && !(event.relatedTarget instanceof Node && box.current?.contains(event.relatedTarget))) commit(false); }}
       className="enter enter-grow fixed z-50 w-[min(20rem,calc(100vw-1.5rem))] rounded-xl border bg-popover p-2.5 text-popover-foreground shadow-[0_16px_40px_-18px_rgb(0_0_0/55%)] dark:shadow-[0_18px_44px_-18px_rgb(0_0_0/80%)]">
       {showQuote && quote && (
         <p className="mb-1.5 line-clamp-2 rounded-md bg-black/6 px-2 py-1 text-muted-foreground text-xs leading-snug [overflow-wrap:anywhere] dark:bg-white/8">{quote}</p>
@@ -139,7 +158,7 @@ export function CiteCommentPopover({ item, anchor, above = false, showQuote = fa
       />
       {tooLong && <p role="status" className="px-1 pt-1 text-destructive-foreground text-xs">Comments can contain up to {COMMENT_CAP.toLocaleString()} characters.</p>}
       <div className="mt-2 flex items-center justify-end gap-2">
-        <Button variant="outline" size="xs" onPointerDown={event => event.preventDefault()} onClick={onCancel}>Cancel</Button>
+        <Button variant="outline" size="xs" onPointerDown={event => event.preventDefault()} onClick={cancel}>Cancel</Button>
         <Button size="xs" disabled={tooLong} onPointerDown={event => event.preventDefault()} onClick={submit}>{tooLong ? 'Shorten comment' : 'Save'}</Button>
       </div>
     </div>,

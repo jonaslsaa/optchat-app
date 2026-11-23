@@ -1296,14 +1296,26 @@ test('citations open a comment popover right at the trigger: Enter saves, Esc ca
   await page.keyboard.type('reconnect dedupe');
   await page.getByRole('search', { name: 'Find in chat' }).locator('[aria-live]').getByText('1/1').waitFor({ timeout: 3000 });
   await page.keyboard.press('Escape');
-  // Esc in the comment popover while the agent is running cancels the fresh cite without stopping the run.
+  // Esc in the comment popover while the agent is running cancels the fresh cite without stopping the run, and programmatic
+  // scroll updates from the streaming timeline do not dismiss an open comment editor.
   await run(page);
   await report.click({ clickCount: 3 });
   await cite.click();
   await commentBox.waitFor();
+  await page.evaluate(() => { document.querySelector<HTMLElement>('main [tabindex="-1"]')?.dispatchEvent(new Event('scroll')); });
+  await commentBox.waitFor();
   await goesOn(page, 'in the citation comment popover');
   await commentBox.waitFor({ state: 'detached' });
   assert.deepEqual(await chips(), []);
+  // Tabbing out of the popover commits the comment rather than dropping it.
+  await report.click({ clickCount: 3 });
+  await cite.click();
+  await commentBox.waitFor();
+  await page.keyboard.type('Committed on blur');
+  await box.focus();
+  await commentBox.waitFor({ state: 'detached' });
+  assert.deepEqual(await chips(), ['Committed on blur']);
+  await page.getByRole('button', { name: 'Remove the citation' }).click();
   // Outside click commits an edited comment when citing from the memory view too.
   await page.keyboard.press('Alt+m');
   await page.locator('[data-line]').first().hover();

@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { chromium, type Browser, type Locator, type Page } from 'playwright-core';
 import { build } from 'vite';
 import { connect, type Client } from '../src/client.ts';
-import { ROW_EVENT } from '../src/menu.ts';
+import { ROW_EVENT, TAB_EVENT } from '../src/menu.ts';
 import { startServer } from '../src/server/server.ts';
 // pi-optchat's own lock, which only Pi takes: here it stands for a Pi in a terminal.
 import { defaults, describeOwner, lockProfile } from 'pi-optchat/files';
@@ -931,6 +931,12 @@ async function pictures(browser: Browser, control: Client) {
   await renaming.getByRole('tab', { name: 'Profile' }).click();
   await renaming.locator('input[aria-label="Display name"][value="Kahoot Work"]').waitFor();
   await shot(renaming, '302-settings-profile-name');
+  // A tab renamed from the desktop app's right-click Rename (its event, as the shell sends it), with a new name typed.
+  const retitled = await open(['work', 'notes'], { width: 900, height: 520 });
+  await retitled.getByRole('tab', { name: 'Notes & Ideas' }).waitFor();
+  await retitled.evaluate(([event, profile]) => dispatchEvent(new CustomEvent(event, { detail: { profile } })), [TAB_EVENT, 'notes']);
+  await retitled.getByRole('textbox', { name: 'Tab name' }).fill('Reading list');
+  await shot(retitled, '303-profile-tab-rename');
   await control.request('setSettings', { names: { work: null, notes: null } });
 
   // The app started again after its Pis closed with agents at work, in two profiles: `work`'s Pi crashed (its agents are still

@@ -7,7 +7,7 @@ import { build } from 'vite';
 import { agents, CHANGES, FILES, FORMULAS, GONE, grouped, GROUPED, NAMED, PICTURED, remember, seed, SEEN, SEEN_IMAGE, TEAM } from '../scripts/seed.ts';
 import type { Launch } from '../src/server/files.ts';
 import { connect } from '../src/client.ts';
-import { ROW_EVENT } from '../src/menu.ts';
+import { ROW_EVENT, TAB_EVENT } from '../src/menu.ts';
 import { startServer } from '../src/server/server.ts';
 import { cited, named } from '../src/ui/cite.ts';
 import { describeOwner, lockProfile } from 'pi-optchat/files';
@@ -1826,6 +1826,50 @@ test('a profile is renamed in Settings → Profile: its tab and the list of prof
   await page.getByRole('tab', { name: 'Appearance' }).click();
   await page.getByRole('tab', { name: 'renamed' }).waitFor();
   assert.deepEqual([kept(), readdirSync(folder).sort()], [undefined, files]);
+  await context.close();
+});
+
+test('a profile\'s tab is renamed from the desktop app\'s right-click Rename: Enter keeps the name, Esc what it was and the run goes on, an empty name is the id again, and a double-click renames nothing', async () => {
+  createProfile(home, 'tabbed');
+  const kept = () => JSON.parse(readFileSync(join(home, 'app', 'settings.json'), 'utf8')).names?.tabbed;
+  const context = await browser.newContext({ viewport: WIDE, reducedMotion: 'reduce' });
+  await context.addInitScript(saved => localStorage.setItem('optchat-app', saved), JSON.stringify({ tabs: ['ant', 'tabbed'], profile: 'tabbed', selected: {} }));
+  const page = await context.newPage(), box = page.getByRole('textbox', { name: 'Tab name' });
+  await page.goto(server.page);
+  await page.getByRole('textbox', { name: 'Message' }).waitFor();
+  await run(page);
+  // The shell asks the page which tab the right click was on, and says Rename with its event.
+  const rename = async (tab: string) => {
+    await page.getByRole('tab', { name: tab }).click({ button: 'right' });
+    const profile = await page.evaluate(() => document.documentElement.dataset.menuTab) ?? '';
+    await page.evaluate(([event, profile]) => dispatchEvent(new CustomEvent(event, { detail: { profile } })), [TAB_EVENT, profile]);
+    await box.waitFor();
+  };
+  await page.getByRole('tab', { name: 'tabbed' }).dblclick();
+  assert.equal(await box.count(), 0, 'a double-click on a tab renames nothing');
+  await rename('tabbed');
+  assert.deepEqual([await focused(page), await box.inputValue()], ['Tab name', 'tabbed']);
+  await page.keyboard.type('Side Desk');
+  await page.keyboard.press('Enter');
+  await page.getByRole('tab', { name: 'Side Desk' }).waitFor();
+  assert.equal(kept(), 'Side Desk');
+  // Esc in the box is the box's: the name stays and the run goes on.
+  await rename('Side Desk');
+  await page.keyboard.type('Not kept');
+  await goesOn(page, 'in the box a tab is renamed in');
+  assert.deepEqual([await box.count(), await page.getByRole('tab', { name: 'Side Desk' }).count(), kept()], [0, 1, 'Side Desk']);
+  await stops(page, 'once the box is gone');
+  // Emptied, it is the id again, and the tabs still click and close.
+  await rename('Side Desk');
+  await box.fill('');
+  await page.keyboard.press('Enter');
+  await page.getByRole('tab', { name: 'tabbed' }).waitFor();
+  assert.equal(kept(), undefined);
+  await page.getByRole('tab', { name: 'ant' }).click();
+  await page.getByRole('tab', { name: 'ant' }).and(page.locator('[aria-selected=true]')).waitFor();
+  await page.getByRole('tab', { name: 'tabbed' }).hover();
+  await page.getByRole('button', { name: 'Close tabbed' }).click();
+  await page.getByRole('tab', { name: 'tabbed' }).waitFor({ state: 'detached' });
   await context.close();
 });
 

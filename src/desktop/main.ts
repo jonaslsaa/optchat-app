@@ -2,7 +2,7 @@ import { app, BrowserWindow, clipboard, dialog, Menu, powerSaveBlocker, screen, 
 import { readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { MENU_EVENT, ROW_EVENT, type MenuAction, type RowAction } from '../menu.ts';
+import { MENU_EVENT, ROW_EVENT, TAB_EVENT, type MenuAction, type RowAction } from '../menu.ts';
 import { startServer } from '../server/server.ts';
 import { launch } from '../server/files.ts';
 import { newestPi, terminal } from '../server/setup.ts';
@@ -70,13 +70,16 @@ else {
     window.on('enter-full-screen', mark).on('leave-full-screen', mark);
     webContents.on('will-navigate', (event, url) => { if (destination(url, server.page) !== 'here') { event.preventDefault(); browse(url); } });
     webContents.setWindowOpenHandler(({ url }) => { browse(url); return { action: 'deny' }; });
-    // A right click: Electron has no menu of its own. On a connected window's row it offers Rename and Remove, which only the
-    // page can tell (it notes the row its right click was on, `data-menu-row`, so no point is mapped through the zoom), and
-    // which it does (ROW_EVENT).
-    webContents.on('context-menu', (_event, params) => void webContents.executeJavaScript('document.documentElement.dataset.menuRow').catch(() => undefined).then((id: unknown) => {
-      const row = typeof id === 'string' ? (action: RowAction) => void webContents.executeJavaScript(`dispatchEvent(new CustomEvent('${ROW_EVENT}', { detail: ${JSON.stringify({ window: id, action })} }))`).catch(() => {}) : undefined;
+    // A right click: Electron has no menu of its own. On a connected window's row it offers Rename and Remove, and on a
+    // profile's tab Rename, which only the page can tell (it notes the row or the tab its right click was on, `data-menu-row`
+    // and `data-menu-tab`, so no point is mapped through the zoom), and which it does (ROW_EVENT, TAB_EVENT).
+    webContents.on('context-menu', (_event, params) => void webContents.executeJavaScript('({ ...document.documentElement.dataset })').catch(() => undefined).then((marked: unknown) => {
+      const { menuRow: id, menuTab: profile } = typeof marked === 'object' && marked !== null ? marked as Record<string, unknown> : {};
+      const say = (event: string, detail: object) => void webContents.executeJavaScript(`dispatchEvent(new CustomEvent('${event}', { detail: ${JSON.stringify(detail)} }))`).catch(() => {});
+      const row = typeof id === 'string' ? (action: RowAction) => say(ROW_EVENT, { window: id, action }) : undefined;
+      const tab = typeof profile === 'string' ? () => say(TAB_EVENT, { profile }) : undefined;
       Menu.buildFromTemplate(contextMenu(params, server.page, {
-        replace: word => webContents.replaceMisspelling(word), copyLink: () => clipboard.writeText(params.linkURL), copyImage: () => webContents.copyImageAt(params.x, params.y), row,
+        replace: word => webContents.replaceMisspelling(word), copyLink: () => clipboard.writeText(params.linkURL), copyImage: () => webContents.copyImageAt(params.x, params.y), row, tab,
       })).popup({ window });
     }));
     // A page whose process crashed is loaded again, a few times, in place of a blank window.

@@ -1,13 +1,16 @@
 import { CheckIcon, ChevronsUpDownIcon, HistoryIcon, PlusIcon, XIcon } from 'lucide-react';
 import { useEffect, useId, useLayoutEffect, useRef, useState, type FormEvent, type PointerEvent, type ReactNode } from 'react';
 import { flushSync } from 'react-dom';
+import { TAB_EVENT } from '../menu.ts';
 import { PROFILE_NAME } from '../protocol.ts';
 import { badge } from './badge.ts';
 import { BringHistory } from './Import.tsx';
 import type { Source } from './imports.ts';
 import { useOverlay, walk } from './keys.ts';
+import { NameBox } from './Rename.tsx';
 import { missing } from './Setup.tsx';
 import { app, byName, profileName, slug, type State } from './store.ts';
+import { isObject } from './transcript.ts';
 import { Button, cn, Spinner, WindowDot } from './ui.tsx';
 
 /** A new profile: the name it is shown by, and its id, which pi-optchat makes it under and says why when it will not (an id
@@ -144,13 +147,25 @@ const SLOP = 4;
  * you pick once. The tab in front looks like part of the page under it, and a tab says when a window of its profile is working
  * or has failed, since its windows are out of sight. A tab is dragged along the bar to another place, as a browser's is: it
  * follows the pointer, and takes a neighbour's place once its edge is past the middle of it, which slides into the place it
- * left. The order is the tabs' (`moveTab`), kept with them; a tab pressed and let go where it was is clicked. */
+ * left. The order is the tabs' (`moveTab`), kept with them; a tab pressed and let go where it was is clicked. The desktop app's
+ * right-click Rename on a tab opens its name in a box (`NameBox`), whose name is the app's: an empty one, or the id, shows the
+ * profile by its id again. */
 export function Tabs({ state, onNew, onImport }: { state: State; onNew: () => void; onImport: () => void }) {
   // Where the dragged tab was pressed (`x`), where its place started then (`left`) and where the pointer is now (`at`): a
   // tab that moved is drawn that far from its place, wherever its place is now. One let go after it moved makes a click, which
   // is swallowed (`dropped`).
   const press = useRef<{ tab: string; x: number; left: number; moved: boolean }>(undefined), dropped = useRef(false), [drag, setDrag] = useState<{ tab: string; at: number }>();
-  const tabs = useRef(new Map<string, HTMLDivElement>()), places = useRef(new Map<string, number>());
+  const tabs = useRef(new Map<string, HTMLDivElement>()), places = useRef(new Map<string, number>()), [renaming, setRenaming] = useState<string>();
+  useEffect(() => {
+    const asked = ({ detail }: Event & { detail?: unknown }) => { if (isObject(detail) && typeof detail.profile === 'string') setRenaming(detail.profile); };
+    // Which tab a right click was on, for the desktop app's menu to ask (main.ts), as the sidebar notes its rows.
+    const clicked = ({ target }: MouseEvent) => {
+      const tab = target instanceof Element ? target.closest<HTMLElement>('[data-tab]')?.dataset.tab : undefined;
+      if (tab) document.documentElement.dataset.menuTab = tab; else delete document.documentElement.dataset.menuTab;
+    };
+    addEventListener(TAB_EVENT, asked); addEventListener('contextmenu', clicked, true);
+    return () => { removeEventListener(TAB_EVENT, asked); removeEventListener('contextmenu', clicked, true); delete document.documentElement.dataset.menuTab; };
+  }, []);
   // Only while a tab is dragged: the bar is drawn again with every change of the page, and measuring it each time is waste.
   useLayoutEffect(() => {
     if (!drag || !press.current) return;
@@ -202,13 +217,15 @@ export function Tabs({ state, onNew, onImport }: { state: State; onNew: () => vo
     <div className="window-bar window-start flex h-10 shrink-0 items-center gap-1 border-b bg-sidebar px-2 in-data-shell:h-(--topbar-height)">
       <div role="tablist" aria-label="Profiles" className="flex min-w-0 items-center gap-1">
         {state.tabs.map(tab => (
-          <div key={tab} ref={element => { if (element) tabs.current.set(tab, element); else tabs.current.delete(tab); }}
-            className={cn('group/tab flex h-7 max-w-48 min-w-0 items-center rounded-md border text-sm', tab === state.profile ? 'border-border bg-background text-foreground shadow-xs' : 'border-transparent text-muted-foreground hover:bg-accent hover:text-foreground', tab === drag?.tab && 'relative z-10 cursor-grabbing bg-background shadow-md')}>
+          <div key={tab} data-tab={tab} ref={element => { if (element) tabs.current.set(tab, element); else tabs.current.delete(tab); }}
+            className={cn('group/tab relative flex h-7 max-w-48 min-w-0 items-center rounded-md border text-sm', tab === renaming && 'min-w-40', tab === state.profile ? 'border-border bg-background text-foreground shadow-xs' : 'border-transparent text-muted-foreground hover:bg-accent hover:text-foreground', tab === drag?.tab && 'relative z-10 cursor-grabbing bg-background shadow-md')}>
             <button type="button" role="tab" aria-selected={tab === state.profile} onPointerDown={event => down(tab, event)} onPointerMove={move} onPointerUp={up} onPointerCancel={up}
               onClick={() => { if (dropped.current) dropped.current = false; else void app.openProfile(tab); }} className="flex min-w-0 select-none items-center gap-1.5 rounded-md py-1 pr-1 pl-2.5 font-medium focus-visible:ring-2 focus-visible:ring-ring">
               <ProfileBadge name={profileName(state, tab)} /><WindowDot windows={state.windows.filter(window => window.profile === tab)} /><span className="min-w-0 truncate">{profileName(state, tab)}</span>
             </button>
             <button type="button" aria-label={`Close ${profileName(state, tab)}`} onClick={() => app.closeTab(tab)} className="mr-1 rounded-sm p-0.5 opacity-0 hover:bg-foreground/10 focus-visible:opacity-100 group-hover/tab:opacity-100"><XIcon className="size-3" /></button>
+            {tab === renaming && <NameBox label="Tab name" name={profileName(state, tab)} max={PROFILE_NAME} done={() => setRenaming(undefined)}
+              keep={typed => void app.saveSettings({ names: { [tab]: typed.trim() || null } })} className="absolute inset-y-0.5 right-0.5 left-8 font-medium" />}
           </div>
         ))}
       </div>

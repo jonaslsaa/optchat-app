@@ -10,6 +10,8 @@ import { THINKING } from './models.ts';
 const id = Type.Integer({ minimum: 0 });
 /** The longest name a window is given, as pi-optchat cuts a run's title. */
 export const NAME = 128;
+/** The longest name a profile is shown by, as long as the longest profile id pi-optchat takes. */
+export const PROFILE_NAME = 64;
 
 /** A message of a profile's log, as pi-optchat keeps it (its `Entry`): `user` (your words), `talk` (the agent's replies), `tool`
  * and `echo` (tool calls and results), `note`, `work` (subagent reports). One with an `origin` is imported history. */
@@ -96,11 +98,13 @@ export type GitHubItem = Static<typeof GitHubItem>;
  * for the top of the sidebar shows it. `awake`: whether the desktop app keeps the Mac from sleeping while agents work, which
  * it does until you turn it off; a browser cannot. `editor`: the one files open in, as you picked it from those `editors`
  * lists (an id of `EDITORS` in `server/files.ts`). `reports`: how the reports of agents that arrive together are drawn, as tabs
- * (one shown at a time) or as sections of one card, one under the other. */
+ * (one shown at a time) or as sections of one card, one under the other. `names`: the name each profile is shown by, by its id,
+ * where you gave it one; pi-optchat knows the profile by its id alone, which stays as it was. */
 const Theme = Type.Enum(['system', 'light', 'dark']);
 const Reports = Type.Enum(['tabs', 'sections']);
 const Palette = Type.Object({ light: Type.Optional(Type.String()), dark: Type.Optional(Type.String()) });
-export const Settings = Type.Object({ cwd: Type.Optional(Type.String()), theme: Theme, palette: Type.Optional(Palette), art: Type.Boolean(), awake: Type.Boolean(), editor: Type.Optional(Type.String()), reports: Reports });
+const Shown = Type.String({ minLength: 1, maxLength: PROFILE_NAME });
+export const Settings = Type.Object({ cwd: Type.Optional(Type.String()), theme: Theme, palette: Type.Optional(Palette), art: Type.Boolean(), awake: Type.Boolean(), editor: Type.Optional(Type.String()), reports: Reports, names: Type.Optional(Type.Record(Type.String(), Shown)) });
 export type Settings = Static<typeof Settings>;
 
 /** One thing the app needs before it can run a chat. `ok`: there and new enough. `missing`: not there. `old`: there, and too
@@ -402,8 +406,8 @@ export const methods = {
   settings: method(none, Settings),
   /** Changes the settings it names and leaves the others, and answers them all as they are kept. A `cwd` has to be a directory
    * that exists (`~` is your home folder); `null` puts back the default. A `palette` names the theme of the appearances it
-   * names and leaves the other's. */
-  setSettings: method(Type.Object({ theme: Type.Optional(Theme), palette: Type.Optional(Type.Object({ light: Type.Optional(Type.Union([Type.String(), Type.Null()])), dark: Type.Optional(Type.Union([Type.String(), Type.Null()])) })), art: Type.Optional(Type.Boolean()), cwd: Type.Optional(Type.Union([Type.String(), Type.Null()])), awake: Type.Optional(Type.Boolean()), editor: Type.Optional(Type.String()), reports: Type.Optional(Reports) }), Settings),
+   * names and leaves the other's, and `names` the name of the profiles it names: an empty one, or `null`, shows it by its id again. */
+  setSettings: method(Type.Object({ theme: Type.Optional(Theme), palette: Type.Optional(Type.Object({ light: Type.Optional(Type.Union([Type.String(), Type.Null()])), dark: Type.Optional(Type.Union([Type.String(), Type.Null()])) })), art: Type.Optional(Type.Boolean()), cwd: Type.Optional(Type.Union([Type.String(), Type.Null()])), awake: Type.Optional(Type.Boolean()), editor: Type.Optional(Type.String()), reports: Type.Optional(Reports), names: Type.Optional(Type.Record(Type.String(), Type.Union([Type.String({ maxLength: PROFILE_NAME }), Type.Null()]))) }), Settings),
   /** The theme files in the app's `themes` folder (`folder`), by name, each with its text or why it was not read. The page reads
    * them as it reads its own (`ui/themes.ts`): the server only hands them on. */
   themes: method(none, Type.Object({ folder: Type.String(), files: Type.Array(Type.Object({ file: Type.String(), text: Type.Optional(Type.String()), error: Type.Optional(Type.String()) })) })),

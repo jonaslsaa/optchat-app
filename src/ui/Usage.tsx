@@ -2,7 +2,7 @@ import { RefreshCwIcon, XIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import type { Usage } from '../protocol.ts';
 import { Page, Section } from './Settings.tsx';
-import { app, mainOf, type State } from './store.ts';
+import { app, mainOf, profileName, type State } from './store.ts';
 import { Button, Choice, cn } from './ui.tsx';
 import { breakdown, chart, dollars, headline, limits, short } from './usage.ts';
 
@@ -150,7 +150,7 @@ export function UsagePage({ state, profile, onClose }: { state: State; profile: 
     </>}>
       {usage && <Limits saved={usage.limits} />}
       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 pt-5">
-        <p className="min-w-0 truncate text-muted-foreground text-sm">What <span className="font-medium text-foreground">{profile}</span> used</p>
+        <p className="min-w-0 truncate text-muted-foreground text-sm">What <span className="font-medium text-foreground">{profileName(state, profile)}</span> used</p>
         {usage && <Choice label="Period" name={`usage-${profile}`} options={usage.ranges.map(range => [range, range] as const)} value={range} onChange={setRange} />}
       </div>
       {/* Figures of another period than the one picked are on their way out, or stay if the server does not answer: dimmed, so they are not taken for it. */}

@@ -21,7 +21,7 @@ import { Settings, Welcome } from './Settings.tsx';
 import { missing } from './Setup.tsx';
 import { Sidebar } from './Sidebar.tsx';
 import { UpdateButton } from './Update.tsx';
-import { app, mainOf, shelved, title, UNTITLED, useApp, type State } from './store.ts';
+import { app, mainOf, profileName, shelved, title, UNTITLED, useApp, type State } from './store.ts';
 import { Timeline } from './Timeline.tsx';
 import { chat, idle, logged, spoken } from './transcript.ts';
 import { Button, Choice, cn, Spinner, useMedia } from './ui.tsx';
@@ -102,7 +102,7 @@ function Profile({ state, profile, onSettings, onUsage, onNewProfile, onImport, 
   useImport(profile, turn);
   const importing = underway(state.imports[profile]);
   useAgents(profile, { closed: !panel && !own, pulse, busy: agentsWork || polled(agents ?? [], window?.outside !== undefined), connected: state.connection === 'open' });
-  if (!window) return <p className="m-auto text-muted-foreground text-sm">Opening {profile}…</p>;
+  if (!window) return <p className="m-auto text-muted-foreground text-sm">Opening {profileName(state, profile)}…</p>;
   const more = !own && log && log.entries.length > 0 && log.entries[0].i > 0;
   // Nothing has been said here, as far as is known: a window that may have a conversation waits for it rather than say so.
   const fresh = items.length === 0 && (own ? window.status === 'stopped' || session !== undefined : log !== undefined);
@@ -144,7 +144,7 @@ function Profile({ state, profile, onSettings, onUsage, onNewProfile, onImport, 
           {/* An empty window says what it is, with the composer under it in the middle of the page, as T3 Code's new thread does. */}
           {memory ? <MemoryView tree={state.memory[profile] ?? NO_TREE} profile={profile} window={window} pulse={turn} box={box} onCite={cite} onImport={onImport} /> : fresh ? (
             <div className="flex min-h-0 flex-1 flex-col items-center justify-end gap-2 px-6 pb-7 text-center">
-              <h2 className="max-w-full truncate font-normal text-2xl tracking-tight sm:text-3xl">{!own ? profile : window.completed ? 'Completed' : 'New connected window'}</h2>
+              <h2 className="max-w-full truncate font-normal text-2xl tracking-tight sm:text-3xl">{!own ? profileName(state, profile) : window.completed ? 'Completed' : 'New connected window'}</h2>
               <p className="max-w-xl text-balance text-muted-foreground text-sm">
                 {!own ? <>One chat that remembers everything. <button type="button" onClick={onImport} className="rounded-sm underline underline-offset-2 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring">Import your history</button> from Claude Code, Codex, Pi or ChatGPT.</> : window.completed ? 'The main chat has this conversation. Your next message starts a new one.' : 'Its own conversation, with this profile\'s memory. Complete hands it to the main chat.'}
               </p>

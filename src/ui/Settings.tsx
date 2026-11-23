@@ -1,10 +1,10 @@
 import { FileTextIcon, PaletteIcon, Settings2Icon, UserRoundIcon, XIcon } from 'lucide-react';
 import { useEffect, useId, useState, type KeyboardEvent, type ReactNode } from 'react';
-import type { Settings as Kept } from '../protocol.ts';
+import { PROFILE_NAME, type Settings as Kept } from '../protocol.ts';
 import { Appearance } from './Appearance.tsx';
 import { Config, Instructions } from './Config.tsx';
 import { missing, Setup } from './Setup.tsx';
-import { app, mainOf, type State } from './store.ts';
+import { app, mainOf, profileName, type State } from './store.ts';
 import { Button, cn, Switch } from './ui.tsx';
 
 /** The settings page, in place of the chat, in tabs: where new windows run and what a chat needs (`Setup`); how the app looks
@@ -42,6 +42,26 @@ function Folder({ kept = '' }: { kept?: string }) {
     <input aria-label="Folder for new windows" value={cwd} placeholder="Your home folder" spellCheck={false} onChange={event => setCwd(event.target.value)} onBlur={keep}
       onKeyDown={event => { if (event.key === 'Enter' && !event.nativeEvent.isComposing) keep(); }}
       className="h-8 w-full rounded-[var(--control-radius)] border border-input bg-popover px-2.5 font-mono text-sm outline-none placeholder:font-sans placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring dark:bg-input/32" />
+  );
+}
+/** The name a profile is shown by, which is the app's alone: kept when you leave the field or press Enter, and an empty one
+ * shows the profile by its id again. */
+function ProfileName({ profile, kept = '' }: { profile: string; kept?: string }) {
+  const [name, setName] = useState(kept), hint = useId();
+  useEffect(() => setName(kept), [kept]);
+  // The id itself is no name, as the server keeps it: the field says so by emptying.
+  const keep = () => {
+    const shown = name.trim() === profile ? '' : name.trim();
+    setName(shown);
+    if (shown !== kept) void app.saveSettings({ names: { [profile]: shown || null } });
+  };
+  return (
+    <div className="space-y-1.5">
+      <input aria-label="Display name" aria-describedby={hint} value={name} placeholder={profile} maxLength={PROFILE_NAME} onChange={event => setName(event.target.value)} onBlur={keep}
+        onKeyDown={event => { if (event.key === 'Enter' && !event.nativeEvent.isComposing) keep(); }}
+        className="h-8 w-full rounded-[var(--control-radius)] border border-input bg-popover px-2.5 text-sm outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring dark:bg-input/32" />
+      <p id={hint} className="text-muted-foreground text-xs">Profile ID: <code className="font-mono text-foreground">{profile}</code> (unchanged on disk and in the terminal).</p>
+    </div>
   );
 }
 /** The app's own settings. Each is kept by itself, so one page's change does not undo another's. */
@@ -91,13 +111,16 @@ export function Settings({ state, onClose, onMade }: { state: State; onClose: ()
   const pages: Record<Tab, ReactNode> = {
     general: <>{state.settings && <Choices settings={state.settings} />}<Needs state={state} onMade={onMade} /></>,
     appearance: state.settings && <Appearance state={state} settings={state.settings} />,
-    profile: profile !== undefined && config && (
-      <Section title={`Profile: ${profile}`} hint="pi-optchat's settings for this profile. A change is saved when you leave its field, and a chat that is running picks it up without a restart.">
+    profile: profile !== undefined && config && <>
+      <Section title="Display name" hint="Shown in tabs and menus in this app. Leave blank to show the profile ID.">
+        <ProfileName key={profile} profile={profile} kept={state.settings?.names?.[profile]} />
+      </Section>
+      <Section title={`Settings for ${profileName(state, profile)}`} hint="pi-optchat settings for this profile. Changes save when you leave a field and apply without a restart.">
         <Config key={profile} profile={profile} config={config} models={state.models[mainOf(profile)]?.models ?? []} />
       </Section>
-    ),
+    </>,
     instructions: profile !== undefined && config && (
-      <Section title="Instructions" hint={`What the agents of ${profile} are told every turn: the profile's AGENTS.md.`}>
+      <Section title="Instructions" hint={`What the agents of ${profileName(state, profile)} are told every turn: the profile's AGENTS.md.`}>
         <Instructions key={profile} profile={profile} kept={config.instructions} />
       </Section>
     ),

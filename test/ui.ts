@@ -1791,12 +1791,42 @@ test('a field keeps the focus when Enter saves it, and when what was typed is re
   await page.keyboard.press('Enter');
   await page.getByRole('alert').filter({ hasText: 'Max active agents' }).waitFor();
   assert.equal(await focused(page), 'Max active agents');
-  // The first profile's name, refused: the button that was pressed is off while it is asked, and the focus is not lost with it.
+  // The first profile's id, refused: the button that was pressed is off while it is asked, and the focus is not lost with it.
   const first = await open();
-  await first.getByRole('textbox', { name: 'Profile name' }).fill('not a name');
+  await first.getByRole('textbox', { name: 'Profile ID' }).fill('not an id');
   await first.getByRole('button', { name: 'Create profile' }).click();
   await first.getByRole('alert').waitFor();
-  assert.equal(await focused(first), 'Profile name');
+  assert.equal(await focused(first), 'Profile ID');
+});
+
+test('a profile is renamed in Settings → Profile: its tab and the list of profiles show the name at once, its id and folder stay, and an emptied name is the id again', async () => {
+  const folder = createProfile(home, 'renamed'), files = readdirSync(folder).sort(), kept = () => JSON.parse(readFileSync(join(home, 'app', 'settings.json'), 'utf8')).names?.renamed;
+  const context = await browser.newContext({ viewport: WIDE, reducedMotion: 'reduce' });
+  await context.addInitScript(saved => localStorage.setItem('optchat-app', saved), JSON.stringify({ tabs: ['ant', 'renamed'], profile: 'renamed', selected: {} }));
+  const page = await context.newPage();
+  await page.goto(server.page);
+  await page.getByRole('tab', { name: 'renamed' }).waitFor();
+  await page.getByRole('button', { name: 'Settings' }).click();
+  await page.getByRole('tab', { name: 'Profile' }).click();
+  const name = page.getByRole('textbox', { name: 'Display name' });
+  assert.equal(await name.inputValue(), '');
+  await name.fill('  Side Project ');
+  await page.keyboard.press('Enter');
+  await page.getByRole('tab', { name: 'Side Project' }).waitFor();
+  await page.getByRole('heading', { name: 'Settings for Side Project' }).waitFor();
+  assert.deepEqual([await name.inputValue(), await focused(page), kept()], ['Side Project', 'Display name', 'Side Project']);
+  await page.keyboard.press('Escape');
+  await page.getByRole('textbox', { name: 'Message' }).waitFor();
+  await page.getByRole('button', { name: 'Open a profile' }).click();
+  await page.locator('[role=listbox] [role=option]', { hasText: 'Side Project' }).getByText('renamed').waitFor();
+  await page.keyboard.press('Escape');
+  // Emptied, the profile is shown by its id again, and nothing of it is kept; pi-optchat's folder was never touched.
+  await page.getByRole('button', { name: 'Settings' }).click();
+  await name.fill('');
+  await page.getByRole('tab', { name: 'Appearance' }).click();
+  await page.getByRole('tab', { name: 'renamed' }).waitFor();
+  assert.deepEqual([kept(), readdirSync(folder).sort()], [undefined, files]);
+  await context.close();
 });
 
 test('a formula is drawn by KaTeX and a price stays as written, and a table copies as Markdown or as CSV', async () => {
@@ -2274,7 +2304,7 @@ test('New Profile…: the menu and the list of profiles open a dialog that makes
     const page = await context.newPage();
     await page.goto(own.page);
     await page.getByRole('textbox', { name: 'Message' }).waitFor();
-    const dialog = page.getByRole('dialog', { name: 'New profile' }), field = dialog.getByRole('textbox', { name: 'Profile name' }), create = dialog.getByRole('button', { name: 'Create profile' }), refused = dialog.getByRole('alert');
+    const dialog = page.getByRole('dialog', { name: 'New profile' }), field = dialog.getByRole('textbox', { name: 'Profile name' }), id = dialog.getByRole('textbox', { name: 'Profile ID' }), create = dialog.getByRole('button', { name: 'Create profile' }), refused = dialog.getByRole('alert');
     const profiles = async () => (await client.request('profiles', {})).profiles.map(profile => profile.name);
     // Gone from the page, which is a frame after it is closed: a closed dialog says so at the next one.
     const closed = async (how: string) => { await page.locator('dialog[aria-label="New profile"]').waitFor({ state: 'detached', timeout: 3000 }).catch(() => assert.fail(`${how} did not close the dialog.`)); };
@@ -2310,26 +2340,34 @@ test('New Profile…: the menu and the list of profiles open a dialog that makes
     assert.equal(await focused(page), 'Open a profile');
     assert.deepEqual(await profiles(), ['alone']);
 
-    // No name, or one of spaces, is not asked for at all. One that will not do, and one there is already, are refused in
-    // pi-optchat's words, in the dialog, with the focus in the name; nothing is made, and nothing is said over the page.
+    // No id, or a name with nothing an id can spell, is not asked for at all. The id follows the name as it is typed, until
+    // it is typed itself. One that will not do, and one there is already, are refused in pi-optchat's words, in the dialog,
+    // with the focus in the id; nothing is made, and nothing is said over the page.
     await ask(page, 'newProfile');
     assert.equal(await create.isDisabled(), true);
     await field.fill('   ');
     assert.equal(await create.isDisabled(), true);
-    await field.fill('Not a name');
+    await field.fill('Kahoot Work');
+    assert.equal(await id.inputValue(), 'kahoot-work');
+    await id.fill('Not an id');
+    await field.fill('Kahoot Work, again');
+    assert.equal(await id.inputValue(), 'Not an id', 'an id typed by itself no longer follows the name');
     await page.keyboard.press('Enter');
     await refused.filter({ hasText: 'Profile names: 1–64 lowercase letters, digits, hyphens, or underscores.' }).waitFor();
-    assert.equal(await focused(page), 'Profile name');
-    await field.fill('alone');
-    assert.equal(await refused.count(), 0, 'what was said of the last name is gone once another is typed');
+    assert.equal(await focused(page), 'Profile ID');
+    await id.fill('alone');
+    assert.equal(await refused.count(), 0, 'what was said of the last id is gone once another is typed');
     await create.click();
     await refused.filter({ hasText: 'Profile already exists: alone' }).waitFor();
-    assert.equal(await focused(page), 'Profile name', 'the button that was pressed went off while it asked, and the focus is in the name again');
+    assert.equal(await focused(page), 'Profile ID', 'the button that was pressed went off while it asked, and the focus is in the id again');
     assert.deepEqual([await profiles(), await page.getByRole('alert').count()], [['alone'], 1]);
+    // Emptied, the id follows the name again.
+    await id.fill('');
+    assert.equal(await id.inputValue(), 'kahoot-work-again');
 
     // A name that will do: the profile is made, and opened in a tab beside the first and put in front, behind the dialog's
     // second step, which asks what history it brings with the keys on the way to the Import page. The spaces around the name
-    // are not part of it. Esc there starts it empty, with the keys in its chat, and does nothing else.
+    // are not part of it, and a name that is its id is none. Esc there starts it empty, with the keys in its chat, and does nothing else.
     const bring = page.getByRole('dialog', { name: 'Bring your history' }), brought = async (how: string) => { await page.locator('dialog[aria-label="Bring your history"]').waitFor({ state: 'detached', timeout: 3000 }).catch(() => assert.fail(`${how} did not close the dialog.`)); };
     await field.fill(' second ');
     await page.keyboard.press('Enter');
@@ -2348,26 +2386,34 @@ test('New Profile…: the menu and the list of profiles open a dialog that makes
     await stop(page).waitFor();
     await stops(page, 'in the first profile, after another was made');
 
-    // From another page, the settings: the dialog lies over them, and the new profile's chat takes their place.
+    // From another page, the settings: the dialog lies over them, and the new profile's chat takes their place. Named apart
+    // from its id, it is shown by its name everywhere, and made under its id: its folder is the id's.
     await page.getByRole('button', { name: 'Settings' }).click();
     await page.getByRole('textbox', { name: 'Folder for new windows' }).waitFor();
     await ask(page, 'newProfile');
-    await field.fill('third');
+    await field.fill('Research Notes');
+    await id.fill('third');
     await create.click();
     await bring.waitFor();
-    await page.getByRole('tab', { name: 'third' }).and(page.locator('[aria-selected=true]')).waitFor();
+    await page.getByRole('tab', { name: 'Research Notes' }).and(page.locator('[aria-selected=true]')).waitFor();
+    assert.deepEqual(await profiles(), ['alone', 'second', 'third']);
+    assert.deepEqual((await client.request('settings', {})).names, { third: 'Research Notes' });
     assert.equal(await page.getByRole('textbox', { name: 'Folder for new windows' }).count(), 0);
     // "Choose what to import…" opens the Import page on the new profile, with the sources whose cards were ticked picked
     // there; Esc there is the page's, and closes it.
     for (const card of ['Claude Code', 'Codex']) await bring.getByRole('checkbox', { name: new RegExp(`^${card}\\s*\\d`) }).click();
     await bring.getByRole('button', { name: 'Choose what to import…' }).click();
     await brought('Choosing what to import');
-    await page.getByRole('heading', { name: 'Import into third' }).waitFor();
+    await page.getByRole('heading', { name: 'Import into Research Notes' }).waitFor();
     const picked = page.getByRole('navigation', { name: 'Sources' }).locator('label:has(input:checked) .font-medium');
     await picked.first().waitFor();
     assert.deepEqual(await picked.allTextContents(), ['Claude Code', 'Codex']);
     await page.keyboard.press('Escape');
     await page.getByRole('textbox', { name: 'Message' }).waitFor();
+    // The list of profiles has it by its name, in the order of the names, with its id beside it; one with no name is its id alone.
+    await page.getByRole('button', { name: 'Open a profile' }).click();
+    assert.deepEqual(await page.locator('[role=listbox] [role=option]').allTextContents(), ['alone', 'Research Notesthird', 'second']);
+    await page.keyboard.press('Escape');
     await page.context().close();
 
     // With no profile yet the first page is where one is named: no dialog over it, and the keys in its name.

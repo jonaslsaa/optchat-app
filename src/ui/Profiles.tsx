@@ -1,40 +1,49 @@
 import { CheckIcon, ChevronsUpDownIcon, HistoryIcon, PlusIcon, XIcon } from 'lucide-react';
-import { useEffect, useLayoutEffect, useRef, useState, type FormEvent, type PointerEvent, type ReactNode } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef, useState, type FormEvent, type PointerEvent, type ReactNode } from 'react';
 import { flushSync } from 'react-dom';
+import { PROFILE_NAME } from '../protocol.ts';
 import { badge } from './badge.ts';
 import { BringHistory } from './Import.tsx';
 import type { Source } from './imports.ts';
 import { useOverlay, walk } from './keys.ts';
 import { missing } from './Setup.tsx';
-import { app, type State } from './store.ts';
+import { app, byName, profileName, slug, type State } from './store.ts';
 import { Button, cn, Spinner, WindowDot } from './ui.tsx';
 
-/** A new profile: a name, and pi-optchat makes it and says why when it will not (a name that will not do, or one there is
- * already), which is said under the name. Once made it is opened, beside those that are open. The first profile is named
- * with it, in the setup, and every later one in the New Profile dialog, which has a way out (`onCancel`). `onMade`: the
- * profile is there, and is opened next. */
+/** A new profile: the name it is shown by, and its id, which pi-optchat makes it under and says why when it will not (an id
+ * that will not do, or one there is already), which is said under the fields. The id follows the name as it is typed
+ * (`slug`) until it is typed itself, and again once it is emptied. A name that is the id is no name: the profile is shown
+ * by its id. Once made it is opened, beside those that are open. The first profile is named with it, in the setup, and every
+ * later one in the New Profile dialog, which has a way out (`onCancel`). `onMade`: the profile is there, and is opened next. */
 export function NewProfile({ onMade, onCancel }: { onMade?: (profile: string) => void; onCancel?: () => void }) {
-  const [name, setName] = useState(''), [making, setMaking] = useState(false), [refused, setRefused] = useState<string>(), field = useRef<HTMLInputElement>(null);
+  const [name, setName] = useState(''), [typed, setTyped] = useState(''), [making, setMaking] = useState(false), [refused, setRefused] = useState<string>(), idField = useRef<HTMLInputElement>(null), hint = useId();
+  const id = typed || slug(name);
   const make = (event: FormEvent) => {
     event.preventDefault();
-    const made = name.trim();
+    const made = id.trim(), shown = name.trim();
     setMaking(true);
-    void app.createProfile(made).then(why => {
+    void app.createProfile(made, shown).then(why => {
       setMaking(false);
       setRefused(why);
-      // The button is off while it is asked, and loses the focus with that: a name that was refused is put right in its field.
-      if (why !== undefined) return field.current?.focus();
+      // The button is off while it is asked, and loses the focus with that: an id that was refused is put right in its field.
+      if (why !== undefined) return idField.current?.focus();
       onMade?.(made);
       void app.openProfile(made);
     });
   };
+  const field = 'h-7 w-full rounded-md border bg-background px-2 text-sm outline-none placeholder:text-muted-foreground/70 focus-visible:ring-2 focus-visible:ring-ring';
   return (
-    <form onSubmit={make} className={cn('mt-2 flex flex-wrap items-center gap-2', onCancel && 'justify-end')}>
-      <input ref={field} aria-label="Profile name" value={name} onChange={event => { setName(event.target.value); setRefused(undefined); }} placeholder="work" autoCapitalize="off" autoCorrect="off" spellCheck={false} maxLength={64}
-        className={cn('h-7 rounded-md border bg-background px-2 text-sm outline-none placeholder:text-muted-foreground/70 focus-visible:ring-2 focus-visible:ring-ring', onCancel ? 'w-full' : 'w-48')} />
-      {refused && <p role="alert" className={cn('enter w-full text-error-foreground text-xs', !onCancel && 'order-last')}>{refused}</p>}
-      {onCancel && <Button variant="ghost-muted" onClick={onCancel}>Cancel</Button>}
-      <Button type="submit" variant="outline" disabled={making || !name.trim()}>{making ? <Spinner /> : <PlusIcon />}Create profile</Button>
+    <form onSubmit={make} className={cn('mt-3 grid grid-cols-[auto_1fr] items-center gap-x-3 gap-y-2', !onCancel && 'max-w-sm')}>
+      <span aria-hidden="true" className="text-muted-foreground text-xs">Name</span>
+      <input aria-label="Profile name" value={name} onChange={event => { setName(event.target.value); setRefused(undefined); }} placeholder="Work" maxLength={PROFILE_NAME} className={field} />
+      <span aria-hidden="true" className="text-muted-foreground text-xs">ID</span>
+      <input ref={idField} aria-label="Profile ID" aria-describedby={hint} value={id} onChange={event => { setTyped(event.target.value); setRefused(undefined); }} placeholder="work" autoCapitalize="off" autoCorrect="off" spellCheck={false} maxLength={64} className={cn(field, 'font-mono text-xs')} />
+      <p id={hint} className="col-start-2 -mt-1 text-muted-foreground text-xs">Used on disk and in the terminal. Lowercase letters, digits, hyphens and underscores.</p>
+      {refused && <p role="alert" className="enter col-span-2 text-error-foreground text-xs">{refused}</p>}
+      <div className={cn('col-span-2 mt-1 flex items-center gap-2', onCancel && 'justify-end')}>
+        {onCancel && <Button variant="ghost-muted" onClick={onCancel}>Cancel</Button>}
+        <Button type="submit" variant="outline" disabled={making || !id.trim()}>{making ? <Spinner /> : <PlusIcon />}Create profile</Button>
+      </div>
     </form>
   );
 }
@@ -57,7 +66,7 @@ export function NewProfileDialog({ state, made: named, onClose, onMade, onImport
         {named === undefined && <p aria-hidden="true" className="mb-2 flex gap-1">{[0, 1].map(step => <span key={step} className={cn('h-1 w-5 rounded-full', (made ? 1 : 0) >= step ? 'bg-foreground/60' : 'bg-foreground/15')} />)}</p>}
         {made === undefined ? <>
           <h2 className="font-medium text-sm">New profile</h2>
-          <p className="mt-1 text-muted-foreground text-xs">A profile is one chat that never ends, with a memory of its own. Its name: lowercase letters, digits, hyphens and underscores.</p>
+          <p className="mt-1 text-muted-foreground text-xs">Each profile is an ongoing chat with its own memory and instructions.</p>
           <NewProfile onMade={profile => { onMade(); if (missing(state)) onClose(profile); else setMade(profile); }} onCancel={close} />
         </> : <div key="bring" className="enter">
           <h2 className="font-medium text-sm">Bring your history?</h2>
@@ -68,7 +77,7 @@ export function NewProfileDialog({ state, made: named, onClose, onMade, onImport
   );
 }
 
-/** A button that opens the list of profiles. Picking one opens it, in a tab of its own beside those already open, and under
+/** A button that opens the list of profiles, by the names they are shown by. Picking one opens it, in a tab of its own beside those already open, and under
  * them is where a new one is made (`onNew`). The arrows walk the list, round its ends; Esc closes it and nothing else
  * (`useOverlay`). */
 export function ProfilePicker({ state, label, className, children, onNew, onImport }: { state: State; label: string; className?: string; children: ReactNode; onNew: () => void; onImport: () => void }) {
@@ -78,22 +87,25 @@ export function ProfilePicker({ state, label, className, children, onNew, onImpo
     <div ref={menu} className="relative shrink-0">
       <button ref={opener} type="button" aria-label={label} title={label} aria-haspopup="listbox" aria-expanded={open} onClick={() => setOpen(!open)} className={className}>{children}</button>
       {open && (
-        <ul role="listbox" aria-label="Profiles" onKeyDown={walk} className="enter enter-grow absolute top-full left-0 z-50 mt-1 max-h-80 w-56 origin-top-left overflow-auto rounded-lg border bg-popover p-1 text-popover-foreground shadow-lg">
-          {state.profiles.map(name => (
+        <ul role="listbox" aria-label="Profiles" onKeyDown={walk} className="enter enter-grow absolute top-full left-0 z-50 mt-1 max-h-80 w-56 origin-top-left scroll-pb-20 overflow-auto rounded-lg border bg-popover p-1 text-popover-foreground shadow-lg">
+          {byName(state).map(name => (
             <li key={name} role="option" aria-selected={name === state.profile}>
               <button type="button" autoFocus={name === state.profile} onClick={() => { setOpen(false); void app.openProfile(name); }} className="flex h-8 w-full items-center gap-2 rounded-[3px] px-2 text-left text-sm hover:bg-accent focus-visible:bg-accent focus-visible:outline-none">
-                <span className="min-w-0 flex-1 truncate">{name}</span>{name === state.profile && <CheckIcon className="size-3.5 text-muted-foreground" />}
+                <span className="min-w-0 flex-1 truncate">{profileName(state, name)}</span>
+                {profileName(state, name) !== name && <span className="max-w-[45%] shrink-0 truncate font-mono text-muted-foreground text-xs">{name}</span>}
+                {name === state.profile && <CheckIcon className="size-3.5 shrink-0 text-muted-foreground" />}
               </button>
             </li>
           ))}
-          {/* Always in sight, under however many profiles the list scrolls through. The focus goes back to the button first,
+          {/* Always in sight, under however many profiles the list scrolls through, which keeps a profile with the focus above
+              it (`scroll-pb-20`). The focus goes back to the button first,
               which is where it is again once the dialog or the Import page is closed. */}
           <li role="presentation" className="sticky -bottom-1 mt-1 border-t bg-popover py-1">
             <button type="button" onClick={() => { setOpen(false); opener.current?.focus(); onNew(); }} className="flex h-8 w-full items-center gap-2 rounded-[3px] px-2 text-left text-muted-foreground text-sm hover:bg-accent hover:text-foreground focus-visible:bg-accent focus-visible:text-foreground focus-visible:outline-none">
               <PlusIcon className="size-3.5" />New profile…
             </button>
             {state.profile && (
-              <button type="button" title={`Import another tool's history into ${state.profile}`} onClick={() => { setOpen(false); opener.current?.focus(); onImport(); }} className="flex h-8 w-full items-center gap-2 rounded-[3px] px-2 text-left text-muted-foreground text-sm hover:bg-accent hover:text-foreground focus-visible:bg-accent focus-visible:text-foreground focus-visible:outline-none">
+              <button type="button" title={`Import another tool's history into ${profileName(state, state.profile)}`} onClick={() => { setOpen(false); opener.current?.focus(); onImport(); }} className="flex h-8 w-full items-center gap-2 rounded-[3px] px-2 text-left text-muted-foreground text-sm hover:bg-accent hover:text-foreground focus-visible:bg-accent focus-visible:text-foreground focus-visible:outline-none">
                 <HistoryIcon className="size-3.5" /><span className="min-w-0 truncate">Import history…</span>
               </button>
             )}
@@ -103,11 +115,11 @@ export function ProfilePicker({ state, label, className, children, onNew, onImpo
     </div>
   );
 }
-/** A profile's badge: its letters in its colour, on a tint of that. Drawn as T3 Code draws a project's (`ProjectMonogram`): text
+/** A profile's badge: its letters in its colour, on a tint of that, from the name it is shown by. Drawn as T3 Code draws a project's (`ProjectMonogram`): text
  * in an SVG is set on its baseline, so the capitals stand in the tile's middle, which a centred line of text does not give.
  * It is there to tell profiles apart at a glance, and says nothing the name beside it does not. */
-function ProfileBadge({ profile }: { profile: string }) {
-  const { letters, colour } = badge(profile);
+function ProfileBadge({ name }: { name: string }) {
+  const { letters, colour } = badge(name);
   return (
     <span aria-hidden="true" className="inline-flex size-4 shrink-0 items-center justify-center">
       <svg viewBox="0 0 16 16" className={cn('size-full select-none overflow-hidden rounded-[25%] font-mono', colour)} style={{ backgroundColor: 'color-mix(in srgb, currentColor 14%, transparent)' }}>
@@ -120,7 +132,7 @@ function ProfileBadge({ profile }: { profile: string }) {
 export function ProfileName({ state, profile, onNew, onImport }: { state: State; profile: string; onNew: () => void; onImport: () => void }) {
   return (
     <ProfilePicker state={state} label="Open a profile" onNew={onNew} onImport={onImport} className="flex h-7 max-w-40 items-center gap-1.5 rounded-md px-1.5 text-muted-foreground text-sm hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring">
-      <ProfileBadge profile={profile} /><span className="min-w-0 truncate">{profile}</span><ChevronsUpDownIcon className="size-3 shrink-0" />
+      <ProfileBadge name={profileName(state, profile)} /><span className="min-w-0 truncate">{profileName(state, profile)}</span><ChevronsUpDownIcon className="size-3 shrink-0" />
     </ProfilePicker>
   );
 }
@@ -194,9 +206,9 @@ export function Tabs({ state, onNew, onImport }: { state: State; onNew: () => vo
             className={cn('group/tab flex h-7 max-w-48 min-w-0 items-center rounded-md border text-sm', tab === state.profile ? 'border-border bg-background text-foreground shadow-xs' : 'border-transparent text-muted-foreground hover:bg-accent hover:text-foreground', tab === drag?.tab && 'relative z-10 cursor-grabbing bg-background shadow-md')}>
             <button type="button" role="tab" aria-selected={tab === state.profile} onPointerDown={event => down(tab, event)} onPointerMove={move} onPointerUp={up} onPointerCancel={up}
               onClick={() => { if (dropped.current) dropped.current = false; else void app.openProfile(tab); }} className="flex min-w-0 select-none items-center gap-1.5 rounded-md py-1 pr-1 pl-2.5 font-medium focus-visible:ring-2 focus-visible:ring-ring">
-              <ProfileBadge profile={tab} /><WindowDot windows={state.windows.filter(window => window.profile === tab)} /><span className="min-w-0 truncate">{tab}</span>
+              <ProfileBadge name={profileName(state, tab)} /><WindowDot windows={state.windows.filter(window => window.profile === tab)} /><span className="min-w-0 truncate">{profileName(state, tab)}</span>
             </button>
-            <button type="button" aria-label={`Close ${tab}`} onClick={() => app.closeTab(tab)} className="mr-1 rounded-sm p-0.5 opacity-0 hover:bg-foreground/10 focus-visible:opacity-100 group-hover/tab:opacity-100"><XIcon className="size-3" /></button>
+            <button type="button" aria-label={`Close ${profileName(state, tab)}`} onClick={() => app.closeTab(tab)} className="mr-1 rounded-sm p-0.5 opacity-0 hover:bg-foreground/10 focus-visible:opacity-100 group-hover/tab:opacity-100"><XIcon className="size-3" /></button>
           </div>
         ))}
       </div>

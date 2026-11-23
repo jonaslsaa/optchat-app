@@ -2,7 +2,7 @@ import { CheckIcon, CircleAlertIcon, CircleDashedIcon, CopyIcon, LogInIcon, Refr
 import { useState, type ReactNode } from 'react';
 import type { Params, Setup as SetupState } from '../protocol.ts';
 import { NewProfile } from './Profiles.tsx';
-import { app, type State } from './store.ts';
+import { app, profileName, type State } from './store.ts';
 import { Button, cn, Spinner } from './ui.tsx';
 
 /** What a chat needs before it can run, each with whether it is there and the one thing to do about it: Pi, pi-optchat in that
@@ -98,8 +98,8 @@ export function Setup({ state, onMade }: { state: State; onMade?: (profile: stri
         <Step name="A model" need={login} found={login?.providers.length ? `logged in: ${login.providers.join(', ')}` : undefined}>
           {login?.terminal && login.state === 'missing' && <SignIn signingIn={state.signingIn} />}
         </Step>
-        <Step name="A profile" need={state.profiles.length ? { state: 'ok' } : { state: 'missing', message: 'A profile is one chat that never ends. Name your first: lowercase letters, digits, hyphens and underscores.' }}
-          found={state.profiles.length ? state.profiles.join(', ') : undefined}>
+        <Step name="A profile" need={state.profiles.length ? { state: 'ok' } : { state: 'missing', message: 'Each profile is an ongoing chat with its own memory and instructions.' }}
+          found={state.profiles.length ? state.profiles.map(profile => profileName(state, profile)).join(', ') : undefined}>
           {!state.profiles.length && <NewProfile onMade={onMade} />}
         </Step>
       </ul>

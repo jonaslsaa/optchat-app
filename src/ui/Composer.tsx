@@ -1,7 +1,7 @@
 import { CircleAlertIcon, CornerUpRightIcon, ImagePlusIcon, ListPlusIcon, PencilIcon, QuoteIcon, XIcon } from 'lucide-react';
 import { useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState, type ComponentRef, type Ref } from 'react';
 import type { PiRecord, WindowState } from '../protocol.ts';
-import { anchorOf, CiteCard, CiteCommentPopover, SkillChip, type CiteAnchor } from './Cite.tsx';
+import { anchorOf, CiteCommentPopover, CiteGroup, SkillChip, type CiteAnchor } from './Cite.tsx';
 import { called, cited, citing, commented, joined, yours, type Cite } from './cite.ts';
 import { useCommands, useMentions } from './Commands.tsx';
 import { address, image, KINDS, sorted } from './images.ts';
@@ -73,20 +73,25 @@ export function Queued({ messages, later = 0, editable = false }: { messages: re
   if (!messages.length) return null;
   return (
     <ol aria-label="Messages waiting for the agent" className="flex flex-col items-end gap-2 pb-1">
-      {messages.map(yours).map(({ skill, cites, text }, index) => (
+      {messages.map(yours).map(({ skill, cites, text }, index) => {
+        const alone = cites.length > 0 && !text && !skill;
+        return (
         <li key={index} className="flex min-w-0 max-w-[80%] flex-col items-end gap-0.5">
           <span className="me-1 flex items-center gap-1 text-muted-foreground text-xs leading-none">
             {index < messages.length - later ? <><CornerUpRightIcon className="size-3" />Steer · waiting to be read</> : <><ListPlusIcon className="size-3" />Queued for after this run</>}
             {editable && !index && <> · <Kbd>{label('alt+↑')}</Kbd> edit</>}
           </span>
-          <p className="flex flex-col gap-1.5 whitespace-pre-wrap rounded-2xl border border-muted-foreground/40 border-dashed px-3 py-2 text-muted-foreground text-sm [overflow-wrap:anywhere]">
-            {skill && <SkillChip skill={skill} />}{cites.map((cite, at) => <CiteCard key={at} cite={cite} />)}{(text || !cites.length && !skill) && <span>{text || 'Image'}</span>}
-          </p>
+          <div className={cn('flex min-w-0 flex-col gap-1.5 rounded-2xl border border-muted-foreground/40 border-dashed text-muted-foreground text-sm [overflow-wrap:anywhere]', alone ? 'p-[5px]' : 'px-3 py-2')}>
+            {skill && <SkillChip skill={skill} />}{cites.length > 0 && <CiteGroup cites={cites} queued alone={alone} />}{(text || !cites.length && !skill) && <p className="whitespace-pre-wrap">{text || 'Image'}</p>}
+          </div>
         </li>
-      ))}
+        );
+      })}
     </ol>
   );
 }
+/** The pencil and × on a citation's chip. */
+const CHIP_ACTION = 'shrink-0 rounded-[5px] p-[3px] text-muted-foreground outline-none hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/70 dark:hover:bg-white/9';
 /** The round button that sends what is typed: to an agent in a run (`steer`) it is a message on its way in. */
 export function SendButton({ steer, ...props }: { steer: boolean; disabled: boolean; onClick: () => void }) {
   return (
@@ -217,23 +222,23 @@ export function Composer({ state, window, live, chat, onSend, ref }: { state: St
           {cites.length > 0 && (
             <ul aria-label="Cited in the message" className="flex flex-wrap gap-1.5 px-4 pt-3.5">
               {cites.map((cite, at) => (
-                <li key={at} title={cite.comment ? `${cite.text}\n— ${cite.comment}` : called(cite) === cite.text ? undefined : cite.text} className="enter flex min-w-0 max-w-64 items-center gap-1 rounded-md bg-black/6 py-0.5 ps-1.5 pe-0.5 text-muted-foreground text-xs dark:bg-white/8">
-                  <QuoteIcon className="size-3 shrink-0" />
-                  <span className="min-w-0 truncate text-foreground/90">{called(cite)}</span>
-                  <button type="button" data-cite-action aria-label={cite.comment ? 'Edit citation comment' : 'Add comment to citation'} title={cite.comment ? 'Edit comment' : 'Add comment'}
+                <li key={at} title={cite.text ? cite.text : undefined} className="enter flex h-6.5 min-w-0 max-w-64 items-center gap-1.5 rounded-[7px] border border-border bg-background ps-2 pe-[3px] text-xs dark:border-white/12">
+                  <QuoteIcon className="size-3 shrink-0 text-cite-ink" />
+                  <span className={cn('min-w-0 truncate', cite.comment ? 'text-foreground' : 'text-muted-foreground')}>{called(cite)}</span>
+                  <button type="button" data-cite-action aria-label={cite.comment ? 'Edit citation comment' : 'Add comment to citation'} title={cite.comment ? 'Edit comment' : 'Add comment'} aria-pressed={editing?.index === at}
                     onClick={event => {
                       if (editing?.index === at) { if (popover.current?.commit()) area.current?.focus(); return; }
                       if (popover.current && !popover.current.commit()) return;
                       setEditing({ index: at, anchor: anchorOf(event.currentTarget), fresh: false, above: true, opener: event.currentTarget });
                     }}
-                    className={cn('shrink-0 rounded-sm p-0.5 hover:bg-foreground/10 hover:text-foreground', cite.comment && 'text-foreground/80')}><PencilIcon className="size-3" /></button>
+                    className={cn(CHIP_ACTION, editing?.index === at && 'bg-accent text-foreground dark:bg-white/9')}><PencilIcon className="size-3" /></button>
                   <button type="button" data-cite-action aria-label="Remove the citation" onClick={() => {
                     const updated = editing && editing.index !== at ? popover.current?.draft() : undefined;
                     const next = cites.map((item, index) => updated !== undefined && index === editing?.index ? commented(item, updated) : item).filter((_, index) => index !== at);
                     setEditing(undefined);
                     keep(citing(next, text));
                     area.current?.focus();
-                  }} className="shrink-0 rounded-sm p-0.5 hover:bg-foreground/10 hover:text-foreground"><XIcon className="size-3" /></button>
+                  }} className={CHIP_ACTION}><XIcon className="size-3" /></button>
                 </li>
               ))}
             </ul>

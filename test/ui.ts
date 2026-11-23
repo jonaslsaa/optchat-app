@@ -476,7 +476,7 @@ test('a message that runs a skill shows the skill by its name over what was type
   // Sent in a run, it waits as Pi has it, the skill's file: shown by its name, and taken back with ⌥↑ as it was typed.
   await run(page);
   await skill('Enter');
-  const waiting = page.getByLabel('Messages waiting for the agent').locator('p');
+  const waiting = page.getByLabel('Messages waiting for the agent').locator('li > div');
   await waiting.getByRole('button', { name: 'sol-loop' }).waitFor();
   assert.deepEqual(await lines(waiting), ['sol-loop', 'the last commit']);
   await page.keyboard.press('Alt+ArrowUp');
@@ -1136,7 +1136,7 @@ test('a tool call that returned a picture shows it small under its line, from th
   await page.context().close();
 });
 
-test('what is selected in a reply, a report or a message is cited in the message under it: a chip there, and a card once sent that opens the memory view where it is; a report and your own message can be copied', async () => {
+test('what is selected in a reply, a report or a message is cited in the message under it: a chip there, and a quote in a card once sent; a report and your own message can be copied', async () => {
   const page = await open('said'), box = page.getByRole('textbox', { name: 'Message' }), cite = page.getByRole('button', { name: 'Cite', exact: true });
   const commentBox = page.getByRole('textbox', { name: 'Comment on cited text' });
   const chips = () => page.getByRole('list', { name: 'Cited in the message' }).getByRole('listitem').allInnerTexts(), draft = () => page.evaluate(() => JSON.parse(localStorage.getItem('optchat-app-drafts') ?? '{}')['said/main']);
@@ -1204,7 +1204,9 @@ test('what is selected in a reply, a report or a message is cited in the message
   await page.getByText('reply', { exact: true }).waitFor();
   const { messages } = await (await connect(server.url)).request('history', { profile: 'said' });
   assert.equal(messages.findLast(message => message.kind === 'user')?.text, sent);
-  assert.deepEqual(await page.locator('[data-cited]').allInnerTexts(), ['Started two agents. I\'ll tell you when they report.\nMemory · 11', 'Nothing is replayed twice\nMemory · 12']);
+  // A quote from the chat is its words: no message number on it, and one that fits is no button.
+  assert.deepEqual(await page.locator('[data-cited]').allInnerTexts(), ['Started two agents. I\'ll tell you when they report.', 'Nothing is replayed twice']);
+  assert.deepEqual([await page.getByText(/^Memory · /).count(), await page.locator('[data-cited][role=button]').count(), await page.getByText('Citing 2').count()], [0, 0, 1]);
   assert.ok(!(await page.locator('main').innerText()).includes('<cite'), 'the chat shows a citation as it is written');
   // ⌘F finds what a card says, as it finds it in the report: a card is pressed, and its words are the chat's all the same.
   await page.keyboard.press('ControlOrMeta+f');
@@ -1216,10 +1218,7 @@ test('what is selected in a reply, a report or a message is cited in the message
   assert.deepEqual([await chips(), await box.inputValue(), await draft()], [['Started two agents. I\'ll tell you when they report.', 'Nothing is replayed twice'], 'how long?', sent]);
   await box.press('ArrowDown');
   assert.deepEqual([await chips(), await box.inputValue()], [[], '']);
-  // A card opens the memory view at the message it cites, and a click on what is selected takes the button away.
-  await page.locator('[data-cited]').first().click();
-  assert.match(await page.locator('[data-found]').innerText(), /message 11/);
-  await page.keyboard.press('Alt+m');
+  // A click on what is selected takes the button away.
   await report.click({ clickCount: 3 });
   await cite.waitFor();
   await report.click();
@@ -1245,7 +1244,7 @@ test('what is selected in a reply, a report or a message is cited in the message
   assert.equal(await draft(), '<cite>wait</cite>\n\n');
 });
 
-test('citations open a comment popover right at the trigger: Enter saves, Esc cancels a fresh cite or discards edits, ⌘Enter sends, and comments render under CiteCard and work in memory view', async () => {
+test('citations open a comment popover right at the trigger: Enter saves, Esc cancels a fresh cite or discards edits, ⌘Enter sends, and comments render under their quotes and work in memory view', async () => {
   const page = await open('cited-comments'), box = page.getByRole('textbox', { name: 'Message' }), cite = page.getByRole('button', { name: 'Cite', exact: true });
   const commentBox = page.getByRole('textbox', { name: 'Comment on cited text' });
   const chips = () => page.getByRole('list', { name: 'Cited in the message' }).getByRole('listitem').allInnerTexts();
@@ -1311,7 +1310,7 @@ test('citations open a comment popover right at the trigger: Enter saves, Esc ca
   await page.getByRole('button', { name: 'Remove the citation' }).nth(1).click();
   await commentBox.waitFor({ state: 'detached' });
   assert.deepEqual(await chips(), ['Updated chip 1']);
-  // Re-set chip 1 back to Verify reconnect dedupe and send a second cite with ⌘Enter; both <comment> blocks render in CiteCard.
+  // Re-set chip 1 back to Verify reconnect dedupe and send a second cite with ⌘Enter; both <comment> blocks render under their quotes.
   await page.getByRole('button', { name: 'Edit citation comment' }).click();
   await commentBox.fill('Verify reconnect dedupe');
   await page.keyboard.press('Enter');
@@ -1394,7 +1393,8 @@ test('in the memory view a line is cited whole by its button, and the words sele
   await page.getByRole('button', { name: 'Cite this line' }).first().click();
   await commentBox.waitFor();
   await page.keyboard.press('Enter');
-  assert.deepEqual([await page.getByRole('list', { name: 'Cited in the message' }).getByRole('listitem').allInnerTexts(), await focused(page)], [['Memory 0+8'], 'Message']);
+  const [chip = '', ...more] = await page.getByRole('list', { name: 'Cited in the message' }).getByRole('listitem').allInnerTexts();
+  assert.deepEqual([chip.startsWith('user: The shutdown test fails on Windows.'), more, await focused(page)], [true, [], 'Message']);
   // Words selected in a line are cited with the line's place, and selecting them does not open it; Enter does, as a click.
   const said = await lines.nth(3).getByText('Started two agents').boundingBox();
   assert.ok(said);
@@ -1430,9 +1430,24 @@ test('in the memory view a line is cited whole by its button, and the words sele
   await box.press('Enter');
   await page.locator('[data-cited]').nth(3).waitFor();
   assert.equal(await page.getByRole('heading', { name: 'Memory view' }).count(), 0);
-  assert.match(await page.locator('[data-cited]').first().innerText(), /^user: The shutdown test fails on Windows\.\n[^]*\nMemory · 0\+8$/);
-  // The card of a line opens the memory view at that line, not at its first message.
-  await page.locator('[data-cited]').first().click();
+  // Four quotes are cut at a line each: the line's, which is longer, unfolds on a click and folds again, and a short one is no
+  // button. Only the line of eight messages has its place on it, which opens the memory view at that line.
+  const quotes = page.locator('[data-cited]'), line = quotes.first();
+  assert.match(await line.innerText(), /^user: The shutdown test fails on Windows\./);
+  assert.deepEqual([await line.getAttribute('aria-expanded'), await quotes.nth(1).getAttribute('role')], ['false', null]);
+  await line.click();
+  assert.equal(await line.getAttribute('aria-expanded'), 'true');
+  await line.press('Enter');
+  assert.equal(await line.getAttribute('aria-expanded'), 'false');
+  // ⌘F at a match in the part of the quote that is cut off unfolds it.
+  await page.keyboard.press('ControlOrMeta+f');
+  await page.keyboard.type('the first to edit');
+  const count = Number((await page.getByRole('search', { name: 'Find in chat' }).locator('[aria-live]').getByText(/^\d+\/\d+$/).innerText()).split('/')[1]);
+  for (let step = 0; step < count && await line.getAttribute('aria-expanded') === 'false'; step++) await page.keyboard.press('Enter');
+  assert.equal(await line.getAttribute('aria-expanded'), 'true');
+  await page.keyboard.press('Escape');
+  assert.deepEqual(await page.getByText(/^Memory · /).allInnerTexts(), ['Memory · 0+8']);
+  await page.getByRole('button', { name: 'Memory · 0+8' }).click();
   assert.match(await page.locator('[data-found]').innerText(), /8 messages/);
 });
 

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { asTyped, called, cite, cited, citing, commented, joined, place, whole, yours, type Cite } from '../src/ui/cite.ts';
+import { asTyped, called, cite, cited, citing, commented, joined, place, placed, whole, yours, type Cite } from '../src/ui/cite.ts';
 
 test('a message is written with what it cites first, each with its place in the memory, and is read back as it was', () => {
   const cites: Cite[] = [cite('  the two lines\nthat were selected ', { id: 11953, n: 1 }), whole({ id: 11904, n: 4 }, 'How the snapshot is taken'), whole({ id: 64, n: 2 }), cite('said in a run')];
@@ -76,8 +76,10 @@ test('a citation can carry an optional comment as a sibling tag, multi-line and 
   assert.equal(citing([commented(cites[0], '   ')], 'hi'), '<cite zoom="13928">quoted words</cite>\n\nhi');
   assert.deepEqual(cited('<comment>not attached</comment>'), { cites: [], text: '<comment>not attached</comment>' });
   assert.deepEqual(cited('<cite>one</cite>\n\n<comment>typed body</comment>'), { cites: [{ text: 'one' }], text: '<comment>typed body</comment>' });
-  // Chip label prefers the comment when present, else falls back to place/words as before.
-  assert.deepEqual([called(cites[0]), called(cites[1]), called(cites[2]), called(whole({ id: 64, n: 2 }))], ['yeah same as T3!\nsecond line', 'check this whole block', 'plain quote', 'Memory 64+2']);
+  // A chip is called by its comment, else its words, and only one with no words by its place.
+  assert.deepEqual([called(cites[0]), called(cites[1]), called(cites[2]), called(whole({ id: 64, n: 2 })), called(whole({ id: 0, n: 8 }, 'how the line begins'))], ['yeah same as T3!\nsecond line', 'check this whole block', 'plain quote', 'Memory 64+2', 'how the line begins']);
+  // In the chat a place is shown only where its number says something: a line of several messages, or no words of its own.
+  assert.deepEqual([placed(cites[0]), placed(cites[1]), placed(cites[3]), placed(whole({ id: 0, n: 8 }, 'how the line begins')), placed(whole({ id: 7, n: 1 }))], [undefined, { id: 64, n: 2 }, undefined, { id: 0, n: 8 }, { id: 7, n: 1 }]);
 });
 
 test('a message that runs a skill is its name and what was typed after it, as Pi sent it and as it was typed, and is written back as typed', () => {

@@ -4,7 +4,7 @@ import { flushSync } from 'react-dom';
 import { working as agentWorks } from '../agent.ts';
 import type { Agent } from '../protocol.ts';
 import { among, doing, named, stood } from './agents.ts';
-import { CiteCard, SkillChip } from './Cite.tsx';
+import { CiteGroup, SkillChip } from './Cite.tsx';
 import { asTyped, type Place } from './cite.ts';
 import { Markdown } from './Markdown.tsx';
 import { act, started, thoughtLine, took, worked, type Part, type Step, type Thinking, type Tool } from './transcript.ts';
@@ -46,13 +46,14 @@ const source = (profile: string, image: string) => image.startsWith('data:') ? i
 /** Your message: a bubble on the right, with the images you sent. */
 export const UserRow = memo(function UserRow({ part, profile, onPlace }: { part: Of<'user'>; profile: string; onPlace?: (at: Place) => void }) {
   // The message as it was sent: copied, it is pasted into the box as it was, with what it cites and the skill as it was typed.
-  const sent = asTyped(part);
+  // A message that only cites is its card, which the bubble hugs.
+  const sent = asTyped(part), alone = part.cites.length > 0 && !part.text && !part.skill && !part.images.length;
   return (
     <div className="group flex flex-col items-end gap-1 pt-2 pb-1">
-      <div data-gallery="" className="relative min-w-0 max-w-[80%] rounded-2xl bg-message p-3 text-message-foreground">
+      <div data-gallery="" className={cn('relative min-w-0 max-w-[80%] rounded-2xl bg-message text-message-foreground', alone ? 'p-[5px]' : 'p-3')}>
         {part.images.length > 0 && <div className="mb-2 flex flex-wrap gap-2">{part.images.map((image, at) => <Picture key={at} src={source(profile, image)} className="max-h-48 rounded-lg" />)}</div>}
         {part.skill && <SkillChip skill={part.skill} className={cn((part.text || part.cites.length > 0) && 'mb-1')} />}
-        {part.cites.length > 0 && <div className={cn('flex flex-col gap-1.5', part.text && 'mb-2')}>{part.cites.map((cite, at) => <CiteCard key={at} cite={cite} onOpen={onPlace} />)}</div>}
+        {part.cites.length > 0 && <CiteGroup cites={part.cites} onOpen={onPlace} alone={alone} className={cn(part.text && 'mb-2')} />}
         {part.text && <Clamp text={part.text} lines={12}><p data-cite={part.key} className="whitespace-pre-wrap text-sm leading-relaxed [overflow-wrap:anywhere]">{part.text}</p></Clamp>}
       </div>
       <div className="flex max-w-[80%] items-center gap-1.5 pe-1 opacity-0 transition-opacity duration-200 focus-within:opacity-100 group-hover:opacity-100">{sent && <CopyButton text={sent} label="Copy message" />}<Time date={part.date} /></div>

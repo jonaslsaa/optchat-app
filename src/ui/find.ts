@@ -93,7 +93,9 @@ export function finding(content: HTMLElement, scroller: HTMLElement, says: (foun
   const reveal = () => {
     if (at < 0) return;
     const range = live(all[at]), within = range.startContainer.parentElement, cut = within?.closest('[data-clamp]');
-    if (cut && range.getBoundingClientRect().bottom > cut.getBoundingClientRect().top + cut.clientHeight * 0.6) cut.dispatchEvent(new Event('beforematch'));
+    // A message cut short fades out from 60% down; a quote cut at its lines (`data-clamp="lines"`) shows all of them.
+    const shown = cut instanceof HTMLElement && cut.dataset.clamp === 'lines' ? 1 : 0.6;
+    if (cut && range.getBoundingClientRect().bottom > cut.getBoundingClientRect().top + cut.clientHeight * shown + 1) cut.dispatchEvent(new Event('beforematch'));
     for (let box = within; box; box = box === scroller ? null : box.parentElement) {
       const tall = box.scrollHeight > box.clientHeight, wide = box.scrollWidth > box.clientWidth;
       if (!tall && !wide) continue;

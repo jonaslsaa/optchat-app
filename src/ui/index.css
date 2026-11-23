@@ -38,6 +38,8 @@
   --color-message-action: var(--message-action);
   --color-message-action-foreground: var(--message-action-foreground);
   --color-message-action-hover: var(--message-action-hover);
+  --color-cite-card: var(--cite-card);
+  --color-cite-ink: var(--cite-ink);
   --color-sidebar: var(--sidebar);
   --color-sidebar-foreground: var(--sidebar-foreground);
   --color-sidebar-muted-foreground: var(--sidebar-muted-foreground);
@@ -159,6 +161,11 @@
   --sidebar-row-hover: var(--color-zinc-100);
   --sidebar-row-active: var(--color-white);
   --sidebar-border: var(--border);
+  /* What a message cites: a card made like its chip in the composer, the page's surface over the bubble with a hairline, and the
+     quote mark and memory icon in the accent, a little lighter in the dark. */
+  --cite-card: color-mix(in srgb, var(--background) 72%, var(--message-surface));
+  --cite-line: color-mix(in srgb, var(--foreground) 8%, transparent);
+  --cite-ink: var(--primary);
 
   @variant dark {
     color-scheme: dark;
@@ -189,6 +196,9 @@
     --sidebar: #000;
     --sidebar-row-hover: --alpha(var(--color-white) / 8%);
     --sidebar-row-active: --alpha(var(--color-white) / 11%);
+    --cite-card: color-mix(in srgb, var(--background) 55%, var(--message-surface));
+    --cite-line: color-mix(in srgb, var(--foreground) 9%, transparent);
+    --cite-ink: color-mix(in oklab, var(--primary) 62%, var(--color-white));
   }
 }
 
@@ -208,6 +218,7 @@
 /* What find marks in the chat (find.ts), and stronger the match it is at: T3 Code's colours for it. They are painted over the
    text and are no part of the page. */
 ::highlight(find) { color: oklch(0.216 0.028 77.4); background-color: oklch(0.915 0.11 85); }
+::highlight(cited) { background-color: color-mix(in srgb, var(--primary) 18%, transparent); text-decoration: underline 1.5px color-mix(in srgb, var(--primary) 70%, transparent); text-underline-offset: 3px; }
 :is(.dark, .dark *)::highlight(find) { color: oklch(0.97 0 0); background-color: oklch(0.55 0.1 85); }
 ::highlight(find-at) { color: oklch(0.216 0.028 77.4); background-color: oklch(0.774 0.152 74.3); }
 

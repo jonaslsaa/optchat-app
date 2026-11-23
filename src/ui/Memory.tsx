@@ -1,10 +1,10 @@
 import { ArrowLeftIcon, ChevronRightIcon, ClipboardCheckIcon, ClockIcon, CornerDownRightIcon, HistoryIcon, MessageSquareIcon, QuoteIcon, SearchIcon, SparkleIcon, StickyNoteIcon, UserIcon, WrenchIcon, XIcon, type LucideIcon } from 'lucide-react';
-import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode, type RefObject } from 'react';
+import { Fragment, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode, type RefObject } from 'react';
 import type { Hit, Line, Message, WindowState } from '../protocol.ts';
 import { anchorOf, CiteSelection, type CiteAnchor } from './Cite.tsx';
 import { whole, type Cite, type Place } from './cite.ts';
 import { escapes, label } from './keys.ts';
-import { called, isOpen, key, leaf, listed, polled, printed, report, since, size, tagged, WHO, type Kind, type Search, type Tree } from './memory.ts';
+import { called, isOpen, key, leaf, listed, polled, printed, reports, since, size, tagged, WHO, type Kind, type Search, type Tree } from './memory.ts';
 import { ReportRow } from './Reports.tsx';
 import { NoteRow, ReplyRow, StepRow, toolIcon, UserRow } from './Rows.tsx';
 import { app } from './store.ts';
@@ -69,11 +69,9 @@ function message(kind: Kind | undefined, text: string): { Icon: LucideIcon; labe
     const { name, text: output } = printed(text);
     return { Icon: ICON.echo, label: name ? `Result of ${name}` : WHO.echo, className: 'line-clamp-2 text-[13px] text-muted-foreground', words: <Coded text={output} /> };
   }
-  if (kind === 'work') {
-    const { agent, title, running, text: body } = report(text);
-    return { Icon: ICON.work, label: WHO.work, className: 'line-clamp-2', words: <>
-      {title && <span className="font-medium">{title}</span>}{agent && <span className="select-none text-muted-foreground">{title && ' · '}{agent}{running && ' · still running'} </span>}<Coded text={body} /></> };
-  }
+  // Each report by its title and agent, and the words between them not selected with the agent.
+  if (kind === 'work') return { Icon: ICON.work, label: WHO.work, className: 'line-clamp-2', words: reports(text).map(({ agent, title, running, text: body }, at) => <Fragment key={at}>
+    {at > 0 && ' '}{title && <span className="font-medium">{title}</span>}{agent && <span className="select-none text-muted-foreground">{title && ' · '}{agent}{running && ' · still running'}</span>}{agent && ' '}<Coded text={body} /></Fragment>) };
   return { Icon: kind ? ICON[kind] : MessageSquareIcon, label: kind && WHO[kind], className: kind === 'user' ? 'whitespace-pre-wrap font-medium' : 'line-clamp-2', words: <Coded text={text} /> };
 }
 /** What a line says, and in front of it who said it, or how many messages it holds. What a summary or a message says is shown

@@ -83,17 +83,23 @@ export function printed(text: string): { name?: string; text: string } {
 }
 /** What pi-optchat puts in front of what an agent said while it still works. */
 const RUNNING = 'Message from subagent (still running): ';
-/** A report as its row says it: the first one's agent and title, if it is kept as pi-optchat writes it, and what it says. */
-export function report(text: string): { agent?: string; title?: string; running: boolean; text: string } {
-  const [{ agent, title, body } = { body: text }] = reported(text), running = body.startsWith(RUNNING);
-  return { ...agent !== undefined && { agent }, ...title !== undefined && { title }, running, text: running ? body.slice(RUNNING.length) : body };
+/** The reports of a `work` message as its row says them (several when they arrived together): each one's agent and title, if
+ * it is kept as pi-optchat writes it, and what it says. */
+export function reports(text: string): { agent?: string; title?: string; running: boolean; text: string }[] {
+  return reported(text).map(({ agent, title, body }) => {
+    const running = body.startsWith(RUNNING);
+    return { ...agent !== undefined && { agent }, ...title !== undefined && { title }, running, text: running ? body.slice(RUNNING.length) : body };
+  });
 }
-/** A summary in pieces: its words, and the kinds it tags them with (`user:`), where a tag begins it, a line or a sentence. */
+/** A summary in pieces: its words, and the kinds it tags them with (`user:`), where a tag begins it, a line or a sentence, and
+ * not in code, which is as it is written. */
 export function tagged(text: string): ({ text: string } | { kind: Kind })[] {
   const pieces: ({ text: string } | { kind: Kind })[] = [], tag = /(^|\n|[.;!?)\]"”]\s+|→\s*)(user|talk|tool|echo|work|note): /g;
+  const code = [...text.matchAll(/```[\s\S]*?(?:```|$)|`[^`\n]+`/g)].map(({ index, 0: span }) => [index, index + span.length]);
   let from = 0;
   for (const match of text.matchAll(tag)) {
     const at = match.index + match[1].length;
+    if (code.some(([start, end]) => start < at && at < end)) continue;
     if (at > from) pieces.push({ text: text.slice(from, at) });
     pieces.push({ kind: match[2] as Kind });
     from = match.index + match[0].length;

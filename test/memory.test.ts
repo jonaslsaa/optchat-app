@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { called, leaf, printed, report, size, tagged } from '../src/ui/memory.ts';
+import { called, leaf, printed, reports, size, tagged } from '../src/ui/memory.ts';
 
 test('a line of one message is who said it and what it says: by its own kind, else by how its summary begins', () => {
   assert.deepEqual(leaf({ kind: 'user', text: 'user: merge #95' }), { kind: 'user', text: 'merge #95' });
@@ -24,9 +24,12 @@ test('a tool call is said in the chat\'s words, with the folder a command goes t
 test('a result goes without its tool\'s name, and a report by its agent and title', () => {
   assert.deepEqual(printed('bash: ℹ tests 18'), { name: 'bash', text: 'ℹ tests 18' });
   assert.deepEqual(printed('Agent aborted: No further details'), { text: 'Agent aborted: No further details' });
-  assert.deepEqual(report('[801252b8 · Grouped reports] Message from subagent (still running): Not yet.'), { agent: '801252b8', title: 'Grouped reports', running: true, text: 'Not yet.' });
-  assert.deepEqual(report('[ce3d516d] T3 Code replays by sequence number.'), { agent: 'ce3d516d', running: false, text: 'T3 Code replays by sequence number.' });
-  assert.deepEqual(report('8d195225 merged it'), { running: false, text: '8d195225 merged it' });
+  assert.deepEqual(reports('[801252b8 · Grouped reports] Message from subagent (still running): Not yet.'), [{ agent: '801252b8', title: 'Grouped reports', running: true, text: 'Not yet.' }]);
+  assert.deepEqual(reports('8d195225 merged it'), [{ running: false, text: '8d195225 merged it' }]);
+  // Reports that arrived together are each there.
+  assert.deepEqual(reports('[ce3d516d · Reconnects] By sequence number.\n\nFull chat: zoom("ce3d516d")\n\n[a41f09c2] Offline.\n\nFull chat: zoom("a41f09c2")'), [
+    { agent: 'ce3d516d', title: 'Reconnects', running: false, text: 'By sequence number.' }, { agent: 'a41f09c2', running: false, text: 'Offline.' },
+  ]);
 });
 
 test('a summary\'s tags are pieces of their own where they begin it, a line or a sentence, and nowhere else', () => {
@@ -35,6 +38,9 @@ test('a summary\'s tags are pieces of their own where they begin it, a line or a
   ]);
   assert.deepEqual(tagged('[IMP 2026-10-04] user: asked; the user: field stays'), [{ text: '[IMP 2026-10-04] ' }, { kind: 'user' }, { text: 'asked; the user: field stays' }]);
   assert.deepEqual(tagged('no tags here'), [{ text: 'no tags here' }]);
+  // Code is as it is written: a tag in it is its words.
+  assert.deepEqual(tagged('note: saved `a; user: hello`. talk: done'), [{ kind: 'note' }, { text: 'saved `a; user: hello`. ' }, { kind: 'talk' }, { text: 'done' }]);
+  assert.deepEqual(tagged('user: the config:\n```yaml\nuser: alice\n```\ntalk: ok'), [{ kind: 'user' }, { text: 'the config:\n```yaml\nuser: alice\n```\n' }, { kind: 'talk' }, { text: 'ok' }]);
 });
 
 test('a line\'s badge is how many messages it holds', () => {

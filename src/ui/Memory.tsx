@@ -1,12 +1,12 @@
-import { ArrowLeftIcon, ChevronRightIcon, HistoryIcon, QuoteIcon, SearchIcon, XIcon } from 'lucide-react';
-import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type RefObject } from 'react';
+import { ArrowLeftIcon, ChevronRightIcon, ClipboardCheckIcon, ClockIcon, CornerDownRightIcon, HistoryIcon, MessageSquareIcon, QuoteIcon, SearchIcon, SparkleIcon, StickyNoteIcon, UserIcon, WrenchIcon, XIcon, type LucideIcon } from 'lucide-react';
+import { Fragment, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode, type RefObject } from 'react';
 import type { Hit, Line, Message, WindowState } from '../protocol.ts';
 import { anchorOf, CiteSelection, type CiteAnchor } from './Cite.tsx';
 import { whole, type Cite, type Place } from './cite.ts';
 import { escapes, label } from './keys.ts';
-import { isOpen, key, listed, polled, since, WHO, type Search, type Tree } from './memory.ts';
+import { called, isOpen, key, leaf, listed, polled, printed, reports, since, size, tagged, WHO, type Kind, type Search, type Tree } from './memory.ts';
 import { ReportRow } from './Reports.tsx';
-import { NoteRow, ReplyRow, StepRow, UserRow } from './Rows.tsx';
+import { NoteRow, ReplyRow, StepRow, toolIcon, UserRow } from './Rows.tsx';
 import { app } from './store.ts';
 import { logged, parts } from './transcript.ts';
 import { Button, cn, Spinner } from './ui.tsx';
@@ -40,14 +40,55 @@ const Original = memo(function Original({ messages, profile }: { messages: Messa
     : <div key={part.key} className="flex min-w-0 flex-col py-1">{part.steps.map(step => <StepRow key={step.key} step={step} profile={profile} />)}</div>);
 });
 /** The button on a line or on a message that was found, which cites it whole. It is there under the pointer and with the keys. */
-function CiteWhole({ onCite }: { onCite: (anchor: CiteAnchor) => void }) {
+function CiteWhole({ onCite, className = 'end-1 top-1' }: { onCite: (anchor: CiteAnchor) => void; className?: string }) {
   return (
-    <span className="absolute end-1 top-1 opacity-0 transition-opacity duration-200 focus-within:opacity-100 group-focus-within:opacity-100 group-hover:opacity-100 pointer-coarse:opacity-100">
+    <span className={cn('absolute opacity-0 transition-opacity duration-200 focus-within:opacity-100 group-focus-within:opacity-100 group-hover:opacity-100 pointer-coarse:opacity-100', className)}>
       <Button variant="ghost-muted" size="icon-xs" aria-label="Cite this line" title="Cite this line in the message" onClick={event => onCite(anchorOf(event.currentTarget))}><QuoteIcon className="size-3" /></Button>
     </span>
   );
 }
-/** One line, and under it what it opens into. Its words can be selected, so it is no `button`, and is one to the keys. */
+/** Who said a message, as the gutter shows it; a tool call has its tool's own icon, as in the chat. */
+const ICON: Record<Kind, LucideIcon> = { user: UserIcon, talk: SparkleIcon, tool: WrenchIcon, echo: CornerDownRightIcon, work: ClipboardCheckIcon, note: StickyNoteIcon };
+/** Words with what is in backticks as code and what is between `**` bold, as the chat shows them. */
+const Coded = ({ text }: { text: string }) => text.split(/`([^`\n]+)`|\*\*([^*\n]+)\*\*/).map((piece, at) => piece === undefined ? null
+  : at % 3 === 1 ? <code key={at} className="rounded bg-foreground/8 px-[0.3em] py-px font-mono text-[0.86em]">{piece}</code>
+  : at % 3 === 2 ? <strong key={at} className="font-semibold">{piece}</strong> : piece);
+/** A kind a summary tags its words with, as a small icon in them. It is not selected with them, so what is cited is words. */
+const Tag = ({ kind }: { kind: Kind }) => {
+  const Icon = ICON[kind];
+  return <span role="img" aria-label={WHO[kind]} title={WHO[kind]} className={cn('me-[3px] inline-flex select-none align-[-2px]', kind === 'user' ? 'text-primary' : 'text-muted-foreground/70')}><Icon className="size-[13px]" /></span>;
+};
+/** A message as its line says it: the icon and the name of who said it, and its words, cut at two lines but for yours. */
+function message(kind: Kind | undefined, text: string): { Icon: LucideIcon; label?: string; className: string; words: ReactNode } {
+  if (kind === 'tool') {
+    const { name, verb, folder, subject } = called(text);
+    return { Icon: toolIcon(name), label: WHO.tool, className: 'line-clamp-2 text-muted-foreground', words: verb === undefined ? <Coded text={text} />
+      : <><span className="text-foreground/85">{verb}</span> {folder && <span className="select-none">{folder} › </span>}<span className={cn(name === 'bash' && 'font-mono text-[0.9em]')}>{subject}</span></> };
+  }
+  if (kind === 'echo') {
+    const { name, text: output } = printed(text);
+    return { Icon: ICON.echo, label: name ? `Result of ${name}` : WHO.echo, className: 'line-clamp-2 text-[13px] text-muted-foreground', words: <Coded text={output} /> };
+  }
+  // Each report by its title and agent, and the words between them not selected with the agent.
+  if (kind === 'work') return { Icon: ICON.work, label: WHO.work, className: 'line-clamp-2', words: reports(text).map(({ agent, title, running, text: body }, at) => <Fragment key={at}>
+    {at > 0 && ' '}{title && <span className="font-medium">{title}</span>}{agent && <span className="select-none text-muted-foreground">{title && ' · '}{agent}{running && ' · still running'}</span>}{agent && ' '}<Coded text={body} /></Fragment>) };
+  return { Icon: kind ? ICON[kind] : MessageSquareIcon, label: kind && WHO[kind], className: kind === 'user' ? 'whitespace-pre-wrap font-medium' : 'line-clamp-2', words: <Coded text={text} /> };
+}
+/** What a line says, and in front of it who said it, or how many messages it holds. What a summary or a message says is shown
+ * without pi-optchat's tags (`user:`), which are its icons: the words left can be selected and cited as they are. */
+function said(line: Line): { kind?: Kind; label?: string; gutter: ReactNode; text: ReactNode } {
+  const words = 'block text-sm leading-relaxed [overflow-wrap:anywhere]';
+  if (line.text === undefined) return { gutter: <ClockIcon className="size-3.5" />, text: <span className="block select-none text-muted-foreground text-sm italic">Not summarized yet.</span> };
+  if (line.n > 1) return {
+    gutter: <span title={`${line.n.toLocaleString()} messages`} className="mt-0.5 h-4.5 min-w-6.5 rounded-[5px] border border-border bg-accent px-1 text-center font-semibold text-[10.5px] text-muted-foreground tabular-nums leading-4 dark:bg-white/5">{size(line.n)}</span>,
+    text: <span data-cite={key(line)} className={cn(words, 'whitespace-pre-wrap')}>{tagged(line.text).map((piece, at) => 'kind' in piece ? <Tag key={at} kind={piece.kind} /> : <Coded key={at} text={piece.text} />)}</span>,
+  };
+  const { kind, text } = leaf(line), { Icon, label, className, words: shown } = message(kind, text);
+  return { kind, label, gutter: <Icon className="size-3.5" />, text: <span data-cite={key(line)} className={cn(words, className)}>{shown}</span> };
+}
+/** One line, and under it what it opens into. Its words can be selected, so it is no `button`, and is one to the keys. Who
+ * said a message, or how many a summary holds, is in the gutter; when, and of a message its number, at the end, where the
+ * button that cites it takes its place under the pointer: its room is kept, so the words do not move. */
 function TreeLine({ tree, line, profile, heading, onCite }: { tree: Tree; line: Line; profile: string; heading: string; onCite?: (cite: Cite, anchor?: CiteAnchor) => void }) {
   const open = isOpen(tree, line), halves = tree.under[key(line)], original = tree.originals[line.id], found = tree.found === key(line);
   // What a line you just opened holds is brought into sight, once it is there: at the end of the view it is under the fold.
@@ -57,24 +98,30 @@ function TreeLine({ tree, line, profile, heading, onCite }: { tree: Tree; line: 
     if (there && asked.current) for (const shown of [under.current, under.current?.previousElementSibling]) shown?.scrollIntoView({ block: 'nearest' });
     if (there || !open) asked.current = false;
   }, [there, open]);
+  const { kind, label, gutter, text } = said(line), imported = line.n === 1 ? leaf(line).imported : undefined;
   return (
-    <div>
+    // A result right after a call is tucked under it.
+    <div data-kind={kind} className={cn(kind === 'echo' && '[[data-kind=tool]+&]:-mt-[3px]')}>
       <div className="group relative">
         {/* A press that selected words in the line does not open it (`detail` is how many presses a click is, and none from the keys). */}
         <div role="button" tabIndex={0} data-line data-found={found || undefined} aria-current={found || undefined} aria-expanded={open}
           onClick={event => { if (event.detail && !getSelection()?.isCollapsed) return; asked.current = !open; void app.toggleLine(profile, line); }}
-          className={cn(ROW, 'scroll-mt-10', onCite && 'pe-8', found && 'bg-primary/8 ring-1 ring-primary/40 ring-inset hover:bg-primary/12')}>
-          <ChevronRightIcon className={cn('mt-0.5 size-3.5 shrink-0 text-muted-foreground transition-transform duration-200', open && 'rotate-90')} />
+          className={cn(ROW, 'scroll-mt-10 gap-2 py-[5px]', found && 'bg-primary/8 ring-1 ring-primary/40 ring-inset hover:bg-primary/12')}>
+          <span role={label ? 'img' : undefined} aria-label={label} title={label} className={cn('flex h-[22px] w-7 shrink-0 select-none items-center justify-center', kind === 'user' ? 'text-primary' : 'text-muted-foreground/70')}>{gutter}</span>
           <span className="min-w-0 flex-1">
-            <span className="block select-none text-muted-foreground text-xs tabular-nums">{when(line, heading)} · {line.n === 1 ? `message ${line.id.toLocaleString()}` : `${line.n.toLocaleString()} messages`}</span>
-            {line.text === undefined ? <span className="block select-none text-muted-foreground text-sm italic">Not summarized yet.</span>
-              : <span data-cite={key(line)} className="block whitespace-pre-wrap text-sm leading-relaxed [overflow-wrap:anywhere]">{line.text}</span>}
+            {line.n > 1 && <span className="mb-px block select-none text-[11.5px] text-muted-foreground/70 tabular-nums">{when(line, heading)}</span>}
+            {text}
+          </span>
+          <span className="flex h-[22px] shrink-0 select-none items-center gap-0.5 text-[11.5px] text-muted-foreground/70 tabular-nums group-hover:text-muted-foreground">
+            {line.n === 1 && <span className="whitespace-nowrap px-1" title={imported && `Imported history, written ${imported}`}>{imported && 'Imported · '}{when(line, heading)} · {line.id.toLocaleString()}</span>}
+            {onCite && <span className="size-6" />}
+            <ChevronRightIcon className={cn('mx-0.5 size-3 transition-transform duration-200', open && 'rotate-90')} />
           </span>
         </div>
-        {onCite && <CiteWhole onCite={anchor => onCite(whole({ id: line.id, n: line.n }, line.text), anchor)} />}
+        {onCite && <CiteWhole className="end-[22px] top-1" onCite={anchor => onCite(whole({ id: line.id, n: line.n }, line.text), anchor)} />}
       </div>
       {open && (
-        <div ref={under} className="enter ms-3 scroll-mb-3 border-border/70 border-s ps-2">
+        <div ref={under} className="enter ms-3.5 scroll-mb-3 border-border/70 border-s ps-2">
           {line.n === 1 ? original ? <div className="py-1 ps-1.5"><Original messages={original} profile={profile} /></div> : <Reading />
             : halves ? halves.map(half => <TreeLine key={half.id} tree={tree} line={half} profile={profile} heading={heading} onCite={onCite} />) : <Reading />}
         </div>

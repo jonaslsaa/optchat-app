@@ -16,15 +16,17 @@ export const NAME = 128;
 export const Message = Type.Unsafe<Entry>({});
 export type Message = Entry;
 
+/** Who said a message: one of the kinds above. */
+const Kind = Type.Unsafe<Entry['kind']>(Type.String());
 /** A line of the summary tree, in pi-optchat's own notation: the `n` messages from `id` on, summarized in `text` as pi-optchat
- * keeps it. No `text` means its summary is not built yet. `from` and `to` are the dates of its earliest and latest message. */
-export const Line = Type.Object({ id, n: Type.Integer({ minimum: 1 }), text: Type.Optional(Type.String()), from: Type.String(), to: Type.String() });
+ * keeps it. No `text` means its summary is not built yet. A line of one message has its `kind`. `from` and `to` are the dates of its earliest and latest message. */
+export const Line = Type.Object({ id, n: Type.Integer({ minimum: 1 }), text: Type.Optional(Type.String()), kind: Type.Optional(Kind), from: Type.String(), to: Type.String() });
 export type Line = Static<typeof Line>;
 /** A message that a search found: message `id`, with who said it (`kind`), when (`date`) and whether it is `imported` history,
  * and the stretch of it around where it first says what was searched for: `lead`, then the `match` as the message writes it,
  * then `rest`. A stretch that is cut from more begins or ends with an ellipsis. */
 export const Hit = Type.Object({
-  id, kind: Type.Unsafe<Entry['kind']>(Type.String()), date: Type.String(), imported: Type.Optional(Type.Boolean()),
+  id, kind: Kind, date: Type.String(), imported: Type.Optional(Type.Boolean()),
   lead: Type.String(), match: Type.String(), rest: Type.String(),
 });
 export type Hit = Static<typeof Hit>;

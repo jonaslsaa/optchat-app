@@ -15,7 +15,7 @@ export function profileDirectory(home: string, name: string) {
   if (!existsSync(directory)) throw new Error(`No profile named ${name}.`);
   return directory;
 }
-/** A line of the tree. Imported history is not always in date order, so a line is dated by its earliest and latest message. */
+/** A line of the tree, and of one message who said it. Imported history is not always in date order, so a line is dated by its earliest and latest message. */
 function line(memory: Memory, { l, i }: Part): Line {
   const id = i * 2 ** l, n = 2 ** l;
   let first = id, last = id, low = Date.parse(memory.root[id].date), high = low;
@@ -23,7 +23,7 @@ function line(memory: Memory, { l, i }: Part): Line {
     const time = Date.parse(memory.root[at].date);
     if (time < low) { first = at; low = time; } else if (time > high) { last = at; high = time; }
   }
-  return { id, n, text: memory.summary({ l, i }), from: memory.root[first].date, to: memory.root[last].date };
+  return { id, n, text: memory.summary({ l, i }), ...n === 1 && { kind: memory.root[id].kind }, from: memory.root[first].date, to: memory.root[last].date };
 }
 
 /** The tool call and its result that message `id` is one of, if it is: found by pi-optchat's own rule (its `callOf`). A

@@ -1,8 +1,8 @@
-import { CircleAlertIcon, CornerUpRightIcon, ImagePlusIcon, ListPlusIcon, QuoteIcon, XIcon } from 'lucide-react';
-import { useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState, type Ref } from 'react';
+import { CircleAlertIcon, CornerUpRightIcon, ImagePlusIcon, ListPlusIcon, PencilIcon, QuoteIcon, XIcon } from 'lucide-react';
+import { useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState, type ComponentRef, type Ref } from 'react';
 import type { PiRecord, WindowState } from '../protocol.ts';
-import { CiteCard, SkillChip } from './Cite.tsx';
-import { called, cited, citing, joined, yours, type Cite } from './cite.ts';
+import { anchorOf, CiteCard, CiteCommentPopover, SkillChip, type CiteAnchor } from './Cite.tsx';
+import { called, cited, citing, commented, joined, yours, type Cite } from './cite.ts';
 import { useCommands, useMentions } from './Commands.tsx';
 import { address, image, KINDS, sorted } from './images.ts';
 import { escapes, label, matches, useShortcuts } from './keys.ts';
@@ -103,9 +103,12 @@ export function SendButton({ steer, ...props }: { steer: boolean; disabled: bool
  * sends is the model the agent runs on, which is picked there. The look is T3 Code's composer
  * (MIT, see THIRD_PARTY_NOTICES.md), over a plain textarea. What the message cites (`ref.cite` adds to it) stands over the
  * box as chips, as its images do, and is sent in front of what is typed (`citing`). */
-export function Composer({ state, window, live, chat, onSend, ref }: { state: State; window: WindowState; live: Live; chat: readonly Item[]; onSend?: () => void; ref?: Ref<{ cite: (cite: Cite) => void }> }) {
+export function Composer({ state, window, live, chat, onSend, ref }: { state: State; window: WindowState; live: Live; chat: readonly Item[]; onSend?: () => void; ref?: Ref<{ cite: (cite: Cite, anchor?: CiteAnchor) => void; closeComment: () => void }> }) {
   // The message as it would be sent: what is typed, under what it cites. The box holds the one, and the chips are the other.
   const [draft, setDraft] = useState(() => app.draft(window.id)), [sending, setSending] = useState(false), { cites, text } = useMemo(() => cited(draft), [draft]);
+  // Which citation chip's comment popover is open (`fresh` removes it on Cancel/Esc; `above` opens over a chip in the composer).
+  const [editing, setEditing] = useState<{ index: number; anchor: CiteAnchor; fresh: boolean; above: boolean; opener?: Element | null }>();
+  const popover = useRef<ComponentRef<typeof CiteCommentPopover>>(null);
   const images = state.attached[window.id] ?? [], [refused, setRefused] = useState<string>(), [reading, setReading] = useState(0);
   const area = useRef<HTMLTextAreaElement>(null), picker = useRef<HTMLInputElement>(null), root = useRef<HTMLDivElement>(null), [caret, setCaret] = useState(0);
   const running = window.status === 'running', queued = [...live.queued.steering, ...live.queued.followUp];
@@ -128,17 +131,49 @@ export function Composer({ state, window, live, chat, onSend, ref }: { state: St
   useLayoutEffect(() => { if (area.current) setCaret(area.current.selectionStart); }, [text]);
   // A message that cites begins with what it cites, which is no command to Pi: a `/` is then a letter, and lists nothing.
   const commands = useCommands(state, window, cites.length || mentions.active ? '' : text, change, area, root);
-  // What was cited in the chat or in the memory view is one more chip, and the keys are where the message is typed.
-  useImperativeHandle(ref, () => ({ cite: cite => { keep(citing([...cites, cite], text)); area.current?.focus(); } }));
+  // What was cited in the chat or in the memory view is one more chip, and opens its comment popover where the Cite trigger was.
+  useImperativeHandle(ref, () => ({
+    cite: (cite, anchor) => {
+      const next = [...cites, cite];
+      keep(citing(next, text));
+      if (anchor) setEditing({ index: next.length - 1, anchor, fresh: true, above: false });
+      else area.current?.focus();
+    },
+    closeComment: () => {
+      if (popover.current) popover.current.commit();
+      setEditing(undefined);
+    },
+  }));
   const empty = !text.trim() && !images.length && !cites.length;
 
-  const send = async (later: boolean) => {
-    const message = citing(cites, text.trim()).trim();
-    if (empty || sending || reading) return;
-    setSending(true); keep(''); app.attach(window.id, []); setRefused(undefined); onSend?.();
+  const send = async (later: boolean, override?: string) => {
+    const message = override ?? citing(cites, text.trim()).trim();
+    if ((!override && empty) || sending || reading) return;
+    setEditing(undefined); setSending(true); keep(''); app.attach(window.id, []); setRefused(undefined); onSend?.();
     // A message the server refused goes back where it was typed, with its images, before what was typed since.
     if (!await app.send(window.id, message, later, images)) { keep(joined([message, app.draft(window.id)])); app.attach(window.id, [...images, ...attached()]); }
     setSending(false);
+  };
+  const edited = editing && cites[editing.index];
+  const saveComment = (comment: string, focus: boolean) => {
+    if (!editing || !cites[editing.index]) return;
+    const next = cites.map((item, at) => at === editing.index ? commented(item, comment) : item);
+    keep(citing(next, text));
+    setEditing(undefined);
+    if (focus) area.current?.focus();
+  };
+  const saveAndSend = (comment: string) => {
+    if (!editing || !cites[editing.index] || sending || reading > 0) return;
+    const next = cites.map((item, at) => at === editing.index ? commented(item, comment) : item);
+    keep(citing(next, text));
+    const message = citing(next, text.trim()).trim();
+    void send(false, message);
+  };
+  const cancelComment = () => {
+    if (!editing) return;
+    if (editing.fresh) keep(citing(cites.filter((_, at) => at !== editing.index), text));
+    setEditing(undefined);
+    area.current?.focus();
   };
   // What the agent had not read yet is back in the box, in front of what was typed since, as Pi's terminal puts it back: on
   // Esc, which stops the run, and on ⌥↑, which lets it go on.
@@ -182,13 +217,36 @@ export function Composer({ state, window, live, chat, onSend, ref }: { state: St
           {cites.length > 0 && (
             <ul aria-label="Cited in the message" className="flex flex-wrap gap-1.5 px-4 pt-3.5">
               {cites.map((cite, at) => (
-                <li key={at} title={called(cite) === cite.text ? undefined : cite.text} className="enter flex min-w-0 max-w-64 items-center gap-1 rounded-md bg-black/6 py-0.5 ps-1.5 pe-0.5 text-muted-foreground text-xs dark:bg-white/8">
+                <li key={at} title={cite.comment ? `${cite.text}\n— ${cite.comment}` : called(cite) === cite.text ? undefined : cite.text} className="enter flex min-w-0 max-w-64 items-center gap-1 rounded-md bg-black/6 py-0.5 ps-1.5 pe-0.5 text-muted-foreground text-xs dark:bg-white/8">
                   <QuoteIcon className="size-3 shrink-0" />
                   <span className="min-w-0 truncate text-foreground/90">{called(cite)}</span>
-                  <button type="button" aria-label="Remove the citation" onClick={() => { keep(citing(cites.filter(other => other !== cite), text)); area.current?.focus(); }} className="shrink-0 rounded-sm p-0.5 hover:bg-foreground/10 hover:text-foreground"><XIcon className="size-3" /></button>
+                  <button type="button" data-cite-action aria-label={cite.comment ? 'Edit citation comment' : 'Add comment to citation'} title={cite.comment ? 'Edit comment' : 'Add comment'}
+                    onClick={event => {
+                      if (editing?.index === at) { if (popover.current?.commit()) area.current?.focus(); return; }
+                      if (popover.current && !popover.current.commit()) return;
+                      setEditing({ index: at, anchor: anchorOf(event.currentTarget), fresh: false, above: true, opener: event.currentTarget });
+                    }}
+                    className={cn('shrink-0 rounded-sm p-0.5 hover:bg-foreground/10 hover:text-foreground', cite.comment && 'text-foreground/80')}><PencilIcon className="size-3" /></button>
+                  <button type="button" data-cite-action aria-label="Remove the citation" onClick={() => {
+                    const updated = editing && editing.index !== at ? popover.current?.draft() : undefined;
+                    const next = cites.map((item, index) => updated !== undefined && index === editing?.index ? commented(item, updated) : item).filter((_, index) => index !== at);
+                    setEditing(undefined);
+                    keep(citing(next, text));
+                    area.current?.focus();
+                  }} className="shrink-0 rounded-sm p-0.5 hover:bg-foreground/10 hover:text-foreground"><XIcon className="size-3" /></button>
                 </li>
               ))}
             </ul>
+          )}
+          {edited && editing && (
+            <CiteCommentPopover
+              ref={popover}
+              key={`${editing.index}-${editing.fresh}-${editing.anchor.top}-${editing.anchor.right}`}
+              item={edited} anchor={editing.anchor} above={editing.above} showQuote={editing.above} opener={editing.opener} canSend={!sending && reading === 0}
+              onSave={(comment, focus) => saveComment(comment, focus)}
+              onSaveAndSend={saveAndSend}
+              onCancel={cancelComment}
+            />
           )}
           {refused && <p role="alert" className="px-4 pt-3 text-error-foreground text-xs">{refused}</p>}
           <div ref={root} className="relative px-4 pt-3.5 pb-2">

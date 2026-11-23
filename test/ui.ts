@@ -36,6 +36,9 @@ seed(createProfile(home, 'diffs'), CHANGES.length, Date.now(), CHANGES);
 const lines = createProfile(home, 'lines');
 seed(lines, TEAM.length, Date.now(), TEAM);
 remember(lines, 4);
+const citedComments = createProfile(home, 'cited-comments');
+seed(citedComments, TEAM.length, Date.now(), TEAM);
+remember(citedComments, 4);
 writeMemory(createProfile(home, 'thinks'), 4);
 seed(createProfile(home, 'formulas'), 1, Date.now(), FORMULAS);
 writeFileSync(join(home, 'chart.png'), png(120, [38, 99, 235]));
@@ -1135,22 +1138,31 @@ test('a tool call that returned a picture shows it small under its line, from th
 
 test('what is selected in a reply, a report or a message is cited in the message under it: a chip there, and a card once sent that opens the memory view where it is; a report and your own message can be copied', async () => {
   const page = await open('said'), box = page.getByRole('textbox', { name: 'Message' }), cite = page.getByRole('button', { name: 'Cite', exact: true });
+  const commentBox = page.getByRole('textbox', { name: 'Comment on cited text' });
   const chips = () => page.getByRole('list', { name: 'Cited in the message' }).getByRole('listitem').allInnerTexts(), draft = () => page.evaluate(() => JSON.parse(localStorage.getItem('optchat-app-drafts') ?? '{}')['said/main']);
   const report = page.locator('[data-cite] li', { hasText: 'Nothing is replayed twice' }), reply = page.locator('[data-cite] p', { hasText: 'Started two agents.' });
   await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
-  // A line of a report: it is a chip over the box, and nothing is typed for it.
+  // A line of a report: clicking Cite adds the chip and opens the comment popover right there; Enter with no comment keeps the
+  // chip and puts focus (and caret) into the composer box.
   await report.click({ clickCount: 3 });
   await cite.click();
-  assert.deepEqual([await chips(), await box.inputValue(), await focused(page), await cite.count()], [['Nothing is replayed twice'], '', 'Message', 0]);
+  await commentBox.waitFor();
+  assert.deepEqual([await chips(), await box.inputValue(), await focused(page), await cite.count()], [['Nothing is replayed twice'], '', 'Comment on cited text', 0]);
+  await page.keyboard.press('Enter');
+  await commentBox.waitFor({ state: 'detached' });
+  assert.deepEqual([await chips(), await box.inputValue(), await focused(page)], [['Nothing is replayed twice'], '', 'Message']);
   // The box has its caret too, so it is seen that the keys are in it: the selection is not taken away after they are put there.
   assert.equal(await page.evaluate(() => getSelection()?.type), 'Caret', 'the box has the keys but no caret once something is cited');
   // A reply, with something typed already. Three clicks on its last paragraph select on into the row under it: the button is
-  // at the paragraph's end all the same.
+  // at the paragraph's end all the same. Clicking into the composer closes the popover and keeps the chip.
   await box.fill('About the agents:');
   await reply.click({ clickCount: 3 });
   const [line, button] = [await reply.boundingBox(), await cite.boundingBox()];
   assert.ok(line && button && Math.abs(button.y - line.y - line.height) < 8, 'the Cite button is not under the last line that is selected');
   await cite.click();
+  await commentBox.waitFor();
+  await box.click();
+  await commentBox.waitFor({ state: 'detached' });
   assert.deepEqual([await chips(), await box.inputValue()], [['Nothing is replayed twice', 'Started two agents. I\'ll tell you when they report.'], 'About the agents:']);
   // Backspace takes a letter while there is one, and a `/` lists no commands: the message begins with what it cites.
   await box.press('Backspace');
@@ -1163,6 +1175,7 @@ test('what is selected in a reply, a report or a message is cited in the message
   assert.deepEqual(await chips(), ['Nothing is replayed twice']);
   await reply.click({ clickCount: 3 });
   await cite.click();
+  await page.keyboard.press('Enter');
   await page.getByRole('button', { name: 'Remove the citation' }).first().click();
   assert.deepEqual([await chips(), await focused(page)], [['Started two agents. I\'ll tell you when they report.'], 'Message']);
   // A selection that runs on into the report under the reply is cited as far as the reply goes, which is the message it names.
@@ -1173,12 +1186,14 @@ test('what is selected in a reply, a report or a message is cited in the message
   await page.mouse.move(to.x + 100, to.y + to.height / 2, { steps: 5 });
   await page.mouse.up();
   await cite.click();
+  await page.keyboard.press('Enter');
   const [, part = ''] = await chips();
   assert.ok(part.length > 10 && 'Started two agents. I\'ll tell you when they report.'.endsWith(part), `what is cited of a selection over two messages: ${part}`);
   await page.getByRole('button', { name: 'Remove the citation' }).last().click();
   // They are there when the page is opened again, with what is typed.
   await report.click({ clickCount: 3 });
   await cite.click();
+  await page.keyboard.press('Enter');
   await page.keyboard.type('how long?');
   await page.reload();
   await box.waitFor();
@@ -1225,17 +1240,160 @@ test('what is selected in a reply, a report or a message is cited in the message
   // What the log does not have yet is cited without a place: the number it is drawn under is not the log's until the run ends.
   await page.getByText('wait', { exact: true }).click({ clickCount: 3 });
   await cite.click();
+  await commentBox.waitFor();
+  await page.keyboard.press('Enter');
   assert.equal(await draft(), '<cite>wait</cite>\n\n');
+});
+
+test('citations open a comment popover right at the trigger: Enter saves, Esc cancels a fresh cite or discards edits, ⌘Enter sends, and comments render under CiteCard and work in memory view', async () => {
+  const page = await open('cited-comments'), box = page.getByRole('textbox', { name: 'Message' }), cite = page.getByRole('button', { name: 'Cite', exact: true });
+  const commentBox = page.getByRole('textbox', { name: 'Comment on cited text' });
+  const chips = () => page.getByRole('list', { name: 'Cited in the message' }).getByRole('listitem').allInnerTexts();
+  const report = page.locator('[data-cite] li', { hasText: 'Nothing is replayed twice' }), reply = page.locator('[data-cite] p', { hasText: 'Started two agents.' });
+  await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
+  // Esc on a brand-new cite removes the fresh chip cleanly and returns focus to the composer.
+  await report.click({ clickCount: 3 });
+  await cite.click();
+  await commentBox.waitFor();
+  await page.keyboard.type('changed my mind');
+  await page.keyboard.press('Escape');
+  await commentBox.waitFor({ state: 'detached' });
+  assert.deepEqual([await chips(), await focused(page)], [[], 'Message']);
+  // Flow B: Cite -> type multi-line comment (Shift+Enter) -> Enter saves -> chip displays comment.
+  await report.click({ clickCount: 3 });
+  await cite.click();
+  await commentBox.waitFor();
+  await page.keyboard.type('Is this true on reconnect?');
+  await page.keyboard.press('Shift+Enter');
+  await page.keyboard.type('Check edge case.');
+  await page.keyboard.press('Enter');
+  await commentBox.waitFor({ state: 'detached' });
+  assert.deepEqual([await chips(), await focused(page)], [['Is this true on reconnect? Check edge case.'], 'Message']);
+  // Editing an existing chip's comment: Esc discards unsaved edits and keeps the saved comment; clicking the active pencil
+  // toggles the popover closed and commits; over-cap blocks Save and outside-click; Save updates it.
+  await page.getByRole('button', { name: 'Edit citation comment' }).click();
+  await commentBox.waitFor();
+  assert.equal(await commentBox.inputValue(), 'Is this true on reconnect?\nCheck edge case.');
+  await commentBox.fill('temporary edit');
+  await page.keyboard.press('Escape');
+  await commentBox.waitFor({ state: 'detached' });
+  assert.deepEqual([await chips(), await focused(page)], [['Is this true on reconnect? Check edge case.'], 'Message']);
+  await page.getByRole('button', { name: 'Edit citation comment' }).click();
+  await commentBox.waitFor();
+  await commentBox.fill('Toggled closed');
+  await page.getByRole('button', { name: 'Edit citation comment' }).click();
+  await commentBox.waitFor({ state: 'detached' });
+  assert.deepEqual([await chips(), await focused(page)], [['Toggled closed'], 'Message']);
+  await page.getByRole('button', { name: 'Edit citation comment' }).click();
+  await commentBox.waitFor();
+  await commentBox.fill('x'.repeat(2001));
+  assert.ok(await page.getByRole('button', { name: 'Shorten comment' }).isDisabled());
+  await box.click();
+  await commentBox.waitFor();
+  await commentBox.fill(`  ${'x'.repeat(2000)}  `);
+  assert.ok(await page.getByRole('button', { name: 'Save', exact: true }).isEnabled());
+  await commentBox.fill('Verify reconnect dedupe');
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await commentBox.waitFor({ state: 'detached' });
+  assert.deepEqual(await chips(), ['Verify reconnect dedupe']);
+  // Switching directly from chip 1's pencil to chip 2's pencil commits chip 1 and opens chip 2; clicking × while open removes it.
+  await reply.click({ clickCount: 3 });
+  await cite.click();
+  await commentBox.waitFor();
+  await page.keyboard.press('Enter');
+  await commentBox.waitFor({ state: 'detached' });
+  await page.getByRole('button', { name: 'Edit citation comment' }).first().click();
+  await commentBox.waitFor();
+  await commentBox.fill('Updated chip 1');
+  await page.getByRole('button', { name: 'Add comment to citation' }).click();
+  await commentBox.waitFor();
+  assert.deepEqual([await chips(), await commentBox.inputValue()], [['Updated chip 1', 'Started two agents. I\'ll tell you when they report.'], '']);
+  await page.getByRole('button', { name: 'Remove the citation' }).nth(1).click();
+  await commentBox.waitFor({ state: 'detached' });
+  assert.deepEqual(await chips(), ['Updated chip 1']);
+  // Re-set chip 1 back to Verify reconnect dedupe and send a second cite with ⌘Enter; both <comment> blocks render in CiteCard.
+  await page.getByRole('button', { name: 'Edit citation comment' }).click();
+  await commentBox.fill('Verify reconnect dedupe');
+  await page.keyboard.press('Enter');
+  await commentBox.waitFor({ state: 'detached' });
+  await reply.click({ clickCount: 3 });
+  await cite.click();
+  await commentBox.waitFor();
+  await page.keyboard.type('Which two?');
+  await page.keyboard.press('ControlOrMeta+Enter');
+  await commentBox.waitFor({ state: 'detached' });
+  await page.getByText('reply', { exact: true }).waitFor();
+  const { messages } = await (await connect(server.url)).request('history', { profile: 'cited-comments' });
+  const expected = '<cite zoom="12">Nothing is replayed twice</cite>\n<comment>Verify reconnect dedupe</comment>\n<cite zoom="11">Started two agents. I\'ll tell you when they report.</cite>\n<comment>Which two?</comment>';
+  assert.equal(messages.findLast(message => message.kind === 'user')?.text, expected);
+  assert.deepEqual(await page.locator('[data-cite-comment]').allInnerTexts(), ['Verify reconnect dedupe', 'Which two?']);
+  // Copying a sent commented message preserves the exact wire format with <comment> tags.
+  await page.getByRole('button', { name: 'Copy message' }).last().click();
+  assert.equal(await page.evaluate(() => navigator.clipboard.readText()), expected);
+  // ⌘F finds text inside a citation comment, and does not match across the quote/comment boundary.
+  await page.keyboard.press('ControlOrMeta+f');
+  await page.keyboard.type('reconnect dedupe');
+  await page.getByRole('search', { name: 'Find in chat' }).locator('[aria-live]').getByText('1/1').waitFor({ timeout: 3000 });
+  await page.getByRole('searchbox', { name: 'Find in chat' }).fill('twice Verify');
+  await page.getByRole('search', { name: 'Find in chat' }).locator('[aria-live]').getByText('0/0').waitFor({ timeout: 3000 });
+  await page.keyboard.press('Escape');
+  // Esc in the comment popover while the agent is running cancels the fresh cite without stopping the run, and programmatic
+  // scroll updates from the streaming timeline do not dismiss an open comment editor.
+  await run(page);
+  await report.click({ clickCount: 3 });
+  await cite.click();
+  await commentBox.waitFor();
+  await page.evaluate(() => { document.querySelector<HTMLElement>('main [tabindex="-1"]')?.dispatchEvent(new Event('scroll')); });
+  await commentBox.waitFor();
+  await goesOn(page, 'in the citation comment popover');
+  await commentBox.waitFor({ state: 'detached' });
+  assert.deepEqual(await chips(), []);
+  // Tabbing out of the popover commits the comment; outside wheel commits it too; Alt+M switching to Memory commits it too.
+  await report.click({ clickCount: 3 });
+  await cite.click();
+  await commentBox.waitFor();
+  await page.keyboard.type('Committed on blur');
+  await box.focus();
+  await commentBox.waitFor({ state: 'detached' });
+  assert.deepEqual(await chips(), ['Committed on blur']);
+  await page.getByRole('button', { name: 'Edit citation comment' }).click();
+  await commentBox.waitFor();
+  await commentBox.fill('Committed on wheel');
+  const boxRect = await box.boundingBox();
+  assert.ok(boxRect);
+  await page.mouse.move(boxRect.x + 10, boxRect.y + 10);
+  await page.mouse.wheel(0, 60);
+  await commentBox.waitFor({ state: 'detached' });
+  assert.deepEqual(await chips(), ['Committed on wheel']);
+  await page.getByRole('button', { name: 'Edit citation comment' }).click();
+  await commentBox.waitFor();
+  await commentBox.fill('Committed on Alt+M');
+  await page.keyboard.press('Alt+m');
+  await commentBox.waitFor({ state: 'detached' });
+  assert.deepEqual(await chips(), ['Committed on Alt+M']);
+  await page.getByRole('button', { name: 'Remove the citation' }).click();
+  // Outside click commits an edited comment when citing from the memory view too.
+  await page.locator('[data-line]').first().hover();
+  await page.getByRole('button', { name: 'Cite this line' }).first().click();
+  await commentBox.waitFor();
+  await page.keyboard.type('Summarize this range');
+  await box.click();
+  await commentBox.waitFor({ state: 'detached' });
+  assert.deepEqual([await chips(), await focused(page)], [['Summarize this range'], 'Message']);
+  await page.context().close();
 });
 
 test('in the memory view a line is cited whole by its button, and the words selected in a line or in an opened message with where they are', async () => {
   const page = await open('lines'), box = page.getByRole('textbox', { name: 'Message' }), cite = page.getByRole('button', { name: 'Cite', exact: true }), lines = page.locator('[data-line]');
+  const commentBox = page.getByRole('textbox', { name: 'Comment on cited text' });
   // What the message cites, as it is kept: where each is, and how it begins.
   const draft = async () => cited(await page.evaluate((): string => JSON.parse(localStorage.getItem('optchat-app-drafts') ?? '{}')['lines/main'] ?? '')).cites.map(({ text, at }) => [at && named(at), text.split('\n')[0]]);
   await page.keyboard.press('Alt+m');
   // The button on a line cites the line: the eight messages from the first on, by how their summary begins.
   await lines.first().hover();
   await page.getByRole('button', { name: 'Cite this line' }).first().click();
+  await commentBox.waitFor();
+  await page.keyboard.press('Enter');
   assert.deepEqual([await page.getByRole('list', { name: 'Cited in the message' }).getByRole('listitem').allInnerTexts(), await focused(page)], [['Memory 0+8'], 'Message']);
   // Words selected in a line are cited with the line's place, and selecting them does not open it; Enter does, as a click.
   const said = await lines.nth(3).getByText('Started two agents').boundingBox();
@@ -1246,17 +1404,23 @@ test('in the memory view a line is cited whole by its button, and the words sele
   await page.mouse.up();
   assert.equal(await lines.nth(3).getAttribute('aria-expanded'), 'false');
   await cite.click();
+  await commentBox.waitFor();
+  await page.keyboard.press('Enter');
   // An opened message is the chat's row, and what is selected in it is cited as that message.
   await lines.nth(4).focus();
   await page.keyboard.press('Enter');
   assert.equal(await lines.nth(4).getAttribute('aria-expanded'), 'true');
   await page.locator('[data-cite] li', { hasText: 'Nothing is replayed twice' }).click({ clickCount: 3 });
   await cite.click();
+  await commentBox.waitFor();
+  await page.keyboard.press('Enter');
   // A message a search found is cited by its button too.
   await page.getByRole('searchbox', { name: 'Search the memory' }).fill('not enough for');
   const found = page.getByRole('region', { name: 'Messages found' });
   await found.locator('[data-line]').first().hover();
   await found.getByRole('button', { name: 'Cite this line' }).first().click();
+  await commentBox.waitFor();
+  await page.keyboard.press('Enter');
   const cites = await draft();
   assert.deepEqual(cites.slice(0, 1), [['0+8', 'user: The shutdown test fails on Windows.']]);
   assert.deepEqual([cites[1][0], cites[2], cites[3][0]], ['11', ['12', 'Nothing is replayed twice'], '2']);

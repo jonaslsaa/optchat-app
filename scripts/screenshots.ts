@@ -606,17 +606,32 @@ async function pictures(browser: Browser, control: Client) {
   await at.getByRole('textbox', { name: 'Message' }).pressSequentially('lose its list on Esc?');
   await at.getByRole('listbox', { name: 'Files' }).waitFor({ state: 'detached' });
   await shot(at, '262-mentions-picked');
-  // A line of a report selected, and the button that cites it; then two citations as chips over what is typed, as cards in
-  // the message once it is sent, and the same message as the log has it, dark and narrow.
+  // A line of a report selected, and the button that cites it; then the comment popover right where the Cite button was,
+  // two citations (one commented, one plain) as chips over what is typed, editing a chip's comment, as cards in the message
+  // once it is sent, and the same message as the log has it, dark and narrow.
   const citing = await open(['cites']), cite = citing.getByRole('button', { name: 'Cite', exact: true });
+  const commentBox = citing.getByRole('textbox', { name: 'Comment on cited text' });
   await citing.locator('[data-cite] li', { hasText: 'The snapshot is the fallback, not the default' }).click({ clickCount: 3 });
   await cite.waitFor();
   await shot(citing, '72-cite-selection');
   await cite.click();
+  await commentBox.waitFor();
+  await citing.keyboard.type('Does ours still fall back to the profile log?');
+  await shot(citing, '281-cite-comment-popover');
+  await citing.keyboard.press('Enter');
+  await commentBox.waitFor({ state: 'detached' });
   await citing.locator('[data-cite] p', { hasText: 'Started two agents.' }).click({ clickCount: 3 });
   await cite.click();
+  await commentBox.waitFor();
+  await citing.keyboard.press('Enter');
+  await commentBox.waitFor({ state: 'detached' });
   await citing.getByRole('textbox', { name: 'Message' }).fill('Is that still how ours works?');
   await shot(citing, '150-cited-in-composer');
+  await citing.getByRole('button', { name: 'Edit citation comment' }).click();
+  await commentBox.waitFor();
+  await shot(citing, '282-cite-comment-edit');
+  await citing.keyboard.press('Escape');
+  await commentBox.waitFor({ state: 'detached' });
   await citing.keyboard.press('Enter');
   await citing.getByText('reply', { exact: true }).waitFor();
   await shot(citing, '151-cited-message');
@@ -626,6 +641,9 @@ async function pictures(browser: Browser, control: Client) {
   await citing.keyboard.press('Alt+m');
   await citing.locator('[data-line]').first().hover();
   await citing.getByRole('button', { name: 'Cite this line' }).first().click();
+  await commentBox.waitFor();
+  await citing.keyboard.press('Enter');
+  await commentBox.waitFor({ state: 'detached' });
   await citing.locator('[data-line]').nth(1).focus();
   await shot(citing, '154-memory-cite');
   await citing.keyboard.press('Alt+m');

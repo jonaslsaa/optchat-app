@@ -173,12 +173,17 @@ The issues and pull requests the main chat named by their link, in the panel bes
 
 ## Citing
 
-A message can cite what was said before: words selected in the chat, or in the memory view a line whole (the button on it, and on a message a search found) or the words selected in a line or in an opened message. What is cited stands over the box you type in as chips, as images do: a chip's × takes it off, and so does Backspace in an empty box. Chips are part of the draft, so they are there after a reload, and ↑ brings a message back with its chips.
+A message can cite what was said before: words selected in the chat, or in the memory view a line whole (the button on it, and on a message a search found) or the words selected in a line or in an opened message. Clicking **Cite** (or the button on a memory line) adds a chip over the box you type in and opens a comment popover right where you clicked (after T3 Code's):
 
-Sent, the citations are the first lines of the message, and what you typed is under them (`citing` in `cite.ts`, and `cited` reads it back; nothing else knows how it is written):
+- **Flow A (plain cite):** leave the comment empty and press Enter, or click straight into the composer to type.
+- **Flow B (comment on this cite):** type a comment in the popover and press Enter to save it (Shift+Enter adds a line), or ⌘Enter (Ctrl+Enter) to save and send right away. Clicking outside commits any edited comment.
+- **Cancel / edit:** Esc on a brand-new citation cancels and removes the fresh chip cleanly without stopping a running agent. Each chip in the composer has a pencil button to add or edit its comment later (Esc there discards unsaved edits and keeps the chip as it was), and × removes it, as Backspace does in an empty box. Chips and their comments are part of the draft, so they are there after a reload, and ↑ brings a message back with them.
+
+Sent, the citations are the first lines of the message, each with an optional sibling `<comment>` on the next line when it has one, and what you typed is under them (`citing` in `cite.ts`, and `cited` reads it back; nothing else knows how it is written):
 
 ```
 <cite zoom="11953">the words that were selected</cite>
+<comment>your comment on that quote</comment>
 <cite zoom="11904+4">how the line begins…</cite>
 
 What you typed.
@@ -186,9 +191,9 @@ What you typed.
 
 - **The place is the agent's own.** `zoom` holds what pi-optchat calls the place: a message by its number, a line as its view heads it (`id+n`). The agent reads the message as it is written and can open the place with its `zoom` tool. The attribute has the tool's name because that is what makes a model go and read it: with `memory="9"` Haiku said it could look, and with `zoom="9"` it did (`npm run test:live` has the case). pi-optchat is not changed.
 - **A place only where the log has one.** A row of the chat is a message of the log, by its number (`data-cite`); an answer in several blocks is one for each. What is cited is of the one message the selection began in: where it runs on into the rows under it, it is cited as far as that message goes. A reply that is still in its run, and a connected window's conversation, are in no log yet: they are cited by their words alone (`<cite>…</cite>`), rather than under a number that is a guess.
-- **What is cited is cut**, at 2,000 characters for a selection and 200 for a line cited whole, and ends in "…": the agent can zoom to the rest. Only what would end a citation early is written another way (`</cite>`), so code is cited as it was written.
-- **In the chat it is a card** in your message (T3 Code's): how it begins, on two lines at most, and "Memory · 11953". A click opens the memory view at that place, with its line pointed out. The message as it is written is never shown, nor in a message that waits in a queue or in a window's name. A message from before this, with `>` before each line, is as it was.
-- **Copied, a message is as it was sent**, so pasted into the box it is its chips and what was typed again.
+- **What is cited is cut**, at 2,000 characters for a selection and 200 for a line cited whole, and ends in "…": the agent can zoom to the rest. Comments are capped at 2,000 characters in the editor. Only what would end a citation or comment early is written another way (`</cite>`, `</comment>`), so code is cited as it was written.
+- **In the chat it is a card** in your message (T3 Code's): how it begins, on two lines at most, and "Memory · 11953", with your comment under the card when it has one. A click on the card opens the memory view at that place, with its line pointed out; ⌘F finds text in both the card and its comment. The message as it is written is never shown, nor in a message that waits in a queue or in a window's name. A message from before this, with `>` before each line, is as it was.
+- **Copied, a message is as it was sent**, so pasted into the box it is its chips, comments and what was typed again.
 - **Left as it is:** what a search of the memory found is the message as it is written, so a citation shows there as that. A message that begins with what it cites is not a command to Pi, so the list a `/` opens is not there while the message cites something.
 
 ## Import

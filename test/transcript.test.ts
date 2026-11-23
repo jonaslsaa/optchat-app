@@ -353,8 +353,13 @@ test('your message is what you typed with what it cites apart, and what is cited
     { type: 'user', text: 'Is that still so?', cites: [{ text: 'Nothing is replayed twice', at: { id: 3, n: 1 } }, { text: 'user: How is the snapshot taken? [image fedcba9876543210]', at: { id: 0, n: 4 } }], images: ['0123456789abcdef'] },
     { type: 'reply', answer: { text: 'It is.\n\nTwice, even.', said: [{ key: 9, text: 'It is.' }, { key: 10, text: 'Twice, even.' }] } },
   ]);
-  // ↑ brings a message back as it was sent, with what it cites.
+  // ↑ brings a message back as it was sent, with what it cites, and cycles past a comment-only citation draft too.
   assert.equal(recalled(items, '', true), sent);
+  const commentedOnly = citing([cite('Nothing is replayed twice', { id: 3, n: 1 }, 'check this')], '');
+  const withComment = logged([entry(5, 'user', 0, 'earlier'), entry(6, 'user', 1, commentedOnly.trim())]);
+  assert.equal(recalled(withComment, '', true), commentedOnly.trim());
+  assert.equal(recalled(withComment, commentedOnly, true), 'earlier');
+  assert.equal(recalled(withComment, commentedOnly, false), '');
 });
 
 test('your message is drawn without the note Pi adds for each picture it made smaller, and keeps every other note', () => {

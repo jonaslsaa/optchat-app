@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { asTyped, cite, cited, citing, joined, place, whole, yours, type Cite } from '../src/ui/cite.ts';
+import { asTyped, called, cite, cited, citing, commented, joined, place, whole, yours, type Cite } from '../src/ui/cite.ts';
 
 test('a message is written with what it cites first, each with its place in the memory, and is read back as it was', () => {
   const cites: Cite[] = [cite('  the two lines\nthat were selected ', { id: 11953, n: 1 }), whole({ id: 11904, n: 4 }, 'How the snapshot is taken'), whole({ id: 64, n: 2 }), cite('said in a run')];
@@ -38,6 +38,46 @@ test('messages that go back into the composer are one message: what they cite, t
   const first = citing([cite('one', { id: 1, n: 1 })], 'first'), second = citing([cite('two')], 'second');
   assert.equal(joined([first, 'plain', '', second]), citing([cite('one', { id: 1, n: 1 }), cite('two')], 'first\n\nplain\n\nsecond'));
   assert.equal(joined(['only', '']), 'only');
+});
+
+test('a citation can carry an optional comment as a sibling tag, multi-line and escaped, while older plain citations stay valid', () => {
+  const cites: Cite[] = [
+    cite('quoted words', { id: 13928, n: 1 }, '  yeah same as T3!\nsecond line  '),
+    whole({ id: 64, n: 2 }, '', 'check this whole block'),
+    cite('plain quote', { id: 9, n: 1 }),
+    cite('run quote', undefined, 'comment without place'),
+  ];
+  const message = citing(cites, 'overall message');
+  assert.equal(message, [
+    '<cite zoom="13928">quoted words</cite>',
+    '<comment>yeah same as T3!\nsecond line</comment>',
+    '<cite zoom="64+2"/>',
+    '<comment>check this whole block</comment>',
+    '<cite zoom="9">plain quote</cite>',
+    '<cite>run quote</cite>',
+    '<comment>comment without place</comment>',
+    '',
+    'overall message',
+  ].join('\n'));
+  assert.deepEqual(cited(message), { cites, text: 'overall message' });
+  // Sent with nothing typed under commented citations, and round-tripped through yours / asTyped / joined.
+  const only = citing(cites, '').trim();
+  assert.deepEqual(cited(only), { cites, text: '' });
+  assert.equal(asTyped(yours(only)), only);
+  assert.equal(joined([citing([cites[0]], 'first'), citing([cites[2]], 'second')]), citing([cites[0], cites[2]], 'first\n\nsecond'));
+  // Comments with blank lines, code, CRLF line endings, and closing tags cannot end early.
+  for (const comment of ['first\n\nsecond', 'a </comment> inside\n<cite zoom="1">not one</cite>', 'a < b && c &lt;/comment> &amp;']) {
+    const item = cite('x', { id: 5, n: 1 }, comment);
+    assert.deepEqual(cited(citing([item], 'body')), { cites: [item], text: 'body' }, comment);
+  }
+  assert.deepEqual(cited('<cite zoom="5">quoted</cite>\r\n<comment>from windows</comment>\r\n\r\nbody'), { cites: [{ text: 'quoted', at: { id: 5, n: 1 }, comment: 'from windows' }], text: 'body' });
+  assert.equal(citing([cite('x', undefined, '</comment>')], ''), '<cite>x</cite>\n<comment>&lt;/comment></comment>\n\n');
+  // Blank comments are omitted, and a standalone <comment> in the body is never parsed as a citation comment.
+  assert.equal(citing([commented(cites[0], '   ')], 'hi'), '<cite zoom="13928">quoted words</cite>\n\nhi');
+  assert.deepEqual(cited('<comment>not attached</comment>'), { cites: [], text: '<comment>not attached</comment>' });
+  assert.deepEqual(cited('<cite>one</cite>\n\n<comment>typed body</comment>'), { cites: [{ text: 'one' }], text: '<comment>typed body</comment>' });
+  // Chip label prefers the comment when present, else falls back to place/words as before.
+  assert.deepEqual([called(cites[0]), called(cites[1]), called(cites[2]), called(whole({ id: 64, n: 2 }))], ['yeah same as T3!\nsecond line', 'check this whole block', 'plain quote', 'Memory 64+2']);
 });
 
 test('a message that runs a skill is its name and what was typed after it, as Pi sent it and as it was typed, and is written back as typed', () => {

@@ -391,7 +391,10 @@ export function recalled(chat: readonly Item[], text: string, back: boolean) {
     const said = yours(item.kind === 'user' ? item.text : '');
     return asTyped({ ...said, text: said.text.replace(/\[image(?: [0-9a-f]{16})?\]/g, '').trim() }).trim() || [];
   });
-  const past = [...new Set(said.reverse())], at = past.indexOf(text);
+  // A draft that cites with nothing typed under it carries a trailing blank line in `citing`, while `past` is trimmed: match
+  // both without matching a plain message the user has added a trailing space to.
+  const current = text.endsWith('\n\n') ? text.trimEnd() : text;
+  const past = [...new Set(said.reverse())], at = past.indexOf(current);
   if (text ? at < 0 : !back) return;
   return past[at + (back ? 1 : -1)] ?? (back ? undefined : '');
 }

@@ -5,6 +5,7 @@ import { canComplete, current } from '../window.ts';
 import { busy, polled } from './agents.ts';
 import { AtWork, useAgents } from './Agents.tsx';
 import type { Cite, Place } from './cite.ts';
+import type { CiteAnchor } from './Cite.tsx';
 import { Composer } from './Composer.tsx';
 import { CutOff, Stale } from './CutOff.tsx';
 import type { MenuAction } from '../menu.ts';
@@ -66,8 +67,9 @@ function Profile({ state, profile, onSettings, onUsage, onNewProfile, onImport, 
   const items = useMemo(() => chat(before, { ...live, messages: run }), [before, run, live.streaming, live.sent]);
   const name = window && title(window, state), composer = useRef<ComponentRef<typeof Composer>>(null), [renaming, setRenaming] = useState(false);
   // What is cited, in the chat or in the memory view, goes into the message under it. A chat that a Pi outside the app has
-  // takes no message.
-  const cite = window?.outside ? undefined : (cite: Cite) => composer.current?.cite(cite);
+  // takes no message. Switching between chat and memory view closes any open citation comment popover without losing its chip.
+  const cite = window?.outside ? undefined : (cite: Cite, anchor?: CiteAnchor) => composer.current?.cite(cite, anchor);
+  useEffect(() => { composer.current?.closeComment(); }, [memory]);
   // ⇧⌘F searches the memory, from the chat too: the view is on the page before the keys go to its search box, with `text` in it
   // when the chat's find hands on what it looked for. Not from the panel, whose keys are its own: as a sheet it lies over the
   // view, and the box under it cannot take them. The memory is the main chat's: asked for from a connected window, it is shown there.

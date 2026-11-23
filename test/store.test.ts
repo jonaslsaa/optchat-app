@@ -219,6 +219,25 @@ test('the first profile is made from the page: pi-optchat makes it, and it opens
   assert.deepEqual([app.state.profiles, app.state.tabs, app.state.profile, app.state.windows.map(window => window.id).sort()], [['first', 'second'], ['first', 'second'], 'second', ['first/main', 'second/main']]);
 });
 
+test('a tab dragged to another place stays there, on the page opened again, and the one in front stays in front', async t => {
+  const home = temporaryHome();
+  for (const name of ['one', 'two', 'three']) createProfile(home, name);
+  const server = await startServer({ home, cwd: home, pi });
+  t.after(() => server.close());
+  const { app, saved } = page(t);
+  await app.start(server.url);
+  for (const name of ['one', 'two', 'three']) await app.openProfile(name);
+  app.moveTab('three', 0);
+  app.moveTab('one', 2);
+  // Past either end is the end, and a profile that is not a tab is no tab.
+  app.moveTab('two', -4);
+  app.moveTab('four', 1);
+  assert.deepEqual([app.state.tabs, app.state.profile], [['two', 'three', 'one'], 'three']);
+  const again = page(t, undefined, undefined, saved);
+  await again.app.start(server.url);
+  assert.deepEqual([again.app.state.tabs, again.app.state.profile], [['two', 'three', 'one'], 'three']);
+});
+
 test('an agent\'s chat is read on from where the page has it, and a report that is not its last answer closes it', async t => {
   const profile = createProfile(directory, 'team'), server = await startServer({ home: directory, cwd: directory, pi });
   t.after(() => server.close());

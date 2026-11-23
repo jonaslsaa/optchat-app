@@ -392,6 +392,13 @@ export class App {
     const tabs = this.state.tabs.filter(tab => tab !== profile);
     this.set({ tabs, profile: this.state.profile === profile ? tabs[0] : this.state.profile });
   }
+  /** A tab dragged to another place among the tabs (`to`, counted as they are once it is taken out), kept as they are. */
+  moveTab(profile: string, to: number) {
+    const tabs = this.state.tabs.filter(tab => tab !== profile);
+    if (tabs.length === this.state.tabs.length || this.state.tabs.indexOf(profile) === to) return;
+    tabs.splice(Math.max(0, Math.min(to, tabs.length)), 0, profile);
+    this.set({ tabs });
+  }
   select(window: string) {
     const profile = this.window(window)?.profile;
     if (profile) this.set({ profile, selected: { ...this.state.selected, [profile]: window } });

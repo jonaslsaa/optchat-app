@@ -1277,11 +1277,11 @@ test('a profile tab is dragged to another place, where it stays when the page is
   await context.addInitScript(saved => { if (!localStorage.getItem('optchat-app')) localStorage.setItem('optchat-app', saved); }, JSON.stringify({ tabs: ['ant', 'bee', 'cat'], profile: 'ant', selected: {} }));
   const page = await context.newPage(), bar = page.getByRole('tablist', { name: 'Profiles' }), tab = (name: string) => bar.getByRole('tab', { name });
   const order = () => bar.getByRole('tab').evaluateAll(tabs => tabs.map(tab => tab.querySelector('.truncate')?.textContent));
-  const drag = async (name: string, by: number) => {
+  const drag = async (name: string, by: number, steps = Math.max(2, Math.round(Math.abs(by) / 8))) => {
     const box = await tab(name).boundingBox() ?? assert.fail(`No tab ${name}`);
     await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
     await page.mouse.down();
-    await page.mouse.move(box.x + box.width / 2 + by, box.y + box.height / 2, { steps: Math.max(2, Math.round(Math.abs(by) / 8)) });
+    await page.mouse.move(box.x + box.width / 2 + by, box.y + box.height / 2, { steps });
     await page.mouse.up();
   };
   await page.goto(server.page);
@@ -1289,6 +1289,11 @@ test('a profile tab is dragged to another place, where it stays when the page is
   const width = (await tab('bee').boundingBox())?.width ?? 0;
   // The last tab dragged to the front, past two: the one in front is still the one that was, so its release was no click.
   await drag('cat', -2.5 * width);
+  assert.deepEqual(await order(), ['cat', 'ant', 'bee']);
+  // Past two in a single move, let go at once: it is past both.
+  await drag('cat', 2.5 * width, 1);
+  assert.deepEqual(await order(), ['ant', 'bee', 'cat']);
+  await drag('cat', -2.5 * width, 1);
   assert.deepEqual(await order(), ['cat', 'ant', 'bee']);
   assert.equal(await tab('ant').getAttribute('aria-selected'), 'true');
   // Back a little, its edge not past the middle of its neighbour: it goes back to its place. A little more, and they swap.

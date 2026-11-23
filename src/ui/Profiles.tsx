@@ -163,12 +163,14 @@ export function Tabs({ state, onNew, onImport }: { state: State; onNew: () => vo
     if (!held || !element || (!held.moved && Math.abs(event.clientX - held.x) < SLOP)) return;
     held.moved = true;
     const order = app.state.tabs, i = order.indexOf(held.tab), start = held.left + event.clientX - held.x, end = start + element.offsetWidth;
-    const middle = (tab: string | undefined) => { const at = tab === undefined ? undefined : tabs.current.get(tab); return at && at.offsetLeft + at.offsetWidth / 2; };
-    const next = middle(order[i + 1]), previous = middle(order[i - 1]);
+    const middle = (tab: string | undefined) => { const at = tab === undefined ? undefined : tabs.current.get(tab); return at ? at.offsetLeft + at.offsetWidth / 2 : NaN; };
+    // Past every neighbour whose middle it crossed, in one move: those further on stay where they are until it passes them.
+    let to = i;
+    while (end > middle(order[to + 1])) to++;
+    if (to === i) while (start < middle(order[to - 1])) to--;
     // At once, so the next move measures the tabs where they are now.
     flushSync(() => {
-      if (next !== undefined && end > next) app.moveTab(held.tab, i + 1);
-      else if (previous !== undefined && start < previous) app.moveTab(held.tab, i - 1);
+      app.moveTab(held.tab, to);
       setDrag({ tab: held.tab, at: event.clientX });
     });
   };

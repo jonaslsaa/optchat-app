@@ -256,6 +256,8 @@ test('the collapsed thinking preview strips Markdown syntax from its last line w
   assert.equal(thoughtLine('- [x] Check *italic*, _under_, and ~~old~~'), 'Check italic, under, and old');
   assert.equal(thoughtLine('**Still streaming bold'), 'Still streaming bold');
   assert.equal(thoughtLine('Keep foo_bar_baz and 2 * 3 * 4 intact'), 'Keep foo_bar_baz and 2 * 3 * 4 intact');
+  assert.equal(thoughtLine('Check `__init__` and foo__bar__baz and __bold__'), 'Check __init__ and foo__bar__baz and bold');
+  assert.equal(thoughtLine('Code `*raw*` and `foo$&bar` stay intact'), 'Code *raw* and foo$&bar stay intact');
 });
 
 test('how long a reply took is said in hours past an hour', () => {

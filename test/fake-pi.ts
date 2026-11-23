@@ -209,7 +209,8 @@ async function run(text: string, images?: Image[]) {
     content.filter(block => block.type === 'toolCall').forEach((call, at) => tool(call, results[at]));
   }
   // Asked to think, it thinks first, as a model does that Pi lets think, and a "wait" then holds it in the middle of its thought, and once it is released, in the middle of its answer ("slowly": and again with all of it out).
-  const thought: Content[] = text.includes('think') ? [{ type: 'thinking', thinking: THOUGHT }] : [];
+  const longThought = Array.from({ length: 30 }, (_, n) => `Paragraph ${n + 1} checking \`step_${n + 1}\` in the shutdown path.`).join('\n\n');
+  const thought: Content[] = text.includes('think') ? [{ type: 'thinking', thinking: text.includes('long') ? longThought : THOUGHT }] : [];
   if (!aborted) aborted = await reply([...thought, { type: 'text', text: scripted?.answer ?? answer }], 'stop', text.includes('wait') ? { at: thought.length ? [0, 1] : [0], again: text.includes('slowly') } : undefined);
   write({ type: 'agent_end', messages: [] });
   const next = aborted ? undefined : steering.shift() ?? followUp.shift();

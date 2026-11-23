@@ -1055,6 +1055,26 @@ test('the working line opens to what the agent has thought so far, and Esc on it
   await stops(page, 'in the chat');
   control.close();
   await page.context().close();
+
+  // With normal motion, Markdown paces streamed thinking across animation frames; the open drawer keeps following as it overflows.
+  const moving = await open('thinks', WIDE, 'no-preference');
+  await moving.getByRole('textbox', { name: 'Message' }).fill('think long, wait slowly');
+  await moving.keyboard.press('Enter');
+  const toggle = moving.getByRole('button', { name: /^Thinking for/ });
+  await toggle.click();
+  await moving.getByText('Paragraph 1 checking').waitFor();
+  const ctl = await connect(server.url);
+  await ctl.request('command', { window: 'thinks/main', command: { type: 'release' } });
+  await moving.getByText('Paragraph 30 checking').waitFor({ timeout: 5000 });
+  const scroller = moving.locator('.chat-markdown-quiet').locator('..');
+  await moving.waitForFunction(el => el.scrollHeight > el.clientHeight && el.scrollHeight - el.scrollTop - el.clientHeight <= 4, await scroller.elementHandle(), { timeout: 3000 });
+  // Scrolling up stops auto-following while the drawer stays open.
+  await scroller.evaluate(el => { el.scrollTop = 0; });
+  await moving.waitForTimeout(100);
+  assert.equal(await scroller.evaluate(el => el.scrollTop), 0, 'scrolling up stays where the user scrolled');
+  await stops(moving, 'on the long thought');
+  ctl.close();
+  await moving.context().close();
 });
 
 test('a long edit opens as its diff, which scrolls in its box and does not make the page longer', async () => {

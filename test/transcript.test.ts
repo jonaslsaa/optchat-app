@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 import { cite, citing, whole } from '../src/ui/cite.ts';
 import type { Message, PiRecord } from '../src/protocol.ts';
-import { act, apply, chat, closed, failure, idle, logged, merged, news, paced, parts, quiet, recalled, replay, spoken, stopped, thinking, thoughtLine, took, without, worked, LAG, type Item, type PiMessage, type Tool } from '../src/ui/transcript.ts';
+import { act, apply, chat, closed, failure, idle, logged, merged, news, paced, parts, plainly, quiet, recalled, reported, replay, spoken, stopped, thinking, thoughtLine, took, without, worked, LAG, type Item, type PiMessage, type Tool } from '../src/ui/transcript.ts';
 
 const T = Date.UTC(2026, 0, 1), at = (seconds: number) => new Date(T + seconds * 1000).toISOString();
 const user = (seconds: number, text: string): PiMessage => ({ role: 'user', timestamp: T + seconds * 1000, content: [{ type: 'text', text }] });
@@ -100,8 +100,8 @@ test('the chat is drawn in parts: your message with its images, a report by its 
   assert.deepEqual(parts(items).map(({ items: _, ...part }) => part), [
     { key: 0, type: 'note', text: 'Prefers short answers.' },
     { key: 1, type: 'user', date: at(0), text: 'look at this', cites: [], images: ['0123456789abcdef'] },
-    { key: 2, type: 'work', date: at(0), agent: '1a2b3c4d', body: '**Done.** All green.' },
-    { key: 3, type: 'work', date: at(0), body: 'A report without a name' },
+    { key: 2, type: 'work', date: at(0), reports: [{ agent: '1a2b3c4d', body: '**Done.** All green.' }] },
+    { key: 3, type: 'work', date: at(0), reports: [{ body: 'A report without a name' }] },
     { key: 4, type: 'user', date: at(1), text: 'check both', cites: [], images: [] },
     {
       key: 5, type: 'reply', from: at(2), to: at(5), stopped: false, answer: { text: 'One failed.', said: [items[10]] },
@@ -164,15 +164,49 @@ test('a report is named by the title its agent was started under, once the chat 
   const reports = [entry(2, 'work', 2, '[5e6f7a8b] Capped at five seconds.'), entry(3, 'work', 3, '[22222222] Done.'), entry(4, 'work', 4, '[1a2b3c4d] A timer.')];
   // The page of the log with the reports is read first, and they go by their agents' numbers.
   const late = parts(logged(reports));
-  assert.deepEqual(late.map(part => part.type === 'work' && [part.agent, part.title]), [['5e6f7a8b', undefined], ['22222222', undefined], ['1a2b3c4d', undefined]]);
+  assert.deepEqual(late.map(part => part.type === 'work' && [part.reports[0].agent, part.reports[0].title]), [['5e6f7a8b', undefined], ['22222222', undefined], ['1a2b3c4d', undefined]]);
   const whole = parts(logged([...start, ...reports]), late);
-  assert.deepEqual(whole.slice(1).map(part => part.type === 'work' && part.title), ['How T3 Code retries', undefined, 'Why it flakes']);
+  assert.deepEqual(whole.slice(1).map(part => part.type === 'work' && part.reports[0].title), ['How T3 Code retries', undefined, 'Why it flakes']);
   // Only the reports that got a title are made again, and none of them a second time.
   assert.deepEqual(whole.slice(1).map((part, at) => part === late[at]), [false, true, false]);
   assert.deepEqual(parts(logged([...start, ...reports]), whole).map((part, at) => part === whole[at]), [true, true, true, true]);
   // pi-optchat writes the title in front of the report itself, and under it a line for the main agent, which is no part of it.
   assert.partialDeepStrictEqual(parts(logged([entry(0, 'work', 0, '[1a2b3c4d · Read the notes] The answer is 42.\n\nFull chat: zoom("1a2b3c4d")')])),
-    [{ type: 'work', agent: '1a2b3c4d', title: 'Read the notes', body: 'The answer is 42.' }]);
+    [{ type: 'work', reports: [{ agent: '1a2b3c4d', title: 'Read the notes', body: 'The answer is 42.' }] }]);
+});
+
+test('the reports of one spawn that arrive together are each one report, without the lines for the main agent', () => {
+  // As pi-optchat joins them (its `deliver`): a report of a deleted agent has no line under it, and a report may quote one.
+  const report = (head: string, body: string, id?: string) => `[${head}] ${body}${id ? `\n\nFull chat: zoom("${id}")` : ''}`;
+  const joined = [
+    report('1a2b3c4d · Security review', '**One HIGH.**\n\n- `token.ts:41`', '1a2b3c4d'),
+    report('5e6f7a8b', 'Deleted by the user while it was working. The user dropped this task on purpose: do not redo it or delegate it again unless they ask.'),
+    report('22222222 · General review', 'It quotes another:\n\n[1a2b3c4d] old words\n\nFull chat: zoom("1a2b3c4d")\n\nand goes on.', '22222222'),
+    report('3c3c3c3c · Last', 'Deleted by the user while it was working. The user dropped this task on purpose: do not redo it or delegate it again unless they ask.'),
+  ].join('\n\n');
+  assert.deepEqual(reported(joined), [
+    { agent: '1a2b3c4d', title: 'Security review', body: '**One HIGH.**\n\n- `token.ts:41`' },
+    { agent: '5e6f7a8b', body: 'Deleted by the user while it was working. The user dropped this task on purpose: do not redo it or delegate it again unless they ask.' },
+    { agent: '22222222', title: 'General review', body: 'It quotes another:\n\n[1a2b3c4d] old words\n\nFull chat: zoom("1a2b3c4d")\n\nand goes on.' },
+    { agent: '3c3c3c3c', title: 'Last', body: 'Deleted by the user while it was working. The user dropped this task on purpose: do not redo it or delegate it again unless they ask.' },
+  ]);
+  // One report, and a text that is no report at all, are one each.
+  assert.deepEqual([reported('[1a2b3c4d] Done.\n\nFull chat: zoom("1a2b3c4d")'), reported('Just words.'), reported('')], [[{ agent: '1a2b3c4d', body: 'Done.' }], [{ body: 'Just words.' }], [{ body: '' }]]);
+  // Each gets the title its agent was started under, where the chat has the start.
+  const start = [entry(0, 'tool', 0, 'spawn {"tasks":[{"title":"Why it flakes","task":"Look."},{"title":"Retries","task":"Read."}]}'), entry(1, 'echo', 1, 'spawn: Started: 1a2b3c4d, 5e6f7a8b. Reports will arrive automatically.')];
+  const both = parts(logged([...start, entry(2, 'work', 2, `${report('1a2b3c4d', 'A timer.', '1a2b3c4d')}\n\n${report('5e6f7a8b · Own title', 'Capped.', '5e6f7a8b')}`)]));
+  assert.deepEqual(both.at(-1)?.type === 'work' && both.at(-1), { key: 2, type: 'work', date: at(2), items: both.at(-1)?.items, reports: [{ agent: '1a2b3c4d', title: 'Why it flakes', body: 'A timer.' }, { agent: '5e6f7a8b', title: 'Own title', body: 'Capped.' }] });
+});
+
+test('a stopped, deleted or failed report is said to you in a few words, and what the agent last wrote', () => {
+  assert.deepEqual(plainly('Stopped by the user. They ended it on purpose, so it did not fail: do not redo or delegate this task again unless they ask. Its chat is kept, so tell resumes it where it stopped.\n\nIts last message before the stop:\nLooking at `chat/`.'),
+    { ended: 'stopped', lead: 'Stopped by you.', text: 'Looking at `chat/`.' });
+  assert.deepEqual(plainly('Stopped because the agent that started it stopped or ended. Its chat is kept, so tell resumes it where it stopped.'), { ended: 'stopped', lead: 'Stopped with the agent that started it.', text: '' });
+  assert.deepEqual(plainly('Deleted by the user while it was working. The user dropped this task on purpose: do not redo it or delegate it again unless they ask.'), { ended: 'stopped', lead: 'Deleted by you while it worked.', text: '' });
+  assert.deepEqual(plainly('Task error: 503 Service Unavailable'), { ended: 'failed', lead: 'Failed.', text: '503 Service Unavailable' });
+  assert.deepEqual(plainly('Launch failed: Error: no model'), { ended: 'failed', lead: 'Failed.', text: 'Error: no model' });
+  // A report that only begins like one is the agent's own words.
+  assert.deepEqual(plainly('Stopped by the user, the logs say, at 14:02.'), { text: 'Stopped by the user, the logs say, at 14:02.' });
 });
 
 test('a tool call is said in words: what it did or is doing, and to what', () => {

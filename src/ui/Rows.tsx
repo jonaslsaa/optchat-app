@@ -18,7 +18,7 @@ import { WorkLogDetails, WorkLogRow } from './WorkLog.tsx';
 
 type Of<T extends Part['type']> = Extract<Part, { type: T }>;
 const clock = (date: string) => new Date(date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-const Time = ({ date }: { date: string }) => <time dateTime={date} title={new Date(date).toLocaleString()} className="select-none text-muted-foreground text-xs tabular-nums">{clock(date)}</time>;
+export const Time = ({ date }: { date: string }) => <time dateTime={date} title={new Date(date).toLocaleString()} className="select-none text-muted-foreground text-xs tabular-nums">{clock(date)}</time>;
 /** The line that something is folded under, which opens it. */
 function Fold({ open, toggle, children }: { open: boolean; toggle: () => void; children: ReactNode }) {
   return (
@@ -27,15 +27,15 @@ function Fold({ open, toggle, children }: { open: boolean; toggle: () => void; c
     </button>
   );
 }
-/** Shows long text a few lines high, with a button for the rest. Find in the chat opens it at once (`beforematch`, find.ts) when
- * what it found is in the part that is cut off. */
-function Clamp({ text, lines, children }: { text: string; lines: number; children: ReactNode }) {
+/** Shows long text a few lines high (`short`: fewer), with a button for the rest. Find in the chat opens it at once
+ * (`beforematch`, find.ts) when what it found is in the part that is cut off. */
+export function Clamp({ text, lines, short = false, children }: { text: string; lines: number; short?: boolean; children: ReactNode }) {
   const [open, setOpen] = useState(false);
   if (text.length <= lines * 100 && text.split('\n').length <= lines) return children;
   return (
     <>
       <div data-clamp={open ? undefined : ''} ref={cut => { const found = () => flushSync(() => setOpen(true)); cut?.addEventListener('beforematch', found); return () => cut?.removeEventListener('beforematch', found); }}
-        className={cn(!open && 'max-h-44 overflow-hidden [mask-image:linear-gradient(to_bottom,black_60%,transparent)]')}>{children}</div>
+        className={cn(!open && 'overflow-hidden [mask-image:linear-gradient(to_bottom,black_60%,transparent)]', !open && (short ? 'max-h-28' : 'max-h-44'))}>{children}</div>
       <Button variant="ghost-muted" size="xs" className="-ms-1.5 mt-1" onClick={() => setOpen(!open)}>{open ? 'Show less' : 'Show full message'}</Button>
     </>
   );
@@ -57,27 +57,6 @@ export const UserRow = memo(function UserRow({ part, profile, onPlace }: { part:
         {part.text && <Clamp text={part.text} lines={12}><p data-cite={part.key} className="whitespace-pre-wrap text-sm leading-relaxed [overflow-wrap:anywhere]">{part.text}</p></Clamp>}
       </div>
       <div className="flex max-w-[80%] items-center gap-1.5 pe-1 opacity-0 transition-opacity duration-200 focus-within:opacity-100 group-hover:opacity-100">{sent && <CopyButton text={sent} label="Copy message" />}<Time date={part.date} /></div>
-    </div>
-  );
-});
-/** What OptChat itself put in the chat: a subagent's report or a connected window's handoff, named by the title its agent was
- * started under, or else by the agent's number. Where agents can be opened (`onAgent`), its name opens the agent's chat. */
-export const ReportRow = memo(function ReportRow({ part, onAgent }: { part: Of<'work'>; onAgent?: (agent: string) => void }) {
-  const { agent } = part, name = part.title ? `Report: ${part.title}` : agent ? `Report from ${agent}` : 'Report';
-  return (
-    <div className="group pb-4">
-      <div className="rounded-xl border border-border/70 bg-card px-3.5 py-3 dark:bg-card/60">
-        <div className="mb-1.5 flex items-center gap-1.5 text-secondary-label text-xs">
-          <BotIcon className="size-3.5 shrink-0" />
-          {agent && onAgent
-            ? <button type="button" title={`Open this agent's chat (${agent})`} onClick={() => onAgent(agent)} className="min-w-0 cursor-pointer truncate rounded-sm font-medium outline-none hover:text-foreground hover:underline hover:underline-offset-2 focus-visible:ring-2 focus-visible:ring-ring/70">{name}</button>
-            : <span title={agent} className="min-w-0 truncate font-medium">{name}</span>}
-          <span className="flex-1" />
-          <span className="-my-1 opacity-0 transition-opacity duration-200 focus-within:opacity-100 group-hover:opacity-100"><CopyButton text={part.body} label="Copy report" /></span>
-          <Time date={part.date} />
-        </div>
-        <div data-cite={part.key}><Clamp text={part.body} lines={14}><Markdown text={part.body} /></Clamp></div>
-      </div>
     </div>
   );
 });
@@ -149,7 +128,7 @@ export const Took = ({ agent }: { agent: Agent }) => agentWorks(agent) ? <Timer 
 /** The colours an agent's state is said in, and the only ones it has: at work (the dot's blue), done, failed. */
 export const TONES = { working: 'text-info-foreground', done: 'text-success-foreground', failed: 'text-error-foreground' };
 /** How an agent stands: a dot while it works, a mark for how it ended. */
-export function Mark({ agent }: { agent: Agent }) {
+export function Mark({ agent }: { agent: Pick<Agent, 'state'> }) {
   if (agentWorks(agent)) return <StatusDot tone="working" pulse={agent.state !== 'paused'} />;
   const Icon = agent.state === 'completed' ? CheckIcon : agent.state === 'failed' ? XIcon : CircleSlashIcon, { tone } = stood(agent);
   return <Icon role="img" aria-label={agent.state} className={cn('size-3.5 shrink-0 text-muted-foreground/70', tone && TONES[tone])} />;

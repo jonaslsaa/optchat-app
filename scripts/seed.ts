@@ -69,6 +69,31 @@ export const TEAM: Said[][] = [
   ],
 ];
 
+/** A chat whose four agents reported together (pi-optchat's `groupReports`): two long reviews, one that failed and one you
+ * stopped, joined as pi-optchat joins them. Its agents are `grouped` below. */
+const SECURITY = '**Security review of #11952: one HIGH, two LOW.** Not mergeable until the HIGH is fixed.\n\n### HIGH: the export token is compared with `==`\n`src/export/token.ts:41` checks the signed token with a plain comparison, so its timing leaks how many leading bytes match. The token lives for 7 days and the endpoint is public.\n\n```ts\n// today\nif (given == expected) return grant(user);\n// fix\nif (given.length === expected.length && timingSafeEqual(Buffer.from(given), Buffer.from(expected))) return grant(user);\n```\n\n### LOW\n- `src/export/routes.ts:88` logs the full URL, token and all.\n- The new `/export/:id` route has no rate limit.\n\n### Checked and fine\n- Ownership is checked before any read (`routes.ts:72`).\n- No new dependencies.';
+const GENERAL = '**Round-2 review of #11952: approvable, no blockers.** All four round-1 MUSTs are fixed; two SHOULDs remain.\n\n### Round-1 MUSTs\n1. Pagination off-by-one in `listExports`: fixed, with a test.\n2. Missing migration for `exports.expires_at`: added.\n3. Error swallowed in the upload retry: rethrown after 3 tries.\n4. `ExportStatus` drifted from the API schema: now inferred from it.\n\n### SHOULD\n- `ExportJob.run()` is 140 lines; the upload and the notify halves split cleanly.\n- `expiresIn` is seconds in one place and a `Duration` in another.';
+export const GROUPED_REPORTS = [
+  ['be099958', 'Security review #11952', SECURITY],
+  ['f6513611', 'General review #11952', GENERAL],
+  ['c02d9e7a', 'Check the npm tarball', 'Task error: 503 Service Unavailable from registry.npmjs.org (retried 3 times)'],
+  ['91d0f3b5', 'How T3 Code groups reports', 'Stopped by the user. They ended it on purpose, so it did not fail: do not redo or delegate this task again unless they ask. Its chat is kept, so tell resumes it where it stopped.\n\nIts last message before the stop:\nLooking at `apps/web/src/components/chat/`: T3 has no grouped reports; each provider message is its own row.'],
+] as const;
+export const GROUPED: Said[][] = [[
+  ['user', 'Review #11952 twice, security and general, check the npm tarball, and look at how T3 Code groups reports.'],
+  ['tool', `spawn ${JSON.stringify({ tasks: GROUPED_REPORTS.map(([, title]) => ({ title, task: `${title}.` })) })}`],
+  ['echo', `spawn: Started: ${GROUPED_REPORTS.map(([id]) => id).join(', ')}. Reports will arrive automatically.`],
+  ['talk', 'Started four agents. I\'ll go through their reports together.'],
+  ['work', GROUPED_REPORTS.map(([id, title, report]) => `[${id} · ${title}] ${report}\n\nFull chat: zoom("${id}")`).join('\n\n')],
+  ['talk', 'Fix the token comparison before merging: that is the one blocker. The general review is happy, the tarball check hit an npm outage, and you stopped the T3 Code look.'],
+]];
+/** The agents of `GROUPED`, as their records were left once all four had reported. */
+export function grouped(directory: string, end: number) {
+  const ago = (seconds: number) => end - seconds * 1000, models = ['anthropic/claude-fable-5', 'anthropic/claude-opus-5-5', 'anthropic/claude-haiku-5-5', 'anthropic/claude-sonnet-5'];
+  const states = ['completed', 'completed', 'failed', 'stopped'] as const, took = [401, 543, 12, 90];
+  GROUPED_REPORTS.forEach(([id, title, report], at) => writeRun(directory, { id, title, task: `${title}.`, state: states[at], started: ago(600), ended: ago(600 - took[at]), model: models[at], report }));
+}
+
 /** A long edit, for a diff that is longer than the box it opens in: one function rewritten and its tests, most lines kept. */
 const STOP_BEFORE = `  async stop(grace: number) {
     const pid = this.child.pid;

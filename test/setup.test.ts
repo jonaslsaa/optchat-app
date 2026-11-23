@@ -37,30 +37,32 @@ async function setup(t: TestContext, options: Partial<ServerOptions> = {}, pi?: 
 
 test('the settings are kept in the app\'s own folder, reach every page, and name where new windows run', async t => {
   const { app, request } = await setup(t), elsewhere = mkdtempSync(join(home, 'elsewhere-'));
-  assert.deepEqual(await request('settings', {}), { theme: 'system', art: true, awake: true });
+  assert.deepEqual(await request('settings', {}), { theme: 'system', art: true, awake: true, reports: 'tabs' });
   assert.equal((await request('open', { profile: 'work', role: 'connected' })).window.cwd, home);
 
   // Each is changed by itself: the theme stays when only the folder is named. A folder is kept as its whole path.
-  assert.deepEqual(await request('setSettings', { theme: 'dark' }), { theme: 'dark', art: true, awake: true });
-  assert.deepEqual(await request('setSettings', { cwd: relative(process.cwd(), elsewhere) }), { theme: 'dark', cwd: elsewhere, art: true, awake: true });
-  assert.deepEqual(await request('setSettings', { awake: false }), { theme: 'dark', cwd: elsewhere, art: true, awake: false });
+  assert.deepEqual(await request('setSettings', { theme: 'dark' }), { theme: 'dark', art: true, awake: true, reports: 'tabs' });
+  assert.deepEqual(await request('setSettings', { cwd: relative(process.cwd(), elsewhere) }), { theme: 'dark', cwd: elsewhere, art: true, awake: true, reports: 'tabs' });
+  assert.deepEqual(await request('setSettings', { awake: false, reports: 'tabs' }), { theme: 'dark', cwd: elsewhere, art: true, awake: false, reports: 'tabs' });
   // The themes drawn in light and dark, and the sidebar's drawing, are kept as the rest are.
-  assert.deepEqual(await request('setSettings', { palette: { dark: 'grove' }, art: false }), { theme: 'dark', palette: { dark: 'grove' }, cwd: elsewhere, art: false, awake: false });
-  assert.deepEqual(await request('setSettings', { palette: { light: 'iris' } }), { theme: 'dark', palette: { light: 'iris', dark: 'grove' }, cwd: elsewhere, art: false, awake: false });
-  assert.deepEqual(await request('setSettings', { palette: { light: null, dark: null }, art: true }), { theme: 'dark', cwd: elsewhere, art: true, awake: false });
-  assert.deepEqual(JSON.parse(readFileSync(join(app, 'settings.json'), 'utf8')), { theme: 'dark', cwd: elsewhere, art: true, awake: false });
+  assert.deepEqual(await request('setSettings', { palette: { dark: 'grove' }, art: false }), { theme: 'dark', palette: { dark: 'grove' }, cwd: elsewhere, art: false, awake: false, reports: 'tabs' });
+  assert.deepEqual(await request('setSettings', { palette: { light: 'iris' } }), { theme: 'dark', palette: { light: 'iris', dark: 'grove' }, cwd: elsewhere, art: false, awake: false, reports: 'tabs' });
+  assert.deepEqual(await request('setSettings', { palette: { light: null, dark: null }, art: true }), { theme: 'dark', cwd: elsewhere, art: true, awake: false, reports: 'tabs' });
+  assert.deepEqual(await request('setSettings', { reports: 'sections' }), { theme: 'dark', cwd: elsewhere, art: true, awake: false, reports: 'sections' });
+  assert.deepEqual(await request('setSettings', { reports: 'tabs' }), { theme: 'dark', cwd: elsewhere, art: true, awake: false, reports: 'tabs' });
+  assert.deepEqual(JSON.parse(readFileSync(join(app, 'settings.json'), 'utf8')), { theme: 'dark', cwd: elsewhere, art: true, awake: false, reports: 'tabs' });
   assert.equal((await request('open', { profile: 'work', role: 'connected' })).window.cwd, elsewhere);
   // A folder that is not there is refused, and what was kept stays.
   await assert.rejects(request('setSettings', { theme: 'light', cwd: join(home, 'missing') }), /No such directory/);
-  assert.deepEqual(await request('settings', {}), { theme: 'dark', cwd: elsewhere, art: true, awake: false });
+  assert.deepEqual(await request('settings', {}), { theme: 'dark', cwd: elsewhere, art: true, awake: false, reports: 'tabs' });
 
   // A folder that is gone since it was kept does not stop a window from opening: it runs where it would with none kept.
   rmSync(elsewhere, { recursive: true });
   assert.equal((await request('open', { profile: 'work', role: 'connected' })).window.cwd, home);
-  assert.deepEqual(await request('setSettings', { cwd: null }), { theme: 'dark', art: true, awake: false });
+  assert.deepEqual(await request('setSettings', { cwd: null }), { theme: 'dark', art: true, awake: false, reports: 'tabs' });
   // A file from before a setting was there keeps what it has, and has that setting as it is before it is changed.
   writeFileSync(join(app, 'settings.json'), JSON.stringify({ theme: 'light', cwd: home }));
-  assert.deepEqual(readSettings(app), { theme: 'light', cwd: home, art: true, awake: true });
+  assert.deepEqual(readSettings(app), { theme: 'light', cwd: home, art: true, awake: true, reports: 'tabs' });
   // And a file that is no settings at all is none.
   writeFileSync(join(app, 'settings.json'), '["dark"]');
   assert.deepEqual(readSettings(app), { theme: 'system', art: true, awake: true });

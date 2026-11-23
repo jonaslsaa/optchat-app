@@ -102,9 +102,9 @@ function TreeLine({ tree, line, profile, heading, onCite }: { tree: Tree; line: 
   }, [there, open]);
   const { kind, label, gutter, text } = said(line), imported = line.n === 1 ? leaf(line).imported : undefined;
   return (
-    <div>
-      {/* A result is tucked under the call it answers. */}
-      <div className={cn('group relative', kind === 'echo' && '-mt-[3px]')}>
+    // A result right after a call is tucked under it.
+    <div data-kind={kind} className={cn(kind === 'echo' && '[[data-kind=tool]+&]:-mt-[3px]')}>
+      <div className="group relative">
         {/* A press that selected words in the line does not open it (`detail` is how many presses a click is, and none from the keys). */}
         <div role="button" tabIndex={0} data-line data-found={found || undefined} aria-current={found || undefined} aria-expanded={open}
           onClick={event => { if (event.detail && !getSelection()?.isCollapsed) return; asked.current = !open; void app.toggleLine(profile, line); }}

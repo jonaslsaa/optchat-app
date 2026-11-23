@@ -138,9 +138,10 @@ export function CiteCommentPopover({ item, anchor, above = false, showQuote = fa
   }, [anchor, above]);
 
   // Clicking outside, tabbing out, or wheel-scrolling outside commits any edited comment (without stealing focus), unless over
-  // the cap: a press on the marked words it is about leaves it open. Esc is heard on capture so the chat's run is not stopped
-  // while this popover is open, except when a modal dialog or inline rename sits over it (as `useOverlay` guards).
-  const settled = useRef(false), actions = useRef({ onSave, onCancel, opener, anchor });
+  // the cap: a press on the marked words it is about leaves it open, though it takes the focus (`onMark`). Esc is heard on
+  // capture so the chat's run is not stopped while this popover is open, except when a modal dialog or inline rename sits
+  // over it (as `useOverlay` guards).
+  const settled = useRef(false), onMark = useRef(false), actions = useRef({ onSave, onCancel, opener, anchor });
   actions.current = { onSave, onCancel, opener, anchor };
   const commit = (focus: boolean) => {
     if (settled.current) return true;
@@ -166,10 +167,11 @@ export function CiteCommentPopover({ item, anchor, above = false, showQuote = fa
   useEffect(() => {
     const outside = (target: EventTarget | null) => !(target instanceof Node && box.current?.contains(target));
     const away = (event: PointerEvent) => {
+      onMark.current = false;
       if (!outside(event.target)) return;
       if (event.target instanceof Node && actions.current.opener?.contains(event.target)) return;
       if (event.target instanceof Element && event.target.closest('[data-cite-action]')) return;
-      if (on(actions.current.anchor.range, event.clientX, event.clientY)) return;
+      if (on(actions.current.anchor.range, event.clientX, event.clientY)) { onMark.current = true; return; }
       commit(false);
     };
     const wheeled = (event: WheelEvent) => { if (outside(event.target)) commit(false); };
@@ -202,10 +204,11 @@ export function CiteCommentPopover({ item, anchor, above = false, showQuote = fa
   return createPortal(
     <div ref={box} role="dialog" aria-label="Comment on citation" style={{ left: pos.left, top: pos.top }}
       onPointerDown={event => event.stopPropagation()}
+      onFocus={() => { onMark.current = false; }}
       onBlur={event => {
         const next = event.relatedTarget;
         if (!next || (next instanceof Node && (box.current?.contains(next) || actions.current.opener?.contains(next)))) return;
-        if (next instanceof Element && next.closest('[data-cite-action]')) return;
+        if (onMark.current || next instanceof Element && next.closest('[data-cite-action]')) return;
         commit(false);
       }}
       className="enter enter-grow fixed z-50 w-[min(20rem,calc(100vw-1.5rem))] rounded-[15px] border bg-popover text-popover-foreground shadow-[0_16px_40px_-18px_rgb(0_0_0/55%)] dark:shadow-[0_18px_44px_-18px_rgb(0_0_0/80%)]">

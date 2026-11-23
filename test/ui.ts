@@ -1522,6 +1522,13 @@ test('the words a message in the composer cites stay marked until it no longer c
   await clickOn(0);
   await commentBox.waitFor();
   assert.equal(await lines.nth(3).getAttribute('aria-expanded'), 'false');
+  // The line takes the focus from a press on them while the comment is open, which saves nothing: Esc still discards it.
+  await page.keyboard.type('not yet');
+  await clickOn(0);
+  assert.deepEqual([await commentBox.inputValue(), await focused(page)], ['not yet', 'Comment on cited text']);
+  await page.keyboard.press('Escape');
+  await commentBox.waitFor({ state: 'detached' });
+  assert.ok(!(await chips()).includes('not yet'), 'a press on the words saved the comment');
   await page.context().close();
 });
 

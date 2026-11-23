@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { asTyped, called, cite, cited, citing, commented, joined, place, placed, whole, yours, type Cite } from '../src/ui/cite.ts';
+import { asTyped, called, cite, cited, citing, commented, joined, paired, place, placed, whole, yours, type Cite } from '../src/ui/cite.ts';
 
 test('a message is written with what it cites first, each with its place in the memory, and is read back as it was', () => {
   const cites: Cite[] = [cite('  the two lines\nthat were selected ', { id: 11953, n: 1 }), whole({ id: 11904, n: 4 }, 'How the snapshot is taken'), whole({ id: 64, n: 2 }), cite('said in a run')];
@@ -38,6 +38,15 @@ test('messages that go back into the composer are one message: what they cite, t
   const first = citing([cite('one', { id: 1, n: 1 })], 'first'), second = citing([cite('two')], 'second');
   assert.equal(joined([first, 'plain', '', second]), citing([cite('one', { id: 1, n: 1 }), cite('two')], 'first\n\nplain\n\nsecond'));
   assert.equal(joined(['only', '']), 'only');
+});
+
+test('a mark follows its citation through the message by its words and place, whatever its comment, and is left over once it is gone', () => {
+  const one = cite('the words', { id: 4, n: 1 }), same = cite('the words', { id: 9, n: 1 }), loose = cite('said in a run');
+  const marks = [{ cite: one, range: 'a' }, { cite: same, range: 'b' }, { cite: loose, range: 'c' }, { cite: one, range: 'd' }];
+  // Read back from the draft, with a comment added to one and the first taken off: each takes the first mark not yet taken.
+  const { cites } = cited(citing([commented(same, 'why?'), loose, one, one, whole({ id: 4, n: 1 }, 'the')], ''));
+  assert.deepEqual(paired(cites, marks).map(mark => mark?.range), ['b', 'c', 'a', 'd', undefined]);
+  assert.deepEqual(paired(cites.slice(1, 2), marks).map(mark => mark?.range), ['c']);
 });
 
 test('a citation can carry an optional comment as a sibling tag, multi-line and escaped, while older plain citations stay valid', () => {

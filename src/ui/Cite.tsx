@@ -6,7 +6,7 @@ import { escapes, label } from './keys.ts';
 import { Button, cn, Kbd } from './ui.tsx';
 
 /** Where a citation came from on screen, in viewport coordinates, so its comment popover opens right there; and for one cited
- * from a selection, the words it was (`range`), which stay marked while the popover is open. */
+ * from a selection, the words it was (`range`), which stay marked while it is in the message (`useMarks`). */
 export interface CiteAnchor { left: number; right: number; top: number; bottom: number; range?: Range }
 export const anchorOf = (element: Element): CiteAnchor => {
   const { left, right, top, bottom } = element.getBoundingClientRect();
@@ -55,6 +55,46 @@ export function CiteSelection({ content, logged = -1, onCite }: { content: RefOb
   );
 }
 
+/** Whether a point on screen is on the words of `range`, as they are drawn. Words that went from the page (the memory view
+ * took the chat's place) leave their range collapsed, and on nothing. */
+const on = (range: Range | undefined, x: number, y: number) =>
+  !!range && !range.collapsed && [...range.getClientRects()].some(line => x >= line.left && x <= line.right && y >= line.top && y <= line.bottom);
+/** What a click on marked words leaves to the page: a link, a button or a field in them. */
+const PRESSED = 'a, button, input, textarea, select, summary, label';
+/** The words a message cites stay marked where they were selected (`ranges`, one or none for each of its citations) for as
+ * long as it cites them, with the browser's own highlights. A click on them opens that citation's comment there (`onOpen`),
+ * and the pointer over them says it can: a click that ends a selection, or one on a link or a button in them, is theirs. */
+export function useMarks(ranges: readonly (Range | undefined)[], onOpen: (index: number, anchor: CiteAnchor) => void) {
+  const latest = useRef({ ranges, onOpen });
+  latest.current = { ranges, onOpen };
+  useEffect(() => {
+    const marked = ranges.filter(range => range !== undefined);
+    if (!marked.length || typeof Highlight === 'undefined') return;
+    CSS.highlights.set('cited', new Highlight(...marked));
+    return () => { CSS.highlights.delete('cited'); };
+  }, [ranges]);
+  useEffect(() => {
+    const at = ({ target, clientX, clientY }: MouseEvent) => target instanceof Node && !(target instanceof Element && target.closest(PRESSED))
+      ? latest.current.ranges.findIndex(range => on(range, clientX, clientY) && range?.intersectsNode(target)) : -1;
+    // On capture, so the click is the words' alone: in the memory view they are in a line, which it would open.
+    const clicked = (event: MouseEvent) => {
+      if (event.button || event.detail !== 1 || !getSelection()?.isCollapsed) return;
+      const index = at(event), range = latest.current.ranges[index], line = range && [...range.getClientRects()].at(-1);
+      if (!range || !line) return;
+      event.stopPropagation();
+      latest.current.onOpen(index, { left: line.left, right: line.right, top: line.top, bottom: line.bottom, range });
+    };
+    const moved = (event: PointerEvent) => document.documentElement.toggleAttribute('data-on-cite', !event.buttons && at(event) >= 0);
+    addEventListener('click', clicked, true);
+    addEventListener('pointermove', moved, { passive: true });
+    return () => {
+      removeEventListener('click', clicked, true);
+      removeEventListener('pointermove', moved);
+      document.documentElement.removeAttribute('data-on-cite');
+    };
+  }, []);
+}
+
 const KEY = 'h-4 min-w-4 text-2xs';
 /** Where the comment popover sits on screen: under `anchor` (or over it if `above`, or when there is no room below), aligned to
  * its right edge and clamped inside the viewport with a small margin. */
@@ -70,19 +110,12 @@ function placePopover(anchor: CiteAnchor, width: number, height: number, above: 
 /** Floating comment editor for a citation (T3 Code's `AssistantCitationCommentEditor` and `assistantCitationCommentDismissal`,
  * MIT, see THIRD_PARTY_NOTICES.md). Opens right where the Cite button or chip was: Enter saves, ⌘/Ctrl+Enter saves and sends,
  * Shift+Enter adds a line, Esc cancels (and removes a fresh citation), and clicking outside commits any edited comment. */
-export function CiteCommentPopover({ item, anchor, above = false, showQuote = false, opener, canSend = true, onSave, onSaveAndSend, onCancel, ref }: { item: Cite; anchor: CiteAnchor; above?: boolean; showQuote?: boolean; opener?: Element | null; canSend?: boolean; onSave: (comment: string, focus: boolean) => void; onSaveAndSend: (comment: string) => void; onCancel: () => void; ref?: Ref<{ commit: () => boolean; draft: () => string | undefined }> }) {
+export function CiteCommentPopover({ item, anchor, above = false, showQuote = false, fresh = false, opener, canSend = true, onSave, onSaveAndSend, onCancel, ref }: { item: Cite; anchor: CiteAnchor; above?: boolean; showQuote?: boolean; fresh?: boolean; opener?: Element | null; canSend?: boolean; onSave: (comment: string, focus: boolean) => void; onSaveAndSend: (comment: string) => void; onCancel: () => void; ref?: Ref<{ commit: () => boolean; draft: () => string | undefined; focus: () => void }> }) {
   const [comment, setComment] = useState(item.comment ?? '');
   const box = useRef<HTMLDivElement>(null), area = useRef<HTMLTextAreaElement>(null), draft = useRef(comment), [pos, setPos] = useState(() => placePopover(anchor, 320, 148, above));
   draft.current = comment;
   const tooLong = comment.trim().length > COMMENT_CAP;
 
-  // What was just cited stays marked where it was selected, with the browser's own highlights, while this is open (the
-  // selection itself is gone: it would take the caret with it).
-  useEffect(() => {
-    if (!anchor.range || typeof Highlight === 'undefined') return;
-    CSS.highlights.set('cited', new Highlight(anchor.range));
-    return () => { CSS.highlights.delete('cited'); };
-  }, [anchor]);
   // Focus the textarea at the end of any existing comment when opened.
   useLayoutEffect(() => {
     const input = area.current;
@@ -105,10 +138,10 @@ export function CiteCommentPopover({ item, anchor, above = false, showQuote = fa
   }, [anchor, above]);
 
   // Clicking outside, tabbing out, or wheel-scrolling outside commits any edited comment (without stealing focus), unless over
-  // the cap. Esc is heard on capture so the chat's run is not stopped while this popover is open, except when a modal dialog
-  // or inline rename sits over it (as `useOverlay` guards).
-  const settled = useRef(false), actions = useRef({ onSave, onCancel, opener });
-  actions.current = { onSave, onCancel, opener };
+  // the cap: a press on the marked words it is about leaves it open. Esc is heard on capture so the chat's run is not stopped
+  // while this popover is open, except when a modal dialog or inline rename sits over it (as `useOverlay` guards).
+  const settled = useRef(false), actions = useRef({ onSave, onCancel, opener, anchor });
+  actions.current = { onSave, onCancel, opener, anchor };
   const commit = (focus: boolean) => {
     if (settled.current) return true;
     if (draft.current.trim().length > COMMENT_CAP) return false;
@@ -123,6 +156,7 @@ export function CiteCommentPopover({ item, anchor, above = false, showQuote = fa
   };
   useImperativeHandle(ref, () => ({
     commit: () => commit(false),
+    focus: () => area.current?.focus(),
     draft: () => {
       if (settled.current || draft.current.trim().length > COMMENT_CAP) return undefined;
       settled.current = true;
@@ -135,6 +169,7 @@ export function CiteCommentPopover({ item, anchor, above = false, showQuote = fa
       if (!outside(event.target)) return;
       if (event.target instanceof Node && actions.current.opener?.contains(event.target)) return;
       if (event.target instanceof Element && event.target.closest('[data-cite-action]')) return;
+      if (on(actions.current.anchor.range, event.clientX, event.clientY)) return;
       commit(false);
     };
     const wheeled = (event: WheelEvent) => { if (outside(event.target)) commit(false); };
@@ -192,7 +227,7 @@ export function CiteCommentPopover({ item, anchor, above = false, showQuote = fa
       />
       {tooLong && <p role="status" className="px-3 pb-1.5 text-destructive-foreground text-xs">Comments can contain up to {COMMENT_CAP.toLocaleString()} characters.</p>}
       <div className="flex items-center gap-2.5 border-t py-1.5 ps-3 pe-1.5 text-muted-foreground text-xs">
-        {showQuote ? <><span><Kbd className={KEY}>{label('enter')}</Kbd> save</span><span><Kbd className={KEY}>Esc</Kbd> cancel</span></>
+        {!fresh ? <><span><Kbd className={KEY}>{label('enter')}</Kbd> save</span><span><Kbd className={KEY}>Esc</Kbd> cancel</span></>
           : <><span><Kbd className={KEY}>{label('enter')}</Kbd> cite</span><span><Kbd className={KEY}>{label('mod+enter')}</Kbd> cite &amp; send</span></>}
         <Button size="xs" className="ms-auto" disabled={tooLong} onPointerDown={event => event.preventDefault()} onClick={submit}>{tooLong ? 'Shorten comment' : 'Save'}</Button>
       </div>

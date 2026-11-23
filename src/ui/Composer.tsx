@@ -1,8 +1,8 @@
 import { CircleAlertIcon, CornerUpRightIcon, ImagePlusIcon, ListPlusIcon, PencilIcon, QuoteIcon, XIcon } from 'lucide-react';
 import { useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState, type ComponentRef, type MouseEvent, type Ref } from 'react';
 import type { PiRecord, WindowState } from '../protocol.ts';
-import { anchorOf, CiteCommentPopover, CiteGroup, SkillChip, type CiteAnchor } from './Cite.tsx';
-import { called, cited, citing, commented, joined, yours, type Cite } from './cite.ts';
+import { anchorOf, CiteCommentPopover, CiteGroup, SkillChip, useMarks, type CiteAnchor } from './Cite.tsx';
+import { called, cited, citing, commented, joined, paired, yours, type Cite } from './cite.ts';
 import { useCommands, useMentions } from './Commands.tsx';
 import { address, image, KINDS, sorted } from './images.ts';
 import { escapes, label, matches, useHeld, useShortcuts } from './keys.ts';
@@ -116,6 +116,22 @@ export function Composer({ state, window, live, chat, onSend, ref }: { state: St
   // Which citation chip's comment popover is open (`fresh` removes it on Cancel/Esc; `above` opens over a chip in the composer).
   const [editing, setEditing] = useState<{ index: number; anchor: CiteAnchor; fresh: boolean; above: boolean; opener?: Element | null }>();
   const popover = useRef<ComponentRef<typeof CiteCommentPopover>>(null);
+  // The words each citation was selected from, while they are on the page: a citation the message no longer has leaves its
+  // mark behind (`paired`), however it went (×, Backspace, Esc, sent, a draft brought back with ↑), and so does one whose
+  // words left the page (the memory view took the chat's place). A citation of a whole line, or from before the page was
+  // opened, has none.
+  const marks = useRef<{ cite: Cite; range: Range }[]>([]);
+  const ranges = useMemo(() => {
+    const now = paired(cites, marks.current.filter(mark => !mark.range.collapsed));
+    marks.current = now.filter(mark => mark !== undefined);
+    return now.map(mark => mark?.range);
+  }, [cites]);
+  // A click on them opens their comment there, as the pencil on the chip does: once more on the one open, it stays open.
+  useMarks(ranges, (index, anchor) => {
+    if (editing?.index === index) return popover.current?.focus();
+    if (popover.current && !popover.current.commit()) return;
+    setEditing({ index, anchor, fresh: false, above: false });
+  });
   const images = state.attached[window.id] ?? [], [refused, setRefused] = useState<string>(), [reading, setReading] = useState(0);
   const area = useRef<HTMLTextAreaElement>(null), picker = useRef<HTMLInputElement>(null), root = useRef<HTMLDivElement>(null), [caret, setCaret] = useState(0);
   const running = window.status === 'running', queued = [...live.queued.steering, ...live.queued.followUp];
@@ -144,6 +160,7 @@ export function Composer({ state, window, live, chat, onSend, ref }: { state: St
   useImperativeHandle(ref, () => ({
     cite: (cite, anchor) => {
       const next = [...cites, cite];
+      if (anchor?.range) marks.current.push({ cite, range: anchor.range });
       keep(citing(next, text));
       if (anchor) setEditing({ index: next.length - 1, anchor, fresh: true, above: false });
       else area.current?.focus();
@@ -251,7 +268,7 @@ export function Composer({ state, window, live, chat, onSend, ref }: { state: St
             <CiteCommentPopover
               ref={popover}
               key={`${editing.index}-${editing.fresh}-${editing.anchor.top}-${editing.anchor.right}`}
-              item={edited} anchor={editing.anchor} above={editing.above} showQuote={editing.above} opener={editing.opener} canSend={!sending && reading === 0}
+              item={edited} anchor={editing.anchor} above={editing.above} showQuote={editing.above} fresh={editing.fresh} opener={editing.opener} canSend={!sending && reading === 0}
               onSave={(comment, focus) => saveComment(comment, focus)}
               onSaveAndSend={saveAndSend}
               onCancel={cancelComment}

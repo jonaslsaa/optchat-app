@@ -69,6 +69,8 @@ export interface State {
   dismissed: Record<string, number>;
   /** Which of the sidebar's shelves are open (`shelf`), for every profile. */
   shelves: Record<Shelf, boolean>;
+  /** Whether the sidebar stands beside the chat in a wide window, for every profile and the pages that stand in a chat's place. */
+  sidebar: boolean;
 }
 type Provider = Params<'signIn'>['provider'];
 const PAGE = 200, SAVED = 'optchat-app', DRAFTS = 'optchat-app-drafts', DISMISSED = 'optchat-app-cut-off', SIGN_IN_ASKS = 100;
@@ -108,7 +110,7 @@ export function title(window: WindowState, state: State) {
 const reason = (error: unknown) => error instanceof Error ? error.message : String(error);
 
 export class App {
-  state: State = { connection: 'connecting', profiles: [], tabs: [], windows: [], selected: {}, logs: {}, live: {}, sessions: {}, agents: {}, github: {}, models: {}, commands: {}, chats: {}, memory: {}, config: {}, usage: {}, attached: {}, cutOff: [], dismissed: {}, scans: {}, imports: {}, imported: {}, shelves: { completing: true, completed: false } };
+  state: State = { connection: 'connecting', profiles: [], tabs: [], windows: [], selected: {}, logs: {}, live: {}, sessions: {}, agents: {}, github: {}, models: {}, commands: {}, chats: {}, memory: {}, config: {}, usage: {}, attached: {}, cutOff: [], dismissed: {}, scans: {}, imports: {}, imported: {}, shelves: { completing: true, completed: false }, sidebar: true };
   private client?: Client;
   private retrying?: ReturnType<typeof setTimeout>;
   private closed = false;
@@ -156,8 +158,8 @@ export class App {
     const before = this.state, next = { ...before, ...patch };
     // A lost connection is said once, for as long as it lasts: whatever fails meanwhile fails for that reason.
     this.state = next.connection === 'lost' || next.connection === 'refused' ? { ...next, error: undefined } : next;
-    const { tabs, profile, selected, shelves } = this.state;
-    if (tabs !== before.tabs || profile !== before.profile || selected !== before.selected || shelves !== before.shelves) this.storage().setItem(SAVED, JSON.stringify({ tabs, profile, selected, shelves }));
+    const { tabs, profile, selected, shelves, sidebar } = this.state;
+    if (tabs !== before.tabs || profile !== before.profile || selected !== before.selected || shelves !== before.shelves || sidebar !== before.sidebar) this.storage().setItem(SAVED, JSON.stringify({ tabs, profile, selected, shelves, sidebar }));
     for (const listener of this.listeners) listener();
   }
   private request<M extends Method>(method: M, params: Params<M>) {
@@ -188,7 +190,8 @@ export class App {
     this.keepAll(typed(this.drafts()));
     const open = isObject(saved) && isObject(saved.shelves) ? saved.shelves : {}, shelves = { ...this.state.shelves };
     for (const name of SHELVES) { const was = open[name]; if (typeof was === 'boolean') shelves[name] = was; }
-    this.set({ connection: 'open', profiles: names, tabs, profile, selected, shelves, windows: ordered(windows.windows), live: kept(this.state.live), sessions: kept(this.state.sessions), attached: typed(this.state.attached), error: undefined });
+    const sidebar = isObject(saved) && typeof saved.sidebar === 'boolean' ? saved.sidebar : this.state.sidebar;
+    this.set({ connection: 'open', profiles: names, tabs, profile, selected, shelves, sidebar, windows: ordered(windows.windows), live: kept(this.state.live), sessions: kept(this.state.sessions), attached: typed(this.state.attached), error: undefined });
     // Neither is waited for: looking for Pi takes a moment, and the chat does not need it to show.
     void this.ask('settings', {}).then(settings => settings && this.set({ settings }));
     void this.readThemes();
@@ -642,6 +645,7 @@ export class App {
   }
   async openFile(window: string, path: string, line?: number) { await this.ask('openFile', { window, path, line }); }
   async closeWindow(window: string) { await this.ask('close', { window }); }
+  toggleSidebar() { this.set({ sidebar: !this.state.sidebar }); }
   toggleShelf(shelf: Shelf) { this.set({ shelves: { ...this.state.shelves, [shelf]: !this.state.shelves[shelf] } }); }
   /** Answers a dialog, which then goes; one whose answer did not arrive stays to be answered again. */
   async answer(window: string, response: Omit<Params<'answer'>, 'window'>) {

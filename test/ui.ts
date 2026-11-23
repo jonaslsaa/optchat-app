@@ -1592,6 +1592,44 @@ test('a profile tab is dragged to another place, where it stays when the page is
   await context.close();
 });
 
+test('the sidebar closed beside the chat stays closed in another profile, after Settings and when the page is opened again, till ⌘B or its button opens it', async () => {
+  const context = await browser.newContext({ viewport: WIDE, reducedMotion: 'reduce' });
+  await context.addInitScript(saved => { if (!localStorage.getItem('optchat-app')) localStorage.setItem('optchat-app', saved); }, JSON.stringify({ tabs: ['ant', 'bee'], profile: 'ant', selected: {} }));
+  const page = await context.newPage(), windows = page.getByRole('navigation', { name: 'Windows' }), toggle = page.getByRole('button', { name: 'Toggle the sidebar' });
+  const closed = async (where: string) => {
+    await page.getByRole('textbox', { name: 'Message' }).waitFor();
+    await page.waitForTimeout(200);
+    assert.equal(await windows.count(), 0, `The sidebar opened again ${where}.`);
+  };
+  await page.goto(server.page);
+  await windows.waitFor();
+  await page.keyboard.press('ControlOrMeta+b');
+  await windows.waitFor({ state: 'detached' });
+  await page.getByRole('tablist', { name: 'Profiles' }).getByRole('tab', { name: 'bee' }).click();
+  await closed('in another profile');
+  await page.getByRole('button', { name: 'Settings' }).click();
+  await page.getByRole('tab', { name: 'General' }).waitFor();
+  await page.getByRole('button', { name: 'Settings' }).click();
+  await closed('after Settings');
+  await page.reload();
+  await closed('when the page was opened again');
+  await page.keyboard.press('ControlOrMeta+b');
+  await windows.waitFor();
+  await toggle.click();
+  await windows.waitFor({ state: 'detached' });
+  // Over a narrow chat it is open for one pick, and what it is beside a wide one is not changed by that.
+  await page.setViewportSize(NARROW);
+  await toggle.click();
+  await page.getByRole('button', { name: 'Close the sidebar' }).waitFor();
+  await page.keyboard.press('Escape');
+  await windows.waitFor({ state: 'detached' });
+  await page.setViewportSize(WIDE);
+  await closed('beside a wide chat after it was open over a narrow one');
+  await toggle.click();
+  await windows.waitFor();
+  await context.close();
+});
+
 test('the settings are in tabs: the arrows go from one to the next, the page opens again on the last one, and Esc closes it while the run goes on', async () => {
   const page = await open('tabs'), settings = page.getByRole('button', { name: 'Settings' }), theme = page.getByRole('textbox', { name: 'Folder for new windows' });
   await run(page);

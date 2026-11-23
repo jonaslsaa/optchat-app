@@ -65,7 +65,7 @@ test('the settings are kept in the app\'s own folder, reach every page, and name
   assert.deepEqual(readSettings(app), { theme: 'light', cwd: home, art: true, awake: true, reports: 'tabs' });
   // And a file that is no settings at all is none.
   writeFileSync(join(app, 'settings.json'), '["dark"]');
-  assert.deepEqual(readSettings(app), { theme: 'system', art: true, awake: true });
+  assert.deepEqual(readSettings(app), { theme: 'system', art: true, awake: true, reports: 'tabs' });
 
   // The app's own folder may be named with `~` too, as in a file that sets the environment.
   const kept = process.env.OPTCHAT_APP_HOME;

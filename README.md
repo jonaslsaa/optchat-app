@@ -39,7 +39,7 @@ The Memory view shows what the agent reads this turn. Open any summary into the 
 
 ## Agents you can steer
 
-Every subagent is listed live with what it is doing right now, and so are the agents it started. Open one to read its chat, tell it something, interrupt it, stop it, or start a finished one again. When the app restarts on agents that were cut off, one bar offers to resume them, a line a profile; it never spends tokens on its own.
+Every subagent is listed live with what it is doing right now, and so are the agents it started. Open one to read its chat, tell it something, interrupt it, stop it, or start a finished one again. Agents started together that report at once arrive as one card, a tab for each or one under the other, as you choose in Appearance. When the app restarts on agents that were cut off, one bar offers to resume them, a line a profile; it never spends tokens on its own.
 
 <p align="center">
   <picture>

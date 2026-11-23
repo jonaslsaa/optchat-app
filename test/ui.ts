@@ -40,6 +40,10 @@ grouped(together, Date.now());
 const lines = createProfile(home, 'lines');
 seed(lines, TEAM.length, Date.now(), TEAM);
 remember(lines, 4);
+// The same, for its lines as the memory view draws them.
+const gutter = createProfile(home, 'gutter');
+seed(gutter, TEAM.length, Date.now(), TEAM);
+remember(gutter, 4);
 const citedComments = createProfile(home, 'cited-comments');
 seed(citedComments, TEAM.length, Date.now(), TEAM);
 remember(citedComments, 4);
@@ -1489,7 +1493,32 @@ test('in the memory view a line is cited whole by its button, and the words sele
   await page.keyboard.press('Escape');
   assert.deepEqual(await page.getByText(/^Memory · /).allInnerTexts(), ['Memory · 0+8']);
   await page.getByRole('button', { name: 'Memory · 0+8' }).click();
-  assert.match(await page.locator('[data-found]').innerText(), /8 messages/);
+  assert.equal(await page.locator('[data-found]').getByTitle('8 messages').innerText(), '8');
+});
+
+test('a memory line says who said it by an icon in place of its tag, selected whole it is its words alone, and the pointer on it moves none of them', async () => {
+  const page = await open('gutter'), lines = page.locator('[data-line]');
+  await page.keyboard.press('Alt+m');
+  // 0+8, 8+2, then a message a line: the result of a spawn, a reply, a report and a reply.
+  await lines.nth(5).waitFor();
+  const who = (at: number) => lines.nth(at).getByRole('img').first().getAttribute('aria-label');
+  assert.deepEqual(await Promise.all([2, 3, 4].map(who)), ['Result of spawn', 'Agent', 'Report']);
+  assert.ok(await lines.nth(0).getByRole('img', { name: 'You' }).count() > 0);
+  // Selected from its first letter to its last, a line is what it says, without its tags, badge, time or number.
+  const whole = (at: number) => lines.nth(at).evaluate(line => { const range = document.createRange(); range.selectNodeContents(line); getSelection()?.removeAllRanges(); getSelection()?.addRange(range); return getSelection()?.toString().trim(); });
+  assert.equal(await whole(3), 'Started two agents. I\'ll tell you when they report.');
+  const summary = await whole(0) ?? '';
+  assert.ok(summary.startsWith('The shutdown test fails on Windows.') && !/\b(user|talk|tool): /.test(summary) && !/\d:\d\d/.test(summary), summary);
+  await page.evaluate(() => getSelection()?.removeAllRanges());
+  // The button that cites it has its room kept beside the words and the time, so the pointer on the line moves nothing.
+  const words = lines.nth(3).locator('[data-cite]'), before = await words.boundingBox(), time = await lines.nth(3).getByText(/ · 11$/).boundingBox();
+  await lines.nth(3).hover();
+  const button = page.getByRole('button', { name: 'Cite this line' }).nth(3);
+  await page.waitForFunction(at => getComputedStyle(document.querySelectorAll('[aria-label="Cite this line"]')[at].parentElement!).opacity === '1', 3);
+  const [after, cite] = await Promise.all([words.boundingBox(), button.boundingBox()]);
+  assert.ok(before && after && cite && time);
+  assert.deepEqual(after, before);
+  assert.ok(cite.x >= before.x + before.width && cite.x >= time.x + time.width, 'the button is beside the words and the time, not over them');
 });
 
 test('reports that arrived together are tabs: the arrows go from one to the next, find shows the tab it found in, Esc on a tab still stops the run, and as sections all are in sight', async t => {

@@ -371,8 +371,8 @@ async function pictures(browser: Browser, control: Client) {
   await memory.getByText('Memory', { exact: true }).click();
   await lines.first().waitFor();
   await shot(memory, '28-memory');
-  for (const name of ['message 346', 'message 347', 'message 349']) await lines.filter({ hasText: name }).click();
-  await memory.getByText('Ran npm test').waitFor();
+  for (const id of [346, 347, 349]) await lines.filter({ hasText: new RegExp(` ${id}(?!\\d)`) }).click();
+  await memory.getByText('Ran npm test').last().waitFor();
   await shot(memory, '29-memory-messages');
   await lines.first().click();
   await lines.nth(1).click();
@@ -389,6 +389,20 @@ async function pictures(browser: Browser, control: Client) {
   await slim.keyboard.press('Alt+m');
   await slim.locator('[data-line]').first().waitFor();
   await shot(slim, '32-memory-narrow');
+  // Lines opened down to single messages: the 16 from 320 on, down to 332+2 and 334+2, with the pointer on one of them.
+  for (const dark of [false, true]) {
+    const page = await open(['long'], { height: 1300, dark: dark || allDark }), all = page.locator('[data-line]');
+    await page.keyboard.press('Alt+m');
+    await all.nth(13).waitFor();
+    for (const at of [2, 4, 6, 7, 10]) {
+      const count = await all.count();
+      await all.nth(at).click();
+      await page.waitForFunction(count => document.querySelectorAll('[data-line]').length === count + 2, count);
+    }
+    await all.nth(2).evaluate(line => line.scrollIntoView({ block: 'start' }));
+    await shot(page, dark ? '30c-memory-leaves-dark' : '30b-memory-leaves', all.nth(9));
+    await page.close();
+  }
   // Its search: the messages that say a word, newest first; the oldest of them opened in the tree, where it is; and a word
   // nothing says.
   const sought = memory.getByRole('searchbox', { name: 'Search the memory' }), found = memory.getByRole('region', { name: 'Messages found' });

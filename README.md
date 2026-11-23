@@ -28,7 +28,7 @@ It is the desktop app for [pi-optchat](https://github.com/jonaslsaa/pi-optchat),
 
 ## A memory you can open
 
-The Memory view shows what the agent reads this turn. Open any summary into the two it was made from, all the way down to the messages as they were said. Search finds any message and shows where it sits in the tree.
+The Memory view shows what the agent reads this turn, one line each: an icon says who said a message (you, the agent, a tool and what it gave back, a report), and a badge how many messages a summary holds. Open any summary into the two it was made from, all the way down to the messages as they were said. Search finds any message and shows where it sits in the tree.
 
 <p align="center">
   <picture>

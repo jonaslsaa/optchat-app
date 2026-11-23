@@ -54,11 +54,11 @@ test('the view tiles the whole log, and a line opens into the two under it', asy
   await assert.rejects(profiles.zoom({ profile: 'tree', id: 3, n: 2 }), /No line 3\+2/);
 });
 
-test('a summary the owning Pi has not built yet is a line without text: the app summarizes nothing', async () => {
+test('a summary the owning Pi has not built yet is a line without text: the app summarizes nothing, and a line of one message still says who said it', async () => {
   const directory = createProfile(home, 'unbuilt'), long = 'long '.repeat(200);
   mkdirSync(join(directory, 'main'));
   writeFileSync(join(directory, 'main', '2026-01-02.jsonl'), [0, 1, 2, 3].map(i => entry(i, long)).join(''));
-  assert.deepEqual((await profiles.view({ profile: 'unbuilt' })).lines, [0, 1, 2, 3].map(id => ({ id, n: 1, text: undefined, from: '2026-01-02T00:00:00.000Z', to: '2026-01-02T00:00:00.000Z' })));
+  assert.deepEqual((await profiles.view({ profile: 'unbuilt' })).lines, [0, 1, 2, 3].map(id => ({ id, n: 1, text: undefined, kind: 'user', from: '2026-01-02T00:00:00.000Z', to: '2026-01-02T00:00:00.000Z' })));
 });
 
 test('a message is answered as it was said, a tool call with what it printed; and a line of imported history by its earliest and latest message', async () => {

@@ -1,4 +1,5 @@
 import type { Hit, Line, Message, Result, WindowState } from '../protocol.ts';
+import { act, reported } from './transcript.ts';
 
 /** A search of the memory: the `text` in its box, and the last answer: the text it was asked for (`of`), the messages found
  * so far, newest first, and how many older ones there are to ask for (`more`). While the answer for what was just typed is
@@ -52,3 +53,53 @@ export const polled = (tree: Tree, window: Pick<WindowState, 'status' | 'outside
 export const calling = (tree: Tree) => Object.values(tree.originals).flatMap(messages => messages.length === 1 && messages[0].kind === 'tool' ? [messages[0].i] : []);
 /** When the profile's first message was said: the earliest date of any line. */
 export const since = (lines: readonly Line[]) => lines.reduce<string | undefined>((first, { from }) => first === undefined || Date.parse(from) < Date.parse(first) ? from : first, undefined);
+
+/** Who said a message, as pi-optchat keeps it. */
+export type Kind = Message['kind'];
+/** How pi-optchat begins the line of one message (its `head`): its kind, after the day it was written when it is imported. */
+const HEAD = /^(?:\[IMP ([^\]\n]+)\] )?(user|talk|tool|echo|work|note): /;
+/** A line of one message as its row shows it: who said it, and what it says without the head that says so. The kind is the
+ * line's own (the server reads it from the log); a line that has none, from a server before it, goes by how its summary
+ * begins. A summary the compactor wrote may begin otherwise, and then it is all text. `imported`: the day it was written. */
+export function leaf({ kind, text = '' }: Pick<Line, 'kind' | 'text'>): { kind?: Kind; imported?: string; text: string } {
+  const [head = '', imported, said] = HEAD.exec(text) ?? [];
+  return { kind: kind ?? (said as Kind | undefined), ...imported !== undefined && { imported }, text: text.slice(head.length) };
+}
+/** A tool call as its row says it: the call itself (`name {json}`, as a short one is kept) in the chat's words, with the folder
+ * a command first goes to (`cd <folder> && …`) set apart; a summary the compactor wrote, as its words, named by the first. */
+export function called(text: string): { name: string; verb?: string; folder?: string; subject: string } {
+  const space = text.indexOf(' '), name = space < 0 ? text : text.slice(0, space);
+  let args: unknown;
+  try { args = JSON.parse(text.slice(space + 1)); } catch {}
+  if (!/^[\w-]+$/.test(name) || typeof args !== 'object' || args === null || Array.isArray(args)) return { name: name.toLowerCase().replace(/\W+$/, ''), subject: text };
+  const { verb, subject } = act({ key: 0, type: 'tool', name, args: args as Record<string, unknown>, output: '', failed: false }, false);
+  const [, path, rest] = (name === 'bash' && /^cd (\S+) && ([\s\S]+)$/.exec(subject)) || [];
+  return path === undefined ? { name, verb, subject } : { name, verb, folder: path.split('/').filter(Boolean).at(-1) ?? path, subject: rest };
+}
+/** A tool's result without the tool's name in front, which the call above it says. */
+export function printed(text: string): { name?: string; text: string } {
+  const [head = '', name] = /^([\w-]+): /.exec(text) ?? [];
+  return { ...name !== undefined && { name }, text: text.slice(head.length) };
+}
+/** What pi-optchat puts in front of what an agent said while it still works. */
+const RUNNING = 'Message from subagent (still running): ';
+/** A report as its row says it: the first one's agent and title, if it is kept as pi-optchat writes it, and what it says. */
+export function report(text: string): { agent?: string; title?: string; running: boolean; text: string } {
+  const [{ agent, title, body } = { body: text }] = reported(text), running = body.startsWith(RUNNING);
+  return { ...agent !== undefined && { agent }, ...title !== undefined && { title }, running, text: running ? body.slice(RUNNING.length) : body };
+}
+/** A summary in pieces: its words, and the kinds it tags them with (`user:`), where a tag begins it, a line or a sentence. */
+export function tagged(text: string): ({ text: string } | { kind: Kind })[] {
+  const pieces: ({ text: string } | { kind: Kind })[] = [], tag = /(^|\n|[.;!?)\]"”]\s+|→\s*)(user|talk|tool|echo|work|note): /g;
+  let from = 0;
+  for (const match of text.matchAll(tag)) {
+    const at = match.index + match[1].length;
+    if (at > from) pieces.push({ text: text.slice(from, at) });
+    pieces.push({ kind: match[2] as Kind });
+    from = match.index + match[0].length;
+  }
+  if (from < text.length) pieces.push({ text: text.slice(from) });
+  return pieces;
+}
+/** How many messages a line holds, as its badge says it: 256, or 16k. */
+export const size = (n: number) => n >= 1024 ? `${Math.round(n / 1024)}k` : String(n);

@@ -4,7 +4,7 @@ import { PROFILE_NAME, type Settings as Kept } from '../protocol.ts';
 import { Appearance } from './Appearance.tsx';
 import { Config, Instructions } from './Config.tsx';
 import { missing, Setup } from './Setup.tsx';
-import { app, mainOf, profileName, type State } from './store.ts';
+import { app, givenName, mainOf, profileName, type State } from './store.ts';
 import { Button, cn, Switch } from './ui.tsx';
 
 /** The settings page, in place of the chat, in tabs: where new windows run and what a chat needs (`Setup`); how the app looks
@@ -113,7 +113,7 @@ export function Settings({ state, onClose, onMade }: { state: State; onClose: ()
     appearance: state.settings && <Appearance state={state} settings={state.settings} />,
     profile: profile !== undefined && config && <>
       <Section title="Display name" hint="Shown in tabs and menus in this app. Leave blank to show the profile ID.">
-        <ProfileName key={profile} profile={profile} kept={state.settings?.names?.[profile]} />
+        <ProfileName key={profile} profile={profile} kept={givenName(state, profile)} />
       </Section>
       <Section title={`Settings for ${profileName(state, profile)}`} hint="pi-optchat settings for this profile. Changes save when you leave a field and apply without a restart.">
         <Config key={profile} profile={profile} config={config} models={state.models[mainOf(profile)]?.models ?? []} />

@@ -95,8 +95,10 @@ export function shelved(windows: WindowState[], open: Record<Shelf, boolean>, se
 /** The profiles the bar over the page offers to resume: cut off, and not dismissed since. */
 export const cutOffShown = ({ cutOff, dismissed }: Pick<State, 'cutOff' | 'dismissed'>) =>
   cutOff.filter(({ profile, agents }) => agents.some(({ started }) => started > (Object.hasOwn(dismissed, profile) ? dismissed[profile] : -Infinity)));
-/** What a profile is called: the name you gave it (`names` in the settings), else its id, which is pi-optchat's and its folder's. */
-export const profileName = ({ settings }: Pick<State, 'settings'>, profile: string) => settings?.names?.[profile] ?? profile;
+/** The name you gave a profile (`names` in the settings), if you gave it one: only its own, as an id may be `constructor`. */
+export const givenName = ({ settings }: Pick<State, 'settings'>, profile: string) => settings?.names && Object.hasOwn(settings.names, profile) ? settings.names[profile] : undefined;
+/** What a profile is called: the name you gave it, else its id, which is pi-optchat's and its folder's. */
+export const profileName = (state: Pick<State, 'settings'>, profile: string) => givenName(state, profile) ?? profile;
 /** The profiles in the order of the names they are shown by, as the list of profiles has them. */
 export const byName = (state: Pick<State, 'profiles' | 'settings'>) => state.profiles.toSorted((one, other) => profileName(state, one).localeCompare(profileName(state, other), 'en', { sensitivity: 'base' }));
 /** Letters NFKD leaves whole, as English spells them. */
@@ -286,7 +288,8 @@ export class App {
     try { await this.request('createProfile', { name }); } catch (error) { return reason(error); }
     // Named before it is there to open, so its tab never shows the id first.
     const settings = shown && shown !== name ? await this.saveSettings({ names: { [name]: shown } }) : undefined;
-    this.set({ profiles: [...this.state.profiles, name].sort(), ...settings && { settings } });
+    // The list may have found it on disk meanwhile (`findProfiles`): it is there once.
+    this.set({ profiles: [...new Set([...this.state.profiles, name])].sort(), ...settings && { settings } });
   }
   /** The profiles as they are now. Once there is one, it is opened. */
   async findProfiles() {

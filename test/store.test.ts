@@ -246,6 +246,8 @@ test('a profile is made under its id and shown by its name, which is the app\'s 
   assert.match(await app.createProfile('Not An Id', 'Pretty') ?? '', /Profile names:/);
   assert.deepEqual(app.state.settings?.names, { 'kahoot-work': 'Kahoot Work' });
   assert.equal(profileName(app.state, 'plain'), 'plain');
+  // An id that is a name every object has is still its own.
+  assert.equal(profileName(app.state, 'constructor'), 'constructor');
   // The list of profiles is in the order of the names they are shown by, whatever their case.
   const settings = { theme: 'system', art: true, awake: true, reports: 'tabs' } as const;
   assert.deepEqual(byName({ profiles: ['alpha', 'mid', 'zeta'], settings: { ...settings, names: { zeta: 'Beta', alpha: 'zulu' } } }), ['zeta', 'mid', 'alpha']);

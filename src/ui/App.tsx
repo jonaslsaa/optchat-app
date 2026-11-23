@@ -45,9 +45,10 @@ function Profile({ state, profile, onSettings, onUsage, onNewProfile, onImport, 
   // The sidebar stands beside the chat in a wide window. In a narrow one it lies over the chat and is opened for one pick: a
   // window picked, a new one, Esc and a press beside it close it (`useOverlay`), and it is closed again whenever the window
   // is narrow anew. Its top row is then not what the desktop app's window is dragged by: Electron goes by the order in the
-  // page, not by what is on top, and the sidebar's buttons would drag instead of being pressed.
-  const wide = useMedia('(min-width: 48rem)'), [beside, setBeside] = useState(true), [over, setOver] = useState(false);
-  const sidebar = wide ? beside : over, covered = sidebar && !wide, toggle = () => (wide ? setBeside : setOver)(shown => !shown);
+  // page, not by what is on top, and the sidebar's buttons would drag instead of being pressed. Beside the chat it is the
+  // app's (`state.sidebar`): closed, it stays closed in another profile, after Settings and when the page is opened again.
+  const wide = useMedia('(min-width: 48rem)'), [over, setOver] = useState(false);
+  const sidebar = wide ? state.sidebar : over, covered = sidebar && !wide, toggle = () => wide ? app.toggleSidebar() : setOver(shown => !shown);
   const drawer = useRef<HTMLDivElement>(null), opener = useRef<HTMLButtonElement>(null), panelButton = useRef<HTMLButtonElement>(null);
   useEffect(() => { if (wide) setOver(false); }, [wide]);
   useOverlay(covered, () => setOver(false), drawer, opener);

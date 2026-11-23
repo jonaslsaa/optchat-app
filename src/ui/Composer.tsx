@@ -1,11 +1,11 @@
 import { CircleAlertIcon, CornerUpRightIcon, ImagePlusIcon, ListPlusIcon, PencilIcon, QuoteIcon, XIcon } from 'lucide-react';
-import { useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState, type ComponentRef, type Ref } from 'react';
+import { useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState, type ComponentRef, type MouseEvent, type Ref } from 'react';
 import type { PiRecord, WindowState } from '../protocol.ts';
 import { anchorOf, CiteCommentPopover, CiteGroup, SkillChip, type CiteAnchor } from './Cite.tsx';
 import { called, cited, citing, commented, joined, yours, type Cite } from './cite.ts';
 import { useCommands, useMentions } from './Commands.tsx';
 import { address, image, KINDS, sorted } from './images.ts';
-import { escapes, label, matches, useShortcuts } from './keys.ts';
+import { escapes, label, matches, useHeld, useShortcuts } from './keys.ts';
 import { Model } from './Model.tsx';
 import { app, type State } from './store.ts';
 import { failure, news, recalled, type Item, type Live, type Notice } from './transcript.ts';
@@ -92,12 +92,14 @@ export function Queued({ messages, later = 0, editable = false }: { messages: re
 }
 /** The pencil and × on a citation's chip. */
 const CHIP_ACTION = 'shrink-0 rounded-[5px] p-[3px] text-muted-foreground outline-none hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/70 dark:hover:bg-white/9';
-/** The round button that sends what is typed: to an agent in a run (`steer`) it is a message on its way in. */
-export function SendButton({ steer, ...props }: { steer: boolean; disabled: boolean; onClick: () => void }) {
+/** The round button that sends what is typed: to an agent in a run (`steer`) it is a message on its way in, and with ⌘ or Ctrl
+ * down (`queue`) one that waits for the run to end. */
+export function SendButton({ steer, queue = false, ...props }: { steer: boolean; queue?: boolean; disabled: boolean; onClick: (event: MouseEvent) => void }) {
+  const [name, keys] = queue ? ['Queue the message for after this run', `Queue (${label('mod+enter')})`] : steer ? ['Steer the agent', `Steer (${label('enter')})`] : ['Send', `Send (${label('enter')})`];
   return (
-    <button type="button" aria-label={steer ? 'Steer the agent' : 'Send'} title={steer ? `Steer (${label('enter')})` : `Send (${label('enter')})`} {...props}
+    <button type="button" aria-label={name} title={keys} {...props}
       className="relative isolate flex size-8 shrink-0 items-center justify-center overflow-hidden rounded-full bg-message-action text-message-action-foreground shadow-xs transition-all duration-150 enabled:inset-shadow-control-highlight hover:scale-105 hover:bg-message-action-hover active:shadow-none disabled:pointer-events-none disabled:bg-foreground/12 disabled:text-muted-foreground disabled:shadow-none">
-      {steer ? <CornerUpRightIcon className="size-3.5" /> : <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M7 11.5V2.5M7 2.5L3 6.5M7 2.5L11 6.5" /></svg>}
+      {queue ? <ListPlusIcon className="size-3.5" /> : steer ? <CornerUpRightIcon className="size-3.5" /> : <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M7 11.5V2.5M7 2.5L3 6.5M7 2.5L11 6.5" /></svg>}
     </button>
   );
 }
@@ -117,6 +119,8 @@ export function Composer({ state, window, live, chat, onSend, ref }: { state: St
   const images = state.attached[window.id] ?? [], [refused, setRefused] = useState<string>(), [reading, setReading] = useState(0);
   const area = useRef<HTMLTextAreaElement>(null), picker = useRef<HTMLInputElement>(null), root = useRef<HTMLDivElement>(null), [caret, setCaret] = useState(0);
   const running = window.status === 'running', queued = [...live.queued.steering, ...live.queued.followUp];
+  // ⌘ or Ctrl down while it runs: the button, as ⌘↵, queues the message for after the run.
+  const queueing = useHeld(event => event.metaKey || event.ctrlKey) && running;
   // It is kept as it is typed (`app.draft`): while you look at another window, and when the page is opened again.
   const keep = (message: string) => { setDraft(message); app.keep(window.id, message); }, change = (typed: string) => keep(citing(cites, typed));
   const attached = () => app.state.attached[window.id] ?? [];
@@ -296,7 +300,7 @@ export function Composer({ state, window, live, chat, onSend, ref }: { state: St
                 <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor" aria-hidden="true"><rect x="2" y="2" width="8" height="8" rx="1.5" /></svg>
               </button>
             ) : (
-              <SendButton steer={running} disabled={empty || sending || reading > 0} onClick={() => void send(false)} />
+              <SendButton steer={running} queue={queueing} disabled={empty || sending || reading > 0} onClick={event => void send(event.metaKey || event.ctrlKey)} />
             )}
           </div>
         </div>

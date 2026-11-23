@@ -4,7 +4,7 @@ import { ROW_EVENT } from '../menu.ts';
 import type { WindowState } from '../protocol.ts';
 import { canComplete } from '../window.ts';
 import { Art } from './Art.tsx';
-import { label, useAltHeld } from './keys.ts';
+import { label, useHeld } from './keys.ts';
 import { Rename } from './Rename.tsx';
 import { isObject } from './transcript.ts';
 import { app, shelf, shelved, title, UNTITLED, type Shelf, type State } from './store.ts';
@@ -18,7 +18,7 @@ import { UpdateButton } from './Update.tsx';
  * chat. A double-click on a connected window's name, F2 on its row, or the desktop app's right-click Rename, renames it (`Rename`), and its
  * right-click Remove removes it. The shelves are T3 Code's "Working" and "Settled" ones, and the row and its states are T3 Code's sidebar thread row (MIT, see THIRD_PARTY_NOTICES.md). */
 export function Sidebar({ state, profile, list: { top, shelves, rows }, selected, onPick }: { state: State; profile: string; list: ReturnType<typeof shelved>; selected: string; onPick: () => void }) {
-  const hints = useAltHeld(), [renaming, setRenaming] = useState<string>();
+  const hints = useHeld(event => event.altKey), [renaming, setRenaming] = useState<string>();
   useEffect(() => {
     const asked = ({ detail }: Event & { detail?: unknown }) => {
       if (!isObject(detail) || typeof detail.window !== 'string') return;

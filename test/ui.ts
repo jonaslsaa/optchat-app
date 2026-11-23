@@ -23,9 +23,9 @@ process.env.FAKE_PI_HOME = join(home, 'pi');
 mkdirSync(join(home, 'pi', 'pi-optchat'), { recursive: true });
 writeFileSync(join(home, 'pi', 'pi-optchat', 'package.json'), JSON.stringify({ name: 'pi-optchat', version: '0.12.2' }));
 writeFileSync(join(home, 'pi', 'state.json'), JSON.stringify({ version: '1.5.2', providers: ['anthropic', 'openai'], packages: { 'npm:pi-optchat': join(home, 'pi', 'pi-optchat') } }));
-for (const name of ['bar', 'cold', 'colder', 'chat', 'beside', 'sheet', 'memory', 'rows', 'menus', 'fields', 'asks', 'windows', 'importing', 'into', 'keys', 'spend', 'commands', 'arrows', 'mute', 'said', 'images', 'gallery', 'tabs', 'slow', 'inline', 'held', 'unread', 'finish', 'renames']) {
+for (const name of ['bar', 'cold', 'colder', 'chat', 'beside', 'sheet', 'memory', 'rows', 'menus', 'fields', 'asks', 'windows', 'importing', 'into', 'keys', 'spend', 'commands', 'arrows', 'mute', 'said', 'images', 'gallery', 'tabs', 'slow', 'inline', 'held', 'unread', 'finish', 'renames', 'queues']) {
   const profile = createProfile(home, name);
-  if (['bar', 'cold', 'colder', 'memory', 'windows', 'keys', 'spend', 'arrows', 'unread'].includes(name)) { writeMemory(profile, 16); continue; }
+  if (['bar', 'cold', 'colder', 'memory', 'windows', 'keys', 'spend', 'arrows', 'unread', 'queues'].includes(name)) { writeMemory(profile, 16); continue; }
   seed(profile, TEAM.length, Date.now(), TEAM);
   agents(profile, Date.now());
   // More that ended than the list shows at first.
@@ -196,6 +196,36 @@ test('⌥↑ takes the messages still waiting back into the box, in front of wha
   await page.getByLabel('Cited in the message').getByText('the line').waitFor();
   await page.waitForFunction(() => document.querySelector<HTMLTextAreaElement>('textarea[aria-label=Message]')?.selectionStart === 3, null, { timeout: 2000 }).catch(() => assert.fail('The caret stayed where it was.'));
   assert.equal(await box.inputValue(), 'abc');
+});
+
+test('while the agent runs, ⌘ or Ctrl held turns the send button into one that queues, until it is let go, the window loses the focus or something is pasted', async () => {
+  const page = await open('queues'), box = page.getByRole('textbox', { name: 'Message' }), waiting = page.getByLabel('Messages waiting for the agent');
+  const steer = page.getByRole('button', { name: 'Steer the agent' }), queue = page.getByRole('button', { name: 'Queue the message for after this run' });
+  await run(page);
+  await box.fill('Then open the pull request');
+  await steer.waitFor();
+  await page.keyboard.down('ControlOrMeta');
+  await queue.waitFor({ timeout: 2000 }).catch(() => assert.fail('Holding the key left the button steering.'));
+  assert.match(await queue.getAttribute('title') ?? '', /^Queue \(/);
+  await page.keyboard.up('ControlOrMeta');
+  await steer.waitFor({ timeout: 2000 }).catch(() => assert.fail('Letting go left the button queueing.'));
+  // Its keyup goes to another window, or never comes after a paste dictation sent: the button lets go of it all the same.
+  for (const lost of ['blur', 'paste']) {
+    await page.keyboard.down('ControlOrMeta');
+    await queue.waitFor();
+    await page.evaluate(type => dispatchEvent(new Event(type)), lost);
+    await steer.waitFor({ timeout: 2000 }).catch(() => assert.fail(`A ${lost} left the button queueing.`));
+    await page.keyboard.up('ControlOrMeta');
+  }
+  // Clicked with the key down it queues, as ⌘↵ does; without it, it steers.
+  await page.keyboard.down('ControlOrMeta');
+  await queue.click();
+  await page.keyboard.up('ControlOrMeta');
+  await waiting.getByText('Queued for after this run').waitFor();
+  await waiting.getByText('Then open the pull request').waitFor();
+  await box.fill('Check the tests first');
+  await steer.click();
+  await waiting.getByText('Steer · waiting to be read').waitFor();
 });
 
 test('the usage page closes on Esc and the run goes on, and it reads the ledger again when the main chat changes', async () => {

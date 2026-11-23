@@ -107,13 +107,15 @@ export function walk(event: ReactKeyboardEvent) {
   event.preventDefault();
   all[(here + (event.key === 'ArrowDown' ? 1 : all.length - 1)) % all.length]?.focus();
 }
-/** Whether ⌥ (Alt) is down, which is when the page shows what it does with a digit. */
-export function useAltHeld() {
-  const [held, setHeld] = useState(false);
+/** Whether a modifier is down, as `held` reads it off each key: ⌥ (Alt) when the page shows what it does with a digit, ⌘ or Ctrl
+ * when a message sent now would wait for the run. It lets go when the window loses the focus, whose keyup it never hears, and
+ * on a paste, which dictation sends as ⌘V and may not let go of ⌘ after. */
+export function useHeld(held: (event: KeyboardEvent) => boolean) {
+  const [down, setDown] = useState(false);
   useEffect(() => {
-    const pressed = (event: KeyboardEvent) => setHeld(event.altKey), left = () => setHeld(false);
-    addEventListener('keydown', pressed); addEventListener('keyup', pressed); addEventListener('blur', left);
-    return () => { removeEventListener('keydown', pressed); removeEventListener('keyup', pressed); removeEventListener('blur', left); };
+    const pressed = (event: KeyboardEvent) => setDown(held(event)), left = () => setDown(false);
+    addEventListener('keydown', pressed, true); addEventListener('keyup', pressed, true); addEventListener('blur', left); addEventListener('paste', left, true);
+    return () => { removeEventListener('keydown', pressed, true); removeEventListener('keyup', pressed, true); removeEventListener('blur', left); removeEventListener('paste', left, true); };
   }, []);
-  return held;
+  return down;
 }

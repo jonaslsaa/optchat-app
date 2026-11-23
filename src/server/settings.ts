@@ -11,7 +11,7 @@ export const appHome = () => whole(process.env.OPTCHAT_APP_HOME ?? '~/.optchat-a
 /** A folder as its whole path, as you would write it: `~` is your home folder. */
 function whole(path: string) { return resolve(path.replace(/^~(?=$|[\\/])/, homedir())); }
 /** The settings before any is changed. */
-const DEFAULTS: Settings = { theme: 'system', art: true, awake: true };
+const DEFAULTS: Settings = { theme: 'system', art: true, awake: true, reports: 'tabs' };
 
 /** The settings as `settings.json` in the app's folder keeps them. A file that is missing or that this app cannot read counts
  * as no settings, and is left as it is until you change one. */
@@ -26,13 +26,13 @@ export function readSettings(directory: string): Settings {
 export const isDirectory = (path: string) => statSync(path, { throwIfNoEntry: false })?.isDirectory() ?? false;
 /** Keeps `kept` with what `change` names changed, written whole beside the old file and then put in its place, so a crash
  * leaves one or the other. A folder is kept as its whole path, and has to be there; an editor is one of `EDITORS`. */
-export function writeSettings(directory: string, kept: Settings, { theme = kept.theme, palette: changed, art = kept.art, cwd: folder, awake = kept.awake, editor = kept.editor }: Params<'setSettings'>): Settings {
+export function writeSettings(directory: string, kept: Settings, { theme = kept.theme, palette: changed, art = kept.art, cwd: folder, awake = kept.awake, editor = kept.editor, reports = kept.reports }: Params<'setSettings'>): Settings {
   const cwd = folder === undefined ? kept.cwd : folder === null ? undefined : whole(folder);
   // A theme is named for one appearance and leaves the other's as it is; `null` is the app's own colours again.
   const palette = Object.fromEntries(Object.entries({ ...kept.palette, ...changed }).filter((entry): entry is [string, string] => typeof entry[1] === 'string'));
   if (folder && cwd && !isDirectory(cwd)) throw new Error(`No such directory: ${cwd}`);
   if (editor !== undefined && !isEditor(editor)) throw new Error(`No editor ${editor}.`);
-  const settings: Settings = { theme, ...Object.keys(palette).length > 0 && { palette }, art, ...cwd !== undefined && { cwd }, awake, ...editor !== undefined && { editor } }, file = join(directory, 'settings.json');
+  const settings: Settings = { theme, ...Object.keys(palette).length > 0 && { palette }, art, ...cwd !== undefined && { cwd }, awake, ...editor !== undefined && { editor }, reports }, file = join(directory, 'settings.json');
   mkdirSync(directory, { recursive: true });
   // Two servers may share the folder: each writes a file of its own beside it.
   const written = `${file}.${process.pid}.new`;

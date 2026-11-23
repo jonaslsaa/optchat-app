@@ -17,6 +17,7 @@ Two servers on one machine share that folder. Each reads the settings when it st
 | `theme` | `system` (the default), `light` or `dark`. |
 | `palette` | The theme drawn in light and the one in dark, each by its file's name (`{ "light": "grove", "dark": "mine.json" }`); the app's own colours where it names none ([Themes](ui.md#themes)). |
 | `art` | Whether a theme's drawing is at the top of the sidebar: `true` until you turn it off. |
+| `reports` | How the reports of agents that arrive together are drawn: `tabs` (the default) or `sections` ([What you see](ui.md#what-you-see)). |
 | `awake` | Whether the desktop app keeps the Mac from sleeping while agents work ([desktop.md](desktop.md)): `true` until you turn it off. In a browser it does nothing, and the settings page does not show it. |
 | `cwd` | The folder a window's agent works in when the window is opened. Your home folder while it is not set. It has to exist when you set it, and is kept as its whole path (`~` is your home folder). If it is gone later, windows run in your home folder until you set another. |
 

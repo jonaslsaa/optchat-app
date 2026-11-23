@@ -10,7 +10,7 @@ import { startServer } from '../src/server/server.ts';
 import { defaults, describeOwner, lockProfile } from 'pi-optchat/files';
 import { createProfile, give, png, writeRun } from '../test/support.ts';
 import { chatgptExport, writeHistories } from '../test/histories.ts';
-import { agents, CHANGES, demo, FAILED, FILES, FORMULAS, limited, NAMED, PICTURED, remember, RESIZED, RESIZED_IMAGE, seed, SEEN, SEEN_IMAGE, SHIPPED, SHIPPING, SKILLED, spend, TEAM } from './seed.ts';
+import { agents, CHANGES, demo, FAILED, FILES, FORMULAS, grouped, GROUPED, limited, NAMED, PICTURED, remember, RESIZED, RESIZED_IMAGE, seed, SEEN, SEEN_IMAGE, SHIPPED, SHIPPING, SKILLED, spend, TEAM } from './seed.ts';
 
 /** `npm run screenshots [directory] [--dark]`: a PNG of every main state of the UI, in /tmp/optchat-app-shots unless a directory
  * is named, and all of them in dark mode with `--dark`. It builds the UI, serves it against throwaway profiles under /tmp with
@@ -91,6 +91,10 @@ seed(resized, 1, NOW, RESIZED);
 mkdirSync(join(resized, 'images'));
 writeFileSync(join(resized, 'images', `${RESIZED_IMAGE}.png`), png(240, [234, 138, 30]));
 seed(createProfile(home, 'skills'), 1, NOW, SKILLED);
+// Four agents that reported together: two long reviews, one that failed and one that was stopped.
+const together = createProfile(home, 'grouped');
+seed(together, 1, NOW, GROUPED);
+grouped(together, NOW);
 // The subscription's limits as they were with the latest answer: well within them, past the five hours and on extra usage,
 // a request refused a moment ago, and a count from before the five hours began again. `empty` has none.
 limited(long, NOW, { five: 0.62, week: 0.18 });
@@ -1156,6 +1160,26 @@ async function pictures(browser: Browser, control: Client) {
     await waiting.evaluate((row, type) => dispatchEvent(new CustomEvent(type, { detail: { window: row.getAttribute('data-row'), action: 'remove' } })), ROW_EVENT);
     await waiting.waitFor({ state: 'detached' });
     await hung.close();
+  }
+  // The reports of four agents that arrived together: as tabs (the setting's default), the same in the dark, the setting with its
+  // preview of each, and as sections. The setting is put back after, as it is the app's and not the page's.
+  for (const dark of [false, true]) {
+    const page = await open(['grouped'], { dark: dark || allDark });
+    await page.getByRole('tab', { name: 'Security review #11952' }).waitFor();
+    await shot(page, dark ? '291-grouped-reports-tabs-dark' : '290-grouped-reports-tabs');
+    if (dark) { await page.close(); continue; }
+    await page.getByRole('button', { name: 'Settings' }).click();
+    await page.getByRole('tab', { name: 'Appearance' }).click();
+    await page.getByRole('radiogroup', { name: 'Subagent reports' }).scrollIntoViewIfNeeded();
+    await shot(page, '292-appearance-subagent-reports');
+    await page.getByText('Sections', { exact: true }).click();
+    await page.locator('[data-preview=sections]').waitFor();
+    await shot(page, '292b-appearance-subagent-reports-sections');
+    await page.getByRole('button', { name: 'Close the settings' }).click();
+    await page.getByRole('region', { name: 'How T3 Code groups reports' }).waitFor();
+    await shot(page, '293-grouped-reports-sections');
+    await control.request('setSettings', { reports: 'tabs' });
+    await page.close();
   }
   // A patch of the app's own Pi that it tried by itself, and that failed: a grey line, and the Pi there still runs.
   const patching = join(home, 'patching'), npm = { command: process.execPath, args: [join(import.meta.dirname, '../test/fake-npm.ts')] };

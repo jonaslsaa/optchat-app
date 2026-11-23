@@ -275,12 +275,15 @@ export type Tool = Extract<Step, { type: 'tool' }>;
 export type Part = { key: number; items: readonly Item[] } & (
   | { type: 'user'; date: string; text: string; cites: Cite[]; skill?: Skill; /** Each by its name in the profile, or as an address where it is not kept there. */ images: string[] }
   | { type: 'note'; text: string }
-  | { type: 'work'; date: string; agent?: string; title?: string; body: string }
+  | { type: 'work'; date: string; reports: Report[] }
   | { type: 'handoff'; date: string; body: string }
   | { type: 'reply'; steps: Step[]; answer?: { text: string; said: readonly Item[]; streaming?: boolean }; from: string; to: string; stopped: boolean });
 
 const inReply = ({ kind }: Item) => kind === 'talk' || kind === 'tool' || kind === 'echo';
 const same = (a: Item, b: Item) => a === b || a.key === b.key && a.kind === b.kind && a.date === b.date && a.text === b.text && a.streaming === b.streaming && a.call === b.call && a.handoff === b.handoff;
+/** One agent's report in a `work` part: the agent it is from and the title it was started under, where the report names them. */
+export interface Report { agent?: string; title?: string; body: string }
+
 /** Groups the chat into its parts. A part of `previous` whose items all still say the same is returned as it was, so that only
  * what changed is drawn again: while a reply streams that is the reply, not the whole chat. */
 export function parts(items: readonly Item[], previous: readonly Part[] = []): Part[] {
@@ -298,8 +301,8 @@ export function parts(items: readonly Item[], previous: readonly Part[] = []): P
   // reaches back to it, has the title.
   const titles = new Map(made.flatMap(part => part.type === 'reply' ? part.steps.flatMap(spawned) : []));
   return made.map(part => {
-    const title = part.type === 'work' && part.agent && part.title === undefined ? titles.get(part.agent) : undefined;
-    return part.type === 'work' && title !== undefined ? { ...part, title } : part;
+    if (part.type !== 'work' || !part.reports.some(report => report.agent && report.title === undefined && titles.has(report.agent))) return part;
+    return { ...part, reports: part.reports.map(report => { const title = report.agent && report.title === undefined ? titles.get(report.agent) : undefined; return title === undefined ? report : { ...report, title }; }) };
   });
 }
 /** The agents a `spawn` call started, in the order of its tasks: pi-optchat answers `Started: <id>, <id>.`. */
@@ -335,12 +338,7 @@ function part(items: readonly Item[]): Part {
     return { ...common, type: 'user', date: first.date, cites, ...skill && { skill }, text: typed.trim(), images };
   }
   if (first.kind === 'note') return { ...common, type: 'note', text: first.text };
-  if (first.kind === 'work') {
-    // pi-optchat names the agent in front of its report, with its title if it has one (`[1a2b3c4d · Why it flakes] …`), and
-    // under it tells the main agent how to read the agent's chat, which here is a click on the report.
-    const [, agent, title, body = first.text] = /^\[([\w-]+)(?: · ([^\]\n]*))?\] ([\s\S]*)$/.exec(first.text) ?? [];
-    return { ...common, type: 'work', date: first.date, ...agent && { agent }, ...title && { title }, body: body.replace(/\n\nFull chat: zoom\("[\w-]+"\)$/, '') };
-  }
+  if (first.kind === 'work') return { ...common, type: 'work', date: first.date, reports: reported(first.text) };
   // What the agent was saying when it was stopped stays in view, as its answer does.
   const cut = last.kind === 'echo' && last.text.startsWith('Agent aborted'), answer = closing(cut ? items.slice(0, -1) : items);
   const work = steps(items.filter(item => !answer.includes(item)));
@@ -349,6 +347,50 @@ function part(items: readonly Item[]): Part {
     ...answer.length > 0 && { answer: { text: text(answer), said: answer, ...answer.at(-1)?.streaming && { streaming: true } } },
   };
 }
+/** The head pi-optchat writes in front of a report: the agent, with its title if it has one (`[1a2b3c4d · Why it flakes] …`). */
+const HEAD = /^\[([\w-]+)(?: · ([^\]\n]*))?\] ([\s\S]*)$/;
+/** What pi-optchat reports for an agent you deleted while it worked. */
+const DELETED = 'Deleted by the user while it was working. The user dropped this task on purpose: do not redo it or delegate it again unless they ask.';
+/** The reports in a `work` entry. The reports of one spawn can arrive together (pi-optchat's `groupReports`), one after the
+ * other with a blank line between them. Each begins with its head, and ends in a line for the main agent that names the agent's
+ * chat (`Full chat: zoom("1a2b3c4d")`), which here is a click on its name: only that agent's line ends it, so a report that
+ * quotes another's goes on past it. A deleted agent's has no such line, its chat being gone, and is pi-optchat's words alone. */
+export function reported(text: string): Report[] {
+  const reports: Report[] = [];
+  for (let from = 0; from < text.length || !reports.length;) {
+    const rest = text.slice(from), [, agent, title, body = rest] = HEAD.exec(rest) ?? [], head = rest.length - body.length;
+    let end = body.length, next = text.length;
+    if (agent && body.startsWith(DELETED) && (body.length === DELETED.length || body.startsWith('\n\n[', DELETED.length))) [end, next] = [DELETED.length, from + head + DELETED.length + 2];
+    else if (agent) {
+      const line = `\n\nFull chat: zoom("${agent}")`;
+      for (let at = body.indexOf(line); at >= 0; at = body.indexOf(line, at + 1)) {
+        if (at + line.length < body.length && !body.startsWith('\n\n', at + line.length)) continue;
+        [end, next] = [at, from + head + at + line.length + 2];
+        break;
+      }
+    }
+    reports.push({ ...agent && { agent }, ...title && { title }, body: body.slice(0, end) });
+    from = next;
+  }
+  return reports;
+}
+/** How an agent's report ended where it says so itself, and what of it is for you. pi-optchat writes a stopped or deleted
+ * agent's report for the main agent ("Stopped by the user. They ended it on purpose, so it did not fail: do not redo…"), which
+ * here is a few words (`lead`) and the agent's last message (`text`). A failed one keeps its error, without the word that it
+ * failed, which `ended` says. */
+export function plainly(body: string): { ended?: 'failed' | 'stopped'; lead?: string; text: string } {
+  for (const [said, lead] of STOPPED) if (body.startsWith(said)) return { ended: 'stopped', lead, text: body.slice(said.length).replace(/^\s*Its last message before the stop:\n/, '').trim() };
+  const [cut, how] = /^(?:Task (error|aborted)|Launch (failed)|(failed)|(stopped)): /.exec(body)?.filter(Boolean) ?? [];
+  if (cut) return { ended: how === 'aborted' || how === 'stopped' ? 'stopped' : 'failed', lead: how === 'aborted' || how === 'stopped' ? 'Stopped.' : 'Failed.', text: body.slice(cut.length) };
+  return { text: body };
+}
+/** pi-optchat's words for a stop (its `STOPPED`, and what a deleted agent reports), and how they are said to you. */
+const STOPPED = [
+  ['Stopped by the user. They ended it on purpose, so it did not fail: do not redo or delegate this task again unless they ask. Its chat is kept, so tell resumes it where it stopped.', 'Stopped by you.'],
+  ['Stopped because the agent that started it stopped or ended. Its chat is kept, so tell resumes it where it stopped.', 'Stopped with the agent that started it.'],
+  ['Stopped because Pi closed or reloaded while it waited for the user. It is not resumed on its own; its chat is kept, so tell resumes it where it stopped.', 'Stopped when Pi closed.'],
+  [DELETED, 'Deleted by you while it worked.'],
+] as const;
 /** What Pi's bash adds under a command's output when it failed. */
 const COMMAND_FAILED = /(^|\n)Command (exited with code [1-9]\d*|aborted|timed out after \d+ seconds)[^\n]*$/;
 /** A reply's tool calls come first and their results after, in the same order: each result goes to the oldest call still without

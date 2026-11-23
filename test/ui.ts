@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { after, before, test } from 'node:test';
 import { chromium, type Browser, type Locator, type Page } from 'playwright-core';
 import { build } from 'vite';
-import { agents, CHANGES, FILES, FORMULAS, GONE, NAMED, PICTURED, remember, seed, SEEN, SEEN_IMAGE, TEAM } from '../scripts/seed.ts';
+import { agents, CHANGES, FILES, FORMULAS, GONE, grouped, GROUPED, NAMED, PICTURED, remember, seed, SEEN, SEEN_IMAGE, TEAM } from '../scripts/seed.ts';
 import type { Launch } from '../src/server/files.ts';
 import { connect } from '../src/client.ts';
 import { ROW_EVENT } from '../src/menu.ts';
@@ -32,6 +32,10 @@ for (const name of ['bar', 'cold', 'colder', 'chat', 'beside', 'sheet', 'memory'
   for (let i = 0; i < 6; i++) writeRun(profile, { id: `e000000${i}`, title: `An older agent ${i}`, state: 'completed', started: Date.now() - 9_000_000 - i * 1000, ended: Date.now() - 8_000_000, report: 'Done.' });
 }
 seed(createProfile(home, 'diffs'), CHANGES.length, Date.now(), CHANGES);
+// Four agents that reported together, and their records.
+const together = createProfile(home, 'grouped');
+seed(together, 1, Date.now(), GROUPED);
+grouped(together, Date.now());
 // A chat with its memory as pi-optchat would have left it: the last four messages a line each, and those before them folded.
 const lines = createProfile(home, 'lines');
 seed(lines, TEAM.length, Date.now(), TEAM);
@@ -1449,6 +1453,36 @@ test('in the memory view a line is cited whole by its button, and the words sele
   assert.deepEqual(await page.getByText(/^Memory · /).allInnerTexts(), ['Memory · 0+8']);
   await page.getByRole('button', { name: 'Memory · 0+8' }).click();
   assert.match(await page.locator('[data-found]').innerText(), /8 messages/);
+});
+
+test('reports that arrived together are tabs: the arrows go from one to the next, find shows the tab it found in, Esc on a tab still stops the run, and as sections all are in sight', async t => {
+  const client = await connect(server.url), page = await open('grouped'), reports = page.getByRole('tablist', { name: 'Reports' }), tab = (name: string) => reports.getByRole('tab', { name });
+  t.after(async () => { await client.request('setSettings', { reports: 'tabs' }); client.close(); });
+  const selected = async () => (await reports.getByRole('tab', { selected: true }).textContent())?.trim();
+  await tab('Security review #11952').focus();
+  await page.keyboard.press('ArrowRight');
+  assert.deepEqual([await selected(), await focused(page)], ['General review #11952', 'General review #11952']);
+  await page.keyboard.press('End');
+  await page.keyboard.press('ArrowRight');
+  assert.deepEqual([await selected(), await focused(page)], ['Security review #11952', 'Security review #11952']);
+  // What is found in a tab that is not shown is shown, tab and all; closed, find gives the focus to the tab shown, when what had
+  // it is in the tab it hid.
+  await page.getByRole('tabpanel').getByRole('button', { name: 'Copy this report' }).focus();
+  await page.keyboard.press('ControlOrMeta+f');
+  await page.keyboard.type('registry.npmjs');
+  await page.getByRole('search', { name: 'Find in chat' }).getByText('1/1', { exact: true }).waitFor();
+  await page.getByText('503 Service Unavailable from registry.npmjs.org').waitFor();
+  assert.equal(await selected(), 'Check the npm tarball');
+  await page.keyboard.press('Escape');
+  assert.equal(await focused(page), 'Check the npm tarball');
+  await run(page);
+  await tab('Check the npm tarball').focus();
+  await stops(page, 'on a report\'s tab');
+  // As sections, each report is in sight under its name, the stopped one in a few words and what its agent last wrote.
+  await client.request('setSettings', { reports: 'sections' });
+  await page.getByRole('region', { name: 'How T3 Code groups reports' }).getByText('Stopped by you.').waitFor();
+  assert.equal(await reports.count(), 0);
+  assert.equal(await page.getByText('do not redo or delegate').count(), 0);
 });
 
 test('a profile tab is dragged to another place, where it stays when the page is opened again; a press that barely moves is still a click, and ✕ still closes', async () => {

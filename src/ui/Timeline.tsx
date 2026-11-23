@@ -4,7 +4,8 @@ import { CiteSelection, type CiteAnchor } from './Cite.tsx';
 import type { Cite, Place } from './cite.ts';
 import { Find } from './Find.tsx';
 import type { Agent } from '../protocol.ts';
-import { AgentsInChat, Doing, HandoffRow, NoteRow, ReplyRow, ReportRow, UserRow, type Working } from './Rows.tsx';
+import { AgentsInChat, Doing, HandoffRow, NoteRow, ReplyRow, UserRow, type Working } from './Rows.tsx';
+import { ReportRow } from './Reports.tsx';
 import { parts, thinking, type Item, type Live, type Part } from './transcript.ts';
 import { Button, cn } from './ui.tsx';
 

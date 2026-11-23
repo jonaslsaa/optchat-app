@@ -7,8 +7,9 @@ import { BUILT_IN } from './theme.ts';
 import { chosen, OWN, OWN_NAME, type Appearance as Mode, type Colors, type Theme, type Unread } from './themes.ts';
 import { Button, cn, Switch } from './ui.tsx';
 
-/** The Appearance tab: light or dark, the theme drawn in each, the sidebar's drawing, and your own themes' folder. Where the
- * tiles, the cards and their pictures come from: THIRD_PARTY_NOTICES.md. */
+/** The Appearance tab: light or dark, the theme drawn in each, the sidebar's drawing, your own themes' folder, and how the
+ * reports of agents that arrive together are drawn. Where the tiles, the cards and their pictures come from:
+ * THIRD_PARTY_NOTICES.md. */
 
 const MODES = ['light', 'dark'] as const;
 const SCHEMES = { system: 'System', light: 'Light', dark: 'Dark' } satisfies Record<Settings['theme'], string>;
@@ -101,6 +102,40 @@ const Unreadable = ({ theme }: { theme: Unread }) => (
   </div>
 );
 
+const LAYOUTS = {
+  tabs: ['Tabs', 'One report at a time, a tab for each agent. The card stays one report high.'],
+  sections: ['Sections', 'All of them in one card, one under the other.'],
+} satisfies Record<Settings['reports'], [title: string, about: string]>;
+/** A card of reports as it is drawn in the chat, small and without words, in the page's own colours: a tab or a section for
+ * each of three agents, the last of which failed. */
+function Reports({ layout }: { layout: Settings['reports'] }) {
+  const bar = (className: string) => <span className={cn('block h-1.5 shrink-0 rounded-full bg-muted-foreground/25', className)} />;
+  const failed = <span className="block size-1.5 shrink-0 rounded-full bg-error-foreground/70" />;
+  return (
+    <span aria-hidden="true" data-preview={layout} className="relative block h-full min-h-[7.5rem] w-full overflow-hidden rounded-lg border border-border/60 bg-background p-3">
+      <span key={layout} className="enter flex h-full flex-col gap-2 overflow-hidden rounded-lg border border-border/70 bg-card px-3 py-2.5 dark:bg-card/60">
+        <span className="flex items-center gap-1.5"><span className="block size-2 rounded-sm bg-muted-foreground/40" />{bar('w-10 bg-muted-foreground/40')}<span className="flex-1" />{bar('w-5')}</span>
+        {layout === 'tabs' ? <>
+          <span className="-mx-3 flex gap-2.5 border-border/70 border-b px-2.5">
+            {['w-12', 'w-9', 'w-11'].map((width, index) => (
+              <span key={index} className={cn('-mb-px flex items-center gap-1 border-b-2 pb-1.5', index === 0 ? 'border-foreground/70' : 'border-transparent')}>
+                {index === 2 && failed}{bar(cn(width, index === 0 && 'bg-foreground/60'))}
+              </span>
+            ))}
+          </span>
+          <span className="flex items-center gap-1.5">{bar('w-12 bg-foreground/45')}<span className="flex-1" />{bar('w-4')}</span>
+          {bar('w-11/12')}{bar('w-4/5')}{bar('w-2/3')}
+        </> : ['w-4/5', 'w-3/5', 'w-2/3'].map((width, index) => (
+          <span key={index} className={cn('flex flex-col gap-1.5', index > 0 && 'border-border/70 border-t pt-2')}>
+            <span className="flex items-center gap-1">{index === 2 && failed}{bar('w-12 bg-foreground/45')}<span className="flex-1" />{bar('w-4')}</span>
+            {bar(width)}
+          </span>
+        ))}
+      </span>
+    </span>
+  );
+}
+
 export function Appearance({ state, settings }: { state: State; settings: Settings }) {
   // Your files are read again each time the tab is shown: one may have been added or changed since.
   useEffect(() => { void app.readThemes(); }, []);
@@ -135,6 +170,21 @@ export function Appearance({ state, settings }: { state: State; settings: Settin
         <div className="flex items-center justify-between gap-4 text-sm">
           <span>A drawing at the top of the sidebar<span className="block text-muted-foreground">In the theme's colours, where the theme has one.</span></span>
           <Switch label="Sidebar art" checked={settings.art} onChange={art => void app.saveSettings({ art })} />
+        </div>
+      </Section>
+      <Section title="Subagent reports" hint="How the reports of agents started together are shown when they arrive at once.">
+        <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_15rem]">
+          <div role="radiogroup" aria-label="Subagent reports" className="flex flex-col gap-2">
+            {(Object.keys(LAYOUTS) as Settings['reports'][]).map(layout => (
+              <label key={layout} className={cn('flex cursor-pointer flex-col gap-0.5 rounded-xl border px-3 py-2.5 text-sm transition-colors has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-foreground/60 has-[:focus-visible]:-outline-offset-4',
+                settings.reports === layout ? 'border-transparent bg-accent/60 ring-2 ring-ring ring-inset' : 'border-border/70 bg-card/60 hover:bg-accent/40')}>
+                <input type="radio" name="reports" className="sr-only" checked={settings.reports === layout} onChange={() => void app.saveSettings({ reports: layout })} />
+                <span className="font-medium text-foreground">{LAYOUTS[layout][0]}</span>
+                <span className="text-muted-foreground text-xs">{LAYOUTS[layout][1]}</span>
+              </label>
+            ))}
+          </div>
+          <Reports layout={settings.reports} />
         </div>
       </Section>
     </>

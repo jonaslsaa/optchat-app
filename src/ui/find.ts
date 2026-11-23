@@ -4,7 +4,8 @@
  *
  * What is searched is the text that is on the page: what you said, what the agent answered, the reports, and whatever is open
  * (a reply's work, a tool call, what the agent thought). What is folded shut is not on the page and is not searched. A long
- * message that is cut short is on the page whole, so it is searched whole, and opens when the match in it is the one shown.
+ * message that is cut short is on the page whole, so it is searched whole, and opens when the match in it is the one shown;
+ * so are the reports in a card's tabs that are not shown, and the tab is shown.
  * The words of buttons, the times beside the messages and the line that says the agent is working are the page's, not the
  * chat's, and are left out; a file's name that opens the file is a button too, and so are the card of what a message cites
  * and the name of the skill it runs, and those are the chat's text all the same. */
@@ -87,12 +88,14 @@ export function finding(content: HTMLElement, scroller: HTMLElement, says: (foun
     const same = was ? all.findIndex(range => range === was || range.startContainer === was.startContainer && range.startOffset === was.startOffset) : -1;
     at = same < 0 ? Math.min(Math.max(at, 0), all.length - 1) : same;
   };
-  /** Brings the match shown into sight: a long message that is cut short over it opens (`data-clamp`, which hears
-   * `beforematch`), and what scrolls around it is scrolled to it: the chat, a tool's output in it, and sideways a block of
-   * code or a table whose lines are longer than the page is wide. */
+  /** Brings the match shown into sight: a report in a tab that is not shown is shown (`data-folded`), a long message that is
+   * cut short over it opens (`data-clamp`; both hear `beforematch`), and what scrolls around it is scrolled to it: the chat, a
+   * tool's output in it, and sideways a block of code or a table whose lines are longer than the page is wide. */
   const reveal = () => {
     if (at < 0) return;
-    const range = live(all[at]), within = range.startContainer.parentElement, cut = within?.closest('[data-clamp]');
+    const range = live(all[at]), within = range.startContainer.parentElement;
+    within?.closest('[data-folded]')?.dispatchEvent(new Event('beforematch'));
+    const cut = within?.closest('[data-clamp]');
     // A message cut short fades out from 60% down; a quote cut at its lines (`data-clamp="lines"`) may hide a match under the
     // ellipsis of its last line, so it opens for any match in it.
     const lines = cut instanceof HTMLElement && cut.dataset.clamp === 'lines';
@@ -127,9 +130,10 @@ export function finding(content: HTMLElement, scroller: HTMLElement, says: (foun
       [find, rows, at] = [finder(text), new WeakMap(), -1];
       look();
       const top = scroller.getBoundingClientRect().top + began - scroller.scrollTop;
-      let low = 0, high = all.length;
-      while (low < high) { const middle = low + high >> 1; if (live(all[middle]).getBoundingClientRect().bottom < top) low = middle + 1; else high = middle; }
-      at = Math.min(low, all.length - 1);
+      // A match in a tab that is not shown has no place of its own on the page: it is where its card is.
+      const bottom = (range: StaticRange) => (range.startContainer.parentElement?.closest('[data-folded]')?.parentElement ?? live(range)).getBoundingClientRect().bottom;
+      const first = all.findIndex(range => bottom(range) >= top);
+      at = first < 0 ? all.length - 1 : first;
       if (all.length) reveal(); else if (scroller.scrollTop !== began) { scroller.scrollTop = began; moved(); }
       put = scroller.scrollTop;
       tell();

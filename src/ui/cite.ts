@@ -29,9 +29,12 @@ export const commented = (item: Cite, comment: string): Cite => {
 
 /** A place as it is written: a message by its number, a line as pi-optchat's view heads it (`id+n`). */
 export const named = (at: Place) => at.n === 1 ? String(at.id) : key(at);
-/** What a citation is called on its chip in the composer: your comment when it has one, else its words, and a line of several
- * messages or one with no words by its place. */
-export const called = ({ text, at, comment }: Cite) => comment?.trim() || (at && (at.n > 1 || !text) ? `Memory ${named(at)}` : text);
+/** What a citation is called on its chip in the composer: your comment when it has one, else its words, and one with no words
+ * (a line cited whole that has none) by its place. */
+export const called = ({ text, at, comment }: Cite) => comment?.trim() || text || (at ? `Memory ${named(at)}` : '');
+/** Whether a citation's place is worth showing in the chat: a number tells you something only for a line of several messages,
+ * or for a citation with no words of its own, where it stands in for them. A quote from the chat is its words. */
+export const placed = ({ text, at }: Cite) => at && (at.n > 1 || !text) ? at : undefined;
 export function place(name = ''): Place | undefined {
   const [, id, n = '1'] = /^(\d+)(?:\+([1-9]\d*))?$/.exec(name) ?? [];
   return id === undefined ? undefined : { id: Number(id), n: Number(n) };

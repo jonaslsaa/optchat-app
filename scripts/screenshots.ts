@@ -637,7 +637,35 @@ async function pictures(browser: Browser, control: Client) {
   await shot(citing, '151-cited-message');
   await shot(await open(['cites'], { dark: true }), '152-cited-message-dark');
   await shot(await open(['cites'], { width: 420, height: 800 }), '153-cited-message-narrow');
-  // The memory view: a line cited whole by its button, which is there for the line the keys are on, and a card opened where it is.
+  // A message that is only a long quote with a comment: the bubble hugs its card, the quote is cut at two lines, and a click
+  // unfolds it; the same cited while the agent runs, waiting under the chat.
+  await citing.locator('[data-cite] p', { hasText: 'replays by sequence number' }).first().click({ clickCount: 3 });
+  await cite.click();
+  await commentBox.waitFor();
+  await citing.keyboard.type('Is a fresh snapshot ever sent while the log still reaches?');
+  await citing.keyboard.press('ControlOrMeta+Enter');
+  await citing.getByText('reply', { exact: true }).nth(1).waitFor();
+  await shot(citing, '283-cited-alone');
+  await citing.locator('[data-cited][role=button]').last().click();
+  await shot(citing, '284-cited-unfolded');
+  await say(citing, 'wait');
+  await citing.getByRole('button', { name: 'Stop the agent' }).waitFor();
+  await citing.locator('[data-cite] li', { hasText: 'Nothing is replayed twice' }).first().click({ clickCount: 3 });
+  await cite.click();
+  await commentBox.waitFor();
+  await citing.keyboard.press('Enter');
+  await commentBox.waitFor({ state: 'detached' });
+  await citing.getByRole('textbox', { name: 'Message' }).fill('and on reconnect?');
+  await citing.keyboard.press('Enter');
+  await citing.getByLabel('Messages waiting for the agent').getByText('Nothing is replayed twice').waitFor();
+  await citing.getByRole('button', { name: 'Scroll to end' }).click({ timeout: 1000 }).catch(() => {});
+  await shot(citing, '285-cited-waiting');
+  // Stopped, what waited is back in the box: its text and its chip go, for the next message.
+  await citing.getByRole('button', { name: 'Stop the agent' }).click();
+  await citing.getByRole('textbox', { name: 'Message' }).fill('');
+  await citing.getByRole('textbox', { name: 'Message' }).press('Backspace');
+  // The memory view: a line cited whole by its button, which is there for the line the keys are on; sent, its card has the
+  // line's place, which opens the memory view where it is.
   await citing.keyboard.press('Alt+m');
   await citing.locator('[data-line]').first().hover();
   await citing.getByRole('button', { name: 'Cite this line' }).first().click();
@@ -647,7 +675,14 @@ async function pictures(browser: Browser, control: Client) {
   await citing.locator('[data-line]').nth(1).focus();
   await shot(citing, '154-memory-cite');
   await citing.keyboard.press('Alt+m');
-  await citing.locator('[data-cited]').first().click();
+  await citing.getByRole('textbox', { name: 'Message' }).fill('What did that cost?');
+  await citing.keyboard.press('Enter');
+  const line = citing.getByRole('button', { name: /^Memory · \d+\+\d+$/ }).last();
+  await line.waitFor();
+  // The fake Pi asks on a message that says "ask", as the line cited does: answered, it goes on.
+  await citing.getByRole('button', { name: 'No', exact: true }).click({ timeout: 3000 }).catch(() => {});
+  await shot(citing, '286-cited-line');
+  await line.click();
   await citing.locator('[data-found]').waitFor();
   await shot(citing, '155-cited-in-memory');
   // Find in the chat: what is typed is marked wherever the chat shows it, with the match it is at marked stronger, and under the

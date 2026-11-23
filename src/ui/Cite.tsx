@@ -1,12 +1,13 @@
-import { BoxIcon, QuoteIcon } from 'lucide-react';
+import { BoxIcon, ChevronDownIcon, HistoryIcon, QuoteIcon } from 'lucide-react';
 import { useEffect, useImperativeHandle, useLayoutEffect, useRef, useState, type Ref, type RefObject } from 'react';
-import { createPortal } from 'react-dom';
-import { cite, COMMENT_CAP, named, place, type Cite, type Place, type Skill } from './cite.ts';
-import { escapes } from './keys.ts';
-import { Button, cn } from './ui.tsx';
+import { createPortal, flushSync } from 'react-dom';
+import { cite, COMMENT_CAP, named, place, placed, type Cite, type Place, type Skill } from './cite.ts';
+import { escapes, label } from './keys.ts';
+import { Button, cn, Kbd } from './ui.tsx';
 
-/** Where a citation came from on screen, in viewport coordinates, so its comment popover opens right there. */
-export interface CiteAnchor { left: number; right: number; top: number; bottom: number }
+/** Where a citation came from on screen, in viewport coordinates, so its comment popover opens right there; and for one cited
+ * from a selection, the words it was (`range`), which stay marked while the popover is open. */
+export interface CiteAnchor { left: number; right: number; top: number; bottom: number; range?: Range }
 export const anchorOf = (element: Element): CiteAnchor => {
   const { left, right, top, bottom } = element.getBoundingClientRect();
   return { left, right, top, bottom };
@@ -47,13 +48,14 @@ export function CiteSelection({ content, logged = -1, onCite }: { content: RefOb
     // box's caret with it, so it looks as if it has no keys. Esc on the button takes both away, and is then not the chat's key.
     <span className="enter enter-grow absolute z-20 mt-1 flex" style={{ left: found.left, top: found.top }}>
       <Button size="xs" variant="glass" onPointerDown={event => event.preventDefault()} onKeyDown={event => escapes(event, drop)}
-        onClick={event => { const where = anchorOf(event.currentTarget), cited = cite(words(found.range), found.at && found.at.id + found.at.n - 1 <= logged ? found.at : undefined); drop(); onCite(cited, where); }}>
+        onClick={event => { const where = { ...anchorOf(event.currentTarget), range: found.range }, cited = cite(words(found.range), found.at && found.at.id + found.at.n - 1 <= logged ? found.at : undefined); drop(); onCite(cited, where); }}>
         <QuoteIcon className="size-3.5" />Cite
       </Button>
     </span>
   );
 }
 
+const KEY = 'h-4 min-w-4 text-2xs';
 /** Where the comment popover sits on screen: under `anchor` (or over it if `above`, or when there is no room below), aligned to
  * its right edge and clamped inside the viewport with a small margin. */
 function placePopover(anchor: CiteAnchor, width: number, height: number, above: boolean) {
@@ -74,6 +76,13 @@ export function CiteCommentPopover({ item, anchor, above = false, showQuote = fa
   draft.current = comment;
   const tooLong = comment.trim().length > COMMENT_CAP;
 
+  // What was just cited stays marked where it was selected, with the browser's own highlights, while this is open (the
+  // selection itself is gone: it would take the caret with it).
+  useEffect(() => {
+    if (!anchor.range || typeof Highlight === 'undefined') return;
+    CSS.highlights.set('cited', new Highlight(anchor.range));
+    return () => { CSS.highlights.delete('cited'); };
+  }, [anchor]);
   // Focus the textarea at the end of any existing comment when opened.
   useLayoutEffect(() => {
     const input = area.current;
@@ -153,6 +162,8 @@ export function CiteCommentPopover({ item, anchor, above = false, showQuote = fa
   };
   const quote = item.text || (item.at ? `Memory · ${named(item.at)}` : '');
 
+  // A fresh citation's words are right where the popover points, highlighted: only one edited from its chip shows them again,
+  // since the reply they came from may have scrolled away.
   return createPortal(
     <div ref={box} role="dialog" aria-label="Comment on citation" style={{ left: pos.left, top: pos.top }}
       onPointerDown={event => event.stopPropagation()}
@@ -162,12 +173,12 @@ export function CiteCommentPopover({ item, anchor, above = false, showQuote = fa
         if (next instanceof Element && next.closest('[data-cite-action]')) return;
         commit(false);
       }}
-      className="enter enter-grow fixed z-50 w-[min(20rem,calc(100vw-1.5rem))] rounded-xl border bg-popover p-2.5 text-popover-foreground shadow-[0_16px_40px_-18px_rgb(0_0_0/55%)] dark:shadow-[0_18px_44px_-18px_rgb(0_0_0/80%)]">
+      className="enter enter-grow fixed z-50 w-[min(20rem,calc(100vw-1.5rem))] rounded-[14px] border bg-popover text-popover-foreground shadow-[0_16px_40px_-18px_rgb(0_0_0/55%)] dark:shadow-[0_18px_44px_-18px_rgb(0_0_0/80%)]">
       {showQuote && quote && (
-        <p className="mb-1.5 line-clamp-2 rounded-md bg-black/6 px-2 py-1 text-muted-foreground text-xs leading-snug [overflow-wrap:anywhere] dark:bg-white/8">{quote}</p>
+        <p className="mx-3 mt-3 line-clamp-2 whitespace-pre-wrap border-primary border-s-2 ps-2.5 text-[0.78rem] text-muted-foreground leading-snug [overflow-wrap:anywhere]">{quote}</p>
       )}
       <textarea
-        ref={area} rows={2} value={comment} placeholder="Add an optional comment..."
+        ref={area} rows={2} value={comment} placeholder="Add an optional comment…"
         aria-label="Comment on cited text"
         aria-invalid={tooLong || undefined}
         onChange={event => setComment(event.target.value)}
@@ -177,36 +188,67 @@ export function CiteCommentPopover({ item, anchor, above = false, showQuote = fa
             if (event.metaKey || event.ctrlKey) submitAndSend(); else submit();
           }
         }}
-        className="field-sizing-content block max-h-40 min-h-14 w-full resize-none overflow-y-auto bg-transparent px-1 py-1 text-foreground text-sm leading-relaxed outline-none placeholder:text-placeholder"
+        className={cn('field-sizing-content block max-h-40 min-h-[3.1em] w-full resize-none overflow-y-auto bg-transparent px-3 pb-1.5 text-foreground text-sm leading-relaxed outline-none placeholder:text-placeholder', showQuote && quote ? 'pt-2' : 'pt-2.5')}
       />
-      {tooLong && <p role="status" className="px-1 pt-1 text-destructive-foreground text-xs">Comments can contain up to {COMMENT_CAP.toLocaleString()} characters.</p>}
-      <div className="mt-2 flex items-center justify-end gap-2">
-        <Button variant="outline" size="xs" onPointerDown={event => event.preventDefault()} onClick={cancel}>Cancel</Button>
-        <Button size="xs" disabled={tooLong} onPointerDown={event => event.preventDefault()} onClick={submit}>{tooLong ? 'Shorten comment' : 'Save'}</Button>
+      {tooLong && <p role="status" className="px-3 pb-1.5 text-destructive-foreground text-xs">Comments can contain up to {COMMENT_CAP.toLocaleString()} characters.</p>}
+      <div className="flex items-center gap-2.5 border-t py-1.5 ps-3 pe-2 text-muted-foreground text-xs">
+        {showQuote ? <><span><Kbd className={KEY}>{label('enter')}</Kbd> save</span><span><Kbd className={KEY}>Esc</Kbd> cancel</span></>
+          : <><span><Kbd className={KEY}>{label('enter')}</Kbd> cite</span><span><Kbd className={KEY}>{label('mod+enter')}</Kbd> cite &amp; send</span></>}
+        <Button size="xs" className="ms-auto" disabled={tooLong} onPointerDown={event => event.preventDefault()} onClick={submit}>{tooLong ? 'Shorten comment' : 'Save'}</Button>
       </div>
     </div>,
     document.body,
   );
 }
 
-/** What a message cites, as a card in it (T3 Code's `ResponseCard`, MIT, see THIRD_PARTY_NOTICES.md): how it begins, where in
- * the memory it is, and your comment on it when it has one. One that has a place opens the memory view there (`onOpen`). */
-export function CiteCard({ cite: { text, at, comment }, onOpen }: { cite: Cite; onOpen?: (at: Place) => void }) {
-  const card = 'block w-full min-w-0 rounded-lg bg-black/8 px-2.5 py-1.5 text-start text-muted-foreground text-sm dark:bg-white/8', opens = at && onOpen;
-  const shown = (
-    <>
-      {text && <span className="line-clamp-2 whitespace-pre-wrap [overflow-wrap:anywhere]">{text}</span>}
-      {at && <span data-no-find className="block text-2xs tabular-nums opacity-80">Memory · {named(at)}</span>}
-    </>
-  );
-  const quote = opens ? <button type="button" data-cited title="Show it in the memory view" onClick={() => onOpen(at)} className={cn(card, 'outline-none hover:bg-black/12 focus-visible:ring-2 focus-visible:ring-ring/70 dark:hover:bg-white/12')}>{shown}</button>
-    : <span data-cited className={card}>{shown}</span>;
-  if (!comment) return quote;
+/** One citation in a message: its words beside the blue bar, cut at `lines` and unfolded by a click only when they are cut (find
+ * in the chat unfolds them too, `beforematch`, when what it found is in the part cut off), the place where a number says
+ * something (`placed`), which opens the memory view there, and your comment under it. */
+function Cited({ cite, lines, under, onOpen }: { cite: Cite; lines: 1 | 2; under?: 'head' | 'cite'; onOpen?: (at: Place) => void }) {
+  const [open, setOpen] = useState(false), [cut, setCut] = useState(false), words = useRef<HTMLSpanElement>(null), at = placed(cite);
+  useLayoutEffect(() => {
+    const element = words.current;
+    if (!element || open) return;
+    const measure = () => setCut(element.scrollHeight > element.clientHeight + 1);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [open, cite.text, lines]);
+  const folds = cut || open, toggle = () => { if (!getSelection()?.toString()) setOpen(!open); };
+  const place = at && (onOpen
+    ? <button type="button" data-no-find title="Show it in the memory view" onClick={() => onOpen(at)} className="flex items-center gap-1 rounded-sm text-muted-foreground text-xs tabular-nums outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/70"><HistoryIcon className="size-3 text-cite-ink" />Memory · {named(at)}</button>
+    : <span data-no-find className="flex items-center gap-1 text-muted-foreground text-xs tabular-nums"><HistoryIcon className="size-3 text-cite-ink" />Memory · {named(at)}</span>);
   return (
-    <span className="block min-w-0">
-      {quote}
-      <span data-cite-comment className="mt-1.5 block whitespace-pre-wrap text-sm leading-relaxed [overflow-wrap:anywhere]">{comment}</span>
-    </span>
+    <div className={cn('px-3 py-2', under === 'head' && 'pt-1.5', under === 'cite' && 'shadow-[inset_0_1px_0_var(--cite-line)]')}>
+      {cite.text ? (
+        <div data-cited role={folds ? 'button' : undefined} tabIndex={folds ? 0 : undefined} aria-expanded={folds ? open : undefined} title={folds ? open ? 'Show less' : 'Show the whole quote' : undefined}
+          onClick={folds ? toggle : undefined} onKeyDown={folds ? event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setOpen(!open); } } : undefined}
+          className={cn('relative border-primary border-s-2 ps-2.5 text-[0.8125rem] text-muted-foreground leading-normal', folds && 'cursor-pointer pe-4.5 outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/70')}>
+          <span ref={element => {
+            words.current = element;
+            const found = () => flushSync(() => setOpen(true));
+            element?.addEventListener('beforematch', found);
+            return () => element?.removeEventListener('beforematch', found);
+          }} data-clamp={cut && !open ? 'lines' : undefined} className={cn('whitespace-pre-wrap [overflow-wrap:anywhere]', open ? 'block' : lines === 1 ? 'line-clamp-1' : 'line-clamp-2')}>{cite.text}</span>
+          {folds && <ChevronDownIcon aria-hidden className={cn('absolute end-0 bottom-1 size-3 transition-transform duration-150', open && 'rotate-180')} />}
+        </div>
+      ) : at && <div className="border-primary border-s-2 py-px ps-2.5">{place}</div>}
+      {cite.text && place && <div className="mt-1 ms-3">{place}</div>}
+      {cite.comment && <div data-cite-comment className="mt-1.5 cursor-text select-text whitespace-pre-wrap text-sm leading-relaxed [overflow-wrap:anywhere]">{cite.comment}</div>}
+    </div>
+  );
+}
+/** What a message cites, as one card at the top of it: made like the chip it was in the composer (the page's surface, a hairline,
+ * squarer corners), a quote each, and over several of them a quiet line that says how many. One that waits in a queue is not
+ * the chat's yet: its card is see-through, and its places open nothing. */
+export function CiteGroup({ cites, onOpen, queued = false, alone = false, className }: { cites: readonly Cite[]; onOpen?: (at: Place) => void; queued?: boolean; alone?: boolean; className?: string }) {
+  const many = cites.length > 1;
+  return (
+    <div data-cites className={cn('min-w-0 text-start shadow-[inset_0_0_0_1px_var(--cite-line)]', alone ? 'rounded-[11px]' : 'rounded-[10px]', queued ? 'bg-transparent' : 'bg-cite-card', className)}>
+      {many && <p data-no-find className="flex items-center gap-1.5 px-3 pt-2 font-medium text-muted-foreground text-xs leading-snug"><QuoteIcon className="size-3 text-cite-ink" />Citing {cites.length}</p>}
+      {cites.map((cite, at) => <Cited key={`${at}:${cite.text}`} cite={cite} lines={many ? 1 : 2} under={at ? 'cite' : many ? 'head' : undefined} onOpen={queued ? undefined : onOpen} />)}
+    </div>
   );
 }
 /** The skill a message runs, by its name (T3 Code's skill chip, MIT, see THIRD_PARTY_NOTICES.md). Its file, as Pi sent it, is

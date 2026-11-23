@@ -41,6 +41,8 @@ seed(createProfile(home, 'formulas'), 1, Date.now(), FORMULAS);
 writeFileSync(join(home, 'chart.png'), png(120, [38, 99, 235]));
 seed(createProfile(home, 'pictured'), 1, Date.now(), PICTURED(join(home, 'chart.png')));
 createProfile(home, 'paced');
+// Three profiles open as tabs, to drag about.
+for (const name of ['ant', 'bee', 'cat']) createProfile(home, name);
 createProfile(home, 'skills');
 // Two things you said, the older with an `@` part of the way in, for ↑ to bring back.
 writeMemory(createProfile(home, 'picking'), 4, i => ['please open @src/ser now', 'Done.', 'ok and what is next?', 'Done.'][i]);
@@ -1268,6 +1270,42 @@ test('in the memory view a line is cited whole by its button, and the words sele
   // The card of a line opens the memory view at that line, not at its first message.
   await page.locator('[data-cited]').first().click();
   assert.match(await page.locator('[data-found]').innerText(), /8 messages/);
+});
+
+test('a profile tab is dragged to another place, where it stays when the page is opened again; a press that barely moves is still a click, and ✕ still closes', async () => {
+  const context = await browser.newContext({ viewport: WIDE, reducedMotion: 'reduce' });
+  await context.addInitScript(saved => { if (!localStorage.getItem('optchat-app')) localStorage.setItem('optchat-app', saved); }, JSON.stringify({ tabs: ['ant', 'bee', 'cat'], profile: 'ant', selected: {} }));
+  const page = await context.newPage(), bar = page.getByRole('tablist', { name: 'Profiles' }), tab = (name: string) => bar.getByRole('tab', { name });
+  const order = () => bar.getByRole('tab').evaluateAll(tabs => tabs.map(tab => tab.querySelector('.truncate')?.textContent));
+  const drag = async (name: string, by: number) => {
+    const box = await tab(name).boundingBox() ?? assert.fail(`No tab ${name}`);
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(box.x + box.width / 2 + by, box.y + box.height / 2, { steps: Math.max(2, Math.round(Math.abs(by) / 8)) });
+    await page.mouse.up();
+  };
+  await page.goto(server.page);
+  await tab('cat').waitFor();
+  const width = (await tab('bee').boundingBox())?.width ?? 0;
+  // The last tab dragged to the front, past two: the one in front is still the one that was, so its release was no click.
+  await drag('cat', -2.5 * width);
+  assert.deepEqual(await order(), ['cat', 'ant', 'bee']);
+  assert.equal(await tab('ant').getAttribute('aria-selected'), 'true');
+  // Back a little, its edge not past the middle of its neighbour: it goes back to its place. A little more, and they swap.
+  await drag('cat', width / 4);
+  assert.deepEqual(await order(), ['cat', 'ant', 'bee']);
+  await drag('cat', width * 0.75);
+  assert.deepEqual(await order(), ['ant', 'cat', 'bee']);
+  await page.reload();
+  await tab('cat').waitFor();
+  assert.deepEqual(await order(), ['ant', 'cat', 'bee']);
+  // Pressed and moved less than the few pixels a drag needs, a tab is clicked.
+  await drag('bee', 2);
+  await bar.getByRole('tab', { name: 'bee', selected: true }).waitFor();
+  await tab('cat').hover();
+  await bar.getByRole('button', { name: 'Close cat' }).click();
+  assert.deepEqual(await order(), ['ant', 'bee']);
+  await context.close();
 });
 
 test('the settings are in tabs: the arrows go from one to the next, the page opens again on the last one, and Esc closes it while the run goes on', async () => {

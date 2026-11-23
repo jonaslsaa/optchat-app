@@ -1,5 +1,6 @@
 import { CheckIcon, ChevronsUpDownIcon, HistoryIcon, PlusIcon, XIcon } from 'lucide-react';
-import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type FormEvent, type PointerEvent, type ReactNode } from 'react';
+import { flushSync } from 'react-dom';
 import { badge } from './badge.ts';
 import { BringHistory } from './Import.tsx';
 import type { Source } from './imports.ts';
@@ -123,16 +124,74 @@ export function ProfileName({ state, profile, onNew, onImport }: { state: State;
     </ProfilePicker>
   );
 }
+/** Motion is left out for those who asked for less. */
+const still = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
+/** How far a pressed tab goes before it is dragged rather than clicked, in pixels. */
+const SLOP = 4;
 /** The open profiles, as tabs, and a button to open another. They are shown only once there are two: a profile is something
  * you pick once. The tab in front looks like part of the page under it, and a tab says when a window of its profile is working
- * or has failed, since its windows are out of sight. */
+ * or has failed, since its windows are out of sight. A tab is dragged along the bar to another place, as a browser's is: it
+ * follows the pointer, and takes a neighbour's place once its edge is past the middle of it, which slides into the place it
+ * left. The order is the tabs' (`moveTab`), kept with them; a tab pressed and let go where it was is clicked. */
 export function Tabs({ state, onNew, onImport }: { state: State; onNew: () => void; onImport: () => void }) {
+  // Where the dragged tab was pressed (`x`), where its place started then (`left`) and where the pointer is now (`at`): a
+  // tab that moved is drawn that far from its place, wherever its place is now. One let go after it moved makes a click, which
+  // is swallowed (`dropped`).
+  const press = useRef<{ tab: string; x: number; left: number; moved: boolean }>(undefined), dropped = useRef(false), [drag, setDrag] = useState<{ tab: string; at: number }>();
+  const tabs = useRef(new Map<string, HTMLDivElement>()), places = useRef(new Map<string, number>());
+  // Only while a tab is dragged: the bar is drawn again with every change of the page, and measuring it each time is waste.
+  useLayoutEffect(() => {
+    if (!drag || !press.current) return;
+    for (const [tab, element] of tabs.current) {
+      const was = places.current.get(tab), now = element.offsetLeft;
+      places.current.set(tab, now);
+      if (tab === drag.tab) element.style.transform = `translateX(${drag.at - press.current.x - (now - press.current.left)}px)`;
+      // A neighbour the dragged tab took the place of slides into the one it left.
+      else if (was !== undefined && was !== now && !still()) element.animate([{ transform: `translateX(${was - now}px)` }, { transform: 'none' }], { duration: 150, easing: 'ease-out' });
+    }
+  }, [drag, state.tabs]);
+  const down = (tab: string, event: PointerEvent<HTMLButtonElement>) => {
+    const element = tabs.current.get(tab);
+    if (event.button !== 0 || !element) return;
+    press.current = { tab, x: event.clientX, left: element.offsetLeft, moved: false };
+    dropped.current = false;
+    places.current = new Map([...tabs.current].map(([name, at]) => [name, at.offsetLeft]));
+    event.currentTarget.setPointerCapture(event.pointerId);
+  };
+  const move = (event: PointerEvent<HTMLButtonElement>) => {
+    const held = press.current, element = held && tabs.current.get(held.tab);
+    if (!held || !element || (!held.moved && Math.abs(event.clientX - held.x) < SLOP)) return;
+    held.moved = true;
+    const order = app.state.tabs, i = order.indexOf(held.tab), start = held.left + event.clientX - held.x, end = start + element.offsetWidth;
+    const middle = (tab: string | undefined) => { const at = tab === undefined ? undefined : tabs.current.get(tab); return at && at.offsetLeft + at.offsetWidth / 2; };
+    const next = middle(order[i + 1]), previous = middle(order[i - 1]);
+    // At once, so the next move measures the tabs where they are now.
+    flushSync(() => {
+      if (next !== undefined && end > next) app.moveTab(held.tab, i + 1);
+      else if (previous !== undefined && start < previous) app.moveTab(held.tab, i - 1);
+      setDrag({ tab: held.tab, at: event.clientX });
+    });
+  };
+  const up = () => {
+    const element = drag && tabs.current.get(drag.tab);
+    if (element) {
+      // It settles into its place from where it was let go.
+      const from = element.style.transform;
+      element.style.transform = '';
+      if (!still()) element.animate([{ transform: from }, { transform: 'none' }], { duration: 150, easing: 'ease-out' });
+    }
+    dropped.current = press.current?.moved ?? false;
+    press.current = undefined;
+    setDrag(undefined);
+  };
   return (
     <div className="window-bar window-start flex h-10 shrink-0 items-center gap-1 border-b bg-sidebar px-2 in-data-shell:h-(--topbar-height)">
       <div role="tablist" aria-label="Profiles" className="flex min-w-0 items-center gap-1">
         {state.tabs.map(tab => (
-          <div key={tab} className={cn('group/tab flex h-7 max-w-48 min-w-0 items-center rounded-md border text-sm', tab === state.profile ? 'border-border bg-background text-foreground shadow-xs' : 'border-transparent text-muted-foreground hover:bg-accent hover:text-foreground')}>
-            <button type="button" role="tab" aria-selected={tab === state.profile} onClick={() => void app.openProfile(tab)} className="flex min-w-0 items-center gap-1.5 rounded-md py-1 pr-1 pl-2.5 font-medium focus-visible:ring-2 focus-visible:ring-ring">
+          <div key={tab} ref={element => { if (element) tabs.current.set(tab, element); else tabs.current.delete(tab); }}
+            className={cn('group/tab flex h-7 max-w-48 min-w-0 items-center rounded-md border text-sm', tab === state.profile ? 'border-border bg-background text-foreground shadow-xs' : 'border-transparent text-muted-foreground hover:bg-accent hover:text-foreground', tab === drag?.tab && 'relative z-10 cursor-grabbing bg-background shadow-md')}>
+            <button type="button" role="tab" aria-selected={tab === state.profile} onPointerDown={event => down(tab, event)} onPointerMove={move} onPointerUp={up} onPointerCancel={up}
+              onClick={() => { if (dropped.current) dropped.current = false; else void app.openProfile(tab); }} className="flex min-w-0 select-none items-center gap-1.5 rounded-md py-1 pr-1 pl-2.5 font-medium focus-visible:ring-2 focus-visible:ring-ring">
               <ProfileBadge profile={tab} /><WindowDot windows={state.windows.filter(window => window.profile === tab)} /><span className="min-w-0 truncate">{tab}</span>
             </button>
             <button type="button" aria-label={`Close ${tab}`} onClick={() => app.closeTab(tab)} className="mr-1 rounded-sm p-0.5 opacity-0 hover:bg-foreground/10 focus-visible:opacity-100 group-hover/tab:opacity-100"><XIcon className="size-3" /></button>

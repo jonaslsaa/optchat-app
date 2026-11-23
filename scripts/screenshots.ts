@@ -240,6 +240,17 @@ async function pictures(browser: Browser, control: Client) {
   await work.getByRole('option', { name: 'notes' }).click();
   await work.getByRole('tab', { name: 'notes' }).waitFor();
   await shot(work, '10-two-profile-tabs');
+  // A tab held and dragged past the other, which has taken its place; let go where it was pressed, the order is as it was.
+  const held = await work.getByRole('tab', { name: 'notes' }).boundingBox();
+  if (!held) throw new Error('No notes tab');
+  await work.mouse.move(held.x + held.width / 2, held.y + held.height / 2);
+  await work.mouse.down();
+  await work.mouse.move(held.x + held.width / 2 - 70, held.y + held.height / 2, { steps: 8 });
+  await work.waitForTimeout(300);
+  await work.screenshot({ path: join(out, '10b-profile-tab-dragged.png') });
+  console.log(join(out, '10b-profile-tab-dragged.png'));
+  await work.mouse.move(held.x + held.width / 2, held.y + held.height / 2, { steps: 8 });
+  await work.mouse.up();
 
   const narrow = await open(['work'], { width: 420, height: 800 });
   await narrow.getByText('which is the point of that test').last().waitFor();

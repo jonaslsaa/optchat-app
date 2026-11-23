@@ -61,7 +61,7 @@ Open a connected window for a side task. It reads the same memory, and **Complet
 
 ## And the rest
 
-- **Profiles.** `work` and `personal` keep separate memories and instructions. Each has a coloured badge, so you always know which one you are in.
+- **Profiles.** `work` and `personal` keep separate memories and instructions. Each has a coloured badge, so you always know which one you are in, and its own tab, which you can drag to put the tabs in your order.
 - **GitHub.** The pull requests and issues the chat mentioned, with their live status, checks and reviews.
 - **Models.** One button picks the model and how hard it thinks, for the chat and for its subagents.
 - **Bring your history.** Import what Claude Code, Codex, Pi and ChatGPT already know into a profile's memory: pick the projects or single conversations, see what it will cost before you start, and pause it any time. A new profile asks right away whether you want to bring yours.

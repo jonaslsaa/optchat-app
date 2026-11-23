@@ -39,7 +39,7 @@ export function Choice<T extends string | boolean>({ label, name, title, options
   return (
     <div role="radiogroup" aria-label={label} title={title} className="flex shrink-0 rounded-[var(--control-radius)] border bg-muted/50 p-0.5">
       {options.map(([text, option]) => (
-        <label key={text} className={cn('flex h-5.5 items-center rounded-[calc(var(--control-radius)-2px)] px-2 text-xs has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring', value === option ? 'bg-background font-medium text-foreground shadow-xs' : 'text-muted-foreground hover:text-foreground')}>
+        <label key={text} className={cn('flex h-5.5 items-center rounded-[calc(var(--control-radius)-3px)] px-2 text-xs has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring', value === option ? 'bg-background font-medium text-foreground shadow-xs' : 'text-muted-foreground hover:text-foreground')}>
           <input type="radio" name={name} className="sr-only" checked={value === option} onChange={() => onChange(option)} />{text}
         </label>
       ))}

@@ -148,7 +148,7 @@ export function Appearance({ state, settings }: { state: State; settings: Settin
             <label key={scheme} className={cn('flex cursor-pointer flex-col gap-1.5 rounded-xl border p-2 transition-colors has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-foreground/60 has-[:focus-visible]:-outline-offset-7',
               settings.theme === scheme ? 'border-transparent bg-accent/60 ring-2 ring-ring ring-inset' : 'border-border/70 bg-card/60 hover:bg-accent/40')}>
               <input type="radio" name="scheme" className="sr-only" checked={settings.theme === scheme} onChange={() => void app.saveSettings({ theme: scheme })} />
-              <span aria-hidden="true" className="relative block h-[7.5rem] w-full overflow-hidden rounded-lg border border-border/60">
+              <span aria-hidden="true" className="relative block h-[7.5rem] w-full overflow-hidden rounded-[3px] border border-border/60">
                 {scheme === 'system' ? <><Pane colors={preview(drawn('light'), 'light')} clip="left" /><Pane colors={preview(drawn('dark'), 'dark')} clip="right" /></> : <Pane colors={preview(drawn(scheme), scheme)} />}
               </span>
               <span className={cn('text-center font-medium text-xs', settings.theme === scheme ? 'text-foreground' : 'text-muted-foreground')}>{SCHEMES[scheme]}</span>

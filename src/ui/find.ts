@@ -13,6 +13,7 @@
 const LEFT_OUT = 'button:not(.file-link, [data-cited], [data-skill]), time, svg, math, [data-no-find]';
 /** Tags that begin a line of their own: a text does not run from one into the next. */
 const BLOCKS = new Set(['P', 'DIV', 'LI', 'UL', 'OL', 'PRE', 'TABLE', 'TR', 'TD', 'TH', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'BLOCKQUOTE', 'BR', 'HR', 'DETAILS', 'SUMMARY']);
+const isBlock = (element: Element) => BLOCKS.has(element.tagName) || element.hasAttribute('data-cite-comment');
 type Place = readonly [from: number, to: number];
 
 /** Finds `text` in what is written, as plain text and in any case (Æ is æ), with a line break or any other white space as a
@@ -41,7 +42,7 @@ function places(under: Element, find: ReturnType<typeof finder>): StaticRange[] 
   const read = (node: Node) => {
     if (node instanceof Text) { pieces.push({ node, from: written.length }); written += node.data; }
     if (!(node instanceof Element)) return;
-    const block = BLOCKS.has(node.tagName), out = node.matches(LEFT_OUT);
+    const block = isBlock(node), out = node.matches(LEFT_OUT);
     if (block || out) flush();
     if (out) return;
     node.childNodes.forEach(read);

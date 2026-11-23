@@ -3,43 +3,66 @@ import { key } from './memory.ts';
 
 /** Where something is in a profile's memory, as pi-optchat names it: the `n` messages from `id` on, so a message is `n` 1. */
 export type Place = Pick<Line, 'id' | 'n'>;
-/** Something a message cites: the words, and where in the memory they are, so that the agent can read what is around them.
- * A line cited whole has no words but its first ones, and what is not in the log yet (a reply in a run, a connected window's
- * conversation) no place. */
-export interface Cite { text: string; at?: Place }
+/** Something a message cites: the words, where in the memory they are (so that the agent can read what is around them), and
+ * an optional comment you attached to that citation. A line cited whole has no words but its first ones, and what is not in
+ * the log yet (a reply in a run, a connected window's conversation) no place. */
+export interface Cite { text: string; at?: Place; comment?: string }
 
-/** How much of what is cited goes with the message: the agent can zoom to the rest. */
+/** How much of what is cited goes with the message: the agent can zoom to the rest. A comment on one has its own cap. */
 const CAP = 2000, LINE = 200;
+export const COMMENT_CAP = 2000;
 const cut = (text: string, cap: number) => text.length > cap ? `${text.slice(0, cap).trimEnd()}…` : text;
 /** What was selected, as a citation; and a line or a message cited whole, by how it begins. */
-export const cite = (text: string, at?: Place): Cite => ({ text: cut(text.trim(), CAP), ...at && { at } });
-export const whole = (at: Place, text = ''): Cite => ({ text: cut(text.trim(), LINE), at });
+export const cite = (text: string, at?: Place, comment?: string): Cite => {
+  const note = comment?.trim();
+  return { text: cut(text.trim(), CAP), ...at && { at }, ...note && { comment: note } };
+};
+export const whole = (at: Place, text = '', comment?: string): Cite => {
+  const note = comment?.trim();
+  return { text: cut(text.trim(), LINE), at, ...note && { comment: note } };
+};
+/** A citation with a new comment, or without one when blank. */
+export const commented = (item: Cite, comment: string): Cite => {
+  const note = comment.trim(), { comment: _, ...rest } = item;
+  return note ? { ...rest, comment: note } : rest;
+};
 
 /** A place as it is written: a message by its number, a line as pi-optchat's view heads it (`id+n`). */
 export const named = (at: Place) => at.n === 1 ? String(at.id) : key(at);
-/** What a citation is called on its chip in the composer: by its words, and a line of several messages, or one with no words, by its place. */
-export const called = ({ text, at }: Cite) => at && (at.n > 1 || !text) ? `Memory ${named(at)}` : text;
+/** What a citation is called on its chip in the composer: your comment when it has one, else its words, and a line of several
+ * messages or one with no words by its place. */
+export const called = ({ text, at, comment }: Cite) => comment?.trim() || (at && (at.n > 1 || !text) ? `Memory ${named(at)}` : text);
 export function place(name = ''): Place | undefined {
   const [, id, n = '1'] = /^(\d+)(?:\+([1-9]\d*))?$/.exec(name) ?? [];
   return id === undefined ? undefined : { id: Number(id), n: Number(n) };
 }
 
-// Only what would end a citation early is written another way, so that what is cited reads as it was said: code keeps its `<`.
-const escaped = (text: string) => text.replace(/&(?=(?:amp|lt);)|<(?=\/cite>)/g, sign => sign === '&' ? '&amp;' : '&lt;');
+// Only what would end a citation or its comment early is written another way, so that what is cited reads as it was said: code
+// keeps its `<`.
+const escaped = (text: string, tag: 'cite' | 'comment') =>
+  text.replace(tag === 'cite' ? /&(?=(?:amp|lt);)|<(?=\/cite>)/g : /&(?=(?:amp|lt);)|<(?=\/comment>)/g, sign => sign === '&' ? '&amp;' : '&lt;');
 const plain = (text: string) => text.replace(/&(amp|lt);/g, (_, name: string) => name === 'amp' ? '&' : '<');
-const TAG = /<cite(?: zoom="([\d+]+)")?(?:\/>|>([\s\S]*?)<\/cite>)\n?/g, HEAD = new RegExp(`^(?:${TAG.source})+`);
-/** A message with what it cites: the citations first, a line each, then what was typed. The agent reads it as it is written
- * here and the page draws it (`cited`), so this is the one place that says how. The place is named after the agent's `zoom`
- * tool, which opens it: a real model goes and reads it then, and under other names mostly says that it could. */
+const TAG = /<cite(?: zoom="([\d+]+)")?(?:\/>|>([\s\S]*?)<\/cite>)(?:\n<comment>([\s\S]*?)<\/comment>)?\n?/g, HEAD = new RegExp(`^(?:${TAG.source})+`);
+/** A message with what it cites: the citations first, a line each (each with its `<comment>` on the next line when it has one),
+ * then what was typed. The agent reads it as it is written here and the page draws it (`cited`), so this is the one place that
+ * says how. The place is named after the agent's `zoom` tool, which opens it: a real model goes and reads it then, and under
+ * other names mostly says that it could. */
 export function citing(cites: readonly Cite[], typed: string) {
   if (!cites.length) return typed;
-  return `${cites.map(({ text, at }) => `<cite${at ? ` zoom="${named(at)}"` : ''}${text ? `>${escaped(text)}</cite>` : '/>'}`).join('\n')}\n\n${typed}`;
+  const line = ({ text, at, comment }: Cite) => {
+    const note = comment?.trim();
+    return `<cite${at ? ` zoom="${named(at)}"` : ''}${text ? `>${escaped(text, 'cite')}</cite>` : '/>'}${note ? `\n<comment>${escaped(note, 'comment')}</comment>` : ''}`;
+  };
+  return `${cites.map(line).join('\n')}\n\n${typed}`;
 }
 /** What a message cites, and what was typed under it: `citing`, read back. Only what a message begins with is a citation. */
 export function cited(message: string): { cites: Cite[]; text: string } {
   const head = HEAD.exec(message)?.[0];
   if (!head) return { cites: [], text: message };
-  const cites = [...head.matchAll(TAG)].map(([, name, text = '']): Cite => { const at = place(name); return { text: plain(text), ...at && { at } }; });
+  const cites = [...head.matchAll(TAG)].map(([, name, text = '', comment]): Cite => {
+    const at = place(name), note = comment === undefined ? undefined : plain(comment).trim();
+    return { text: plain(text), ...at && { at }, ...note && { comment: note } };
+  });
   return { cites, text: message.slice(head.length).replace(/^\n/, '') };
 }
 /** The skill a message runs: `/skill:name what was typed`, which Pi sends as the skill's file (`body`, from `path`) with what

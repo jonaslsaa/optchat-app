@@ -512,7 +512,7 @@ test('the profiles whose agents were cut off are offered: Resume resumes the one
 test('a connected window is called by what its first message says, and by what that cites when it says nothing else', t => {
   const { app } = page(t), window: WindowState = { id: 'work/1', profile: 'work', role: 'connected', cwd: '/tmp', status: 'idle', seq: 0 };
   const called = (text: string) => title(window, { ...app.state, sessions: { [window.id]: [{ role: 'user', timestamp: 1, content: [{ type: 'text', text }] }] } });
-  assert.deepEqual([called(citing([cite('the banner', { id: 9, n: 1 })], 'Which colour?\nThe hex.')), called(citing([cite('the banner\nof the release')], '').trim()), title(window, app.state)], ['Which colour?', 'the banner', UNTITLED]);
+  assert.deepEqual([called(citing([cite('the banner', { id: 9, n: 1 })], 'Which colour?\nThe hex.')), called(citing([cite('the banner\nof the release')], '').trim()), called(citing([cite('the banner', undefined, 'make it darker\nplease')], '').trim()), title(window, app.state)], ['Which colour?', 'the banner', 'make it darker', UNTITLED]);
 });
 
 test('a connected window renamed is called by its name on every page, an empty name gives back the automatic one, and the main chat keeps its own', async t => {

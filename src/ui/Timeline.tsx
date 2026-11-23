@@ -1,6 +1,6 @@
 import { ChevronDownIcon } from 'lucide-react';
 import { useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState, type Ref } from 'react';
-import { CiteSelection } from './Cite.tsx';
+import { CiteSelection, type CiteAnchor } from './Cite.tsx';
 import type { Cite, Place } from './cite.ts';
 import { Find } from './Find.tsx';
 import type { Agent } from '../protocol.ts';
@@ -19,7 +19,7 @@ const EDGE = 48, NONE: readonly Agent[] = [];
  * message cites in the memory view. Where the memory can be searched from (`onMemory`), the chat can be found in: `ref.find`
  * shows the bar for it (`Find`). `agents` are the profile's as the panel lists them, which the calls that started them show
  * under them. */
-export function Timeline({ items, live, running, starting = false, profile, older, loading, onAgent, onCite, logged, onPlace, onMemory, ref, narrow = false, agents = NONE }: { items: Item[]; live: Live; running: boolean; starting?: boolean; profile: string; older?: () => void; loading?: boolean; onAgent?: (agent: string) => void; onCite?: (cite: Cite) => void; logged?: number; onPlace?: (at: Place) => void; onMemory?: (text: string) => void; ref?: Ref<{ find: () => void }>; narrow?: boolean; agents?: readonly Agent[] }) {
+export function Timeline({ items, live, running, starting = false, profile, older, loading, onAgent, onCite, logged, onPlace, onMemory, ref, narrow = false, agents = NONE }: { items: Item[]; live: Live; running: boolean; starting?: boolean; profile: string; older?: () => void; loading?: boolean; onAgent?: (agent: string) => void; onCite?: (cite: Cite, anchor?: CiteAnchor) => void; logged?: number; onPlace?: (at: Place) => void; onMemory?: (text: string) => void; ref?: Ref<{ find: () => void }>; narrow?: boolean; agents?: readonly Agent[] }) {
   const scroller = useRef<HTMLDivElement>(null), content = useRef<HTMLDivElement>(null);
   const atEnd = useRef(true), before = useRef({ first: items[0]?.key, height: 0, top: 0, sent: -1 });
   // Find scrolls the chat to what it found (`found` is where it put it), which is not you reading back to the top: no older

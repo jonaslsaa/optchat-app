@@ -1,7 +1,7 @@
 import { ArrowLeftIcon, ChevronRightIcon, HistoryIcon, QuoteIcon, SearchIcon, XIcon } from 'lucide-react';
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type RefObject } from 'react';
 import type { Hit, Line, Message, WindowState } from '../protocol.ts';
-import { CiteSelection } from './Cite.tsx';
+import { anchorOf, CiteSelection, type CiteAnchor } from './Cite.tsx';
 import { whole, type Cite, type Place } from './cite.ts';
 import { escapes, label } from './keys.ts';
 import { isOpen, key, listed, polled, since, WHO, type Search, type Tree } from './memory.ts';
@@ -39,15 +39,15 @@ const Original = memo(function Original({ messages, profile }: { messages: Messa
     : <div key={part.key} className="flex min-w-0 flex-col py-1">{part.steps.map(step => <StepRow key={step.key} step={step} profile={profile} />)}</div>);
 });
 /** The button on a line or on a message that was found, which cites it whole. It is there under the pointer and with the keys. */
-function CiteWhole({ onCite }: { onCite: () => void }) {
+function CiteWhole({ onCite }: { onCite: (anchor: CiteAnchor) => void }) {
   return (
     <span className="absolute end-1 top-1 opacity-0 transition-opacity duration-200 focus-within:opacity-100 group-focus-within:opacity-100 group-hover:opacity-100 pointer-coarse:opacity-100">
-      <Button variant="ghost-muted" size="icon-xs" aria-label="Cite this line" title="Cite this line in the message" onClick={onCite}><QuoteIcon className="size-3" /></Button>
+      <Button variant="ghost-muted" size="icon-xs" aria-label="Cite this line" title="Cite this line in the message" onClick={event => onCite(anchorOf(event.currentTarget))}><QuoteIcon className="size-3" /></Button>
     </span>
   );
 }
 /** One line, and under it what it opens into. Its words can be selected, so it is no `button`, and is one to the keys. */
-function TreeLine({ tree, line, profile, heading, onCite }: { tree: Tree; line: Line; profile: string; heading: string; onCite?: (cite: Cite) => void }) {
+function TreeLine({ tree, line, profile, heading, onCite }: { tree: Tree; line: Line; profile: string; heading: string; onCite?: (cite: Cite, anchor?: CiteAnchor) => void }) {
   const open = isOpen(tree, line), halves = tree.under[key(line)], original = tree.originals[line.id], found = tree.found === key(line);
   // What a line you just opened holds is brought into sight, once it is there: at the end of the view it is under the fold.
   // The line itself stays in sight, where what it holds is taller than the page.
@@ -70,7 +70,7 @@ function TreeLine({ tree, line, profile, heading, onCite }: { tree: Tree; line: 
               : <span data-cite={key(line)} className="block whitespace-pre-wrap text-sm leading-relaxed [overflow-wrap:anywhere]">{line.text}</span>}
           </span>
         </div>
-        {onCite && <CiteWhole onCite={() => onCite(whole({ id: line.id, n: line.n }, line.text))} />}
+        {onCite && <CiteWhole onCite={anchor => onCite(whole({ id: line.id, n: line.n }, line.text), anchor)} />}
       </div>
       {open && (
         <div ref={under} className="enter ms-3 scroll-mb-3 border-border/70 border-s ps-2">
@@ -94,7 +94,7 @@ function keys(event: KeyboardEvent) {
   event.preventDefault();
 }
 /** A message a search found: who said it and when, and where it says it. It opens in the tree. */
-function Found({ hit, profile, onCite }: { hit: Hit; profile: string; onCite?: (cite: Cite) => void }) {
+function Found({ hit, profile, onCite }: { hit: Hit; profile: string; onCite?: (cite: Cite, anchor?: CiteAnchor) => void }) {
   const date = new Date(hit.date);
   return (
     <div className="group relative">
@@ -104,12 +104,12 @@ function Found({ hit, profile, onCite }: { hit: Hit; profile: string; onCite?: (
           <span className="line-clamp-2 text-muted-foreground text-sm leading-relaxed [overflow-wrap:anywhere]">{hit.lead}<mark className="bg-transparent font-semibold text-foreground">{hit.match}</mark>{hit.rest}</span>
         </span>
       </button>
-      {onCite && <CiteWhole onCite={() => onCite(whole({ id: hit.id, n: 1 }, hit.lead + hit.match + hit.rest))} />}
+      {onCite && <CiteWhole onCite={anchor => onCite(whole({ id: hit.id, n: 1 }, hit.lead + hit.match + hit.rest), anchor)} />}
     </div>
   );
 }
 /** What a search found, newest first, in the tree's place. */
-function Results({ answer, profile, onCite }: { answer: NonNullable<Search['answer']>; profile: string; onCite?: (cite: Cite) => void }) {
+function Results({ answer, profile, onCite }: { answer: NonNullable<Search['answer']>; profile: string; onCite?: (cite: Cite, anchor?: CiteAnchor) => void }) {
   return (
     <div role="region" aria-label="Messages found" onKeyDown={keys} className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-y-contain px-3 sm:px-5">
       <div className="mx-auto w-full min-w-0 max-w-(--chat-content-max-width) pt-2 pb-6">
@@ -123,7 +123,7 @@ const Reading = () => <p className="flex items-center gap-1.5 px-1.5 py-1.5 text
 
 /** It is read again when the main chat changes (`pulse`), and every three seconds while that says too little (`polled`): the
  * server keeps what it read until the files change, so a look costs it a glance at them. */
-export const MemoryView = memo(function MemoryView({ tree, profile, window, pulse, box, onCite, onImport }: { tree: Tree; profile: string; window: WindowState; pulse: string; box: RefObject<HTMLInputElement | null>; onCite?: (cite: Cite) => void; onImport: () => void }) {
+export const MemoryView = memo(function MemoryView({ tree, profile, window, pulse, box, onCite, onImport }: { tree: Tree; profile: string; window: WindowState; pulse: string; box: RefObject<HTMLInputElement | null>; onCite?: (cite: Cite, anchor?: CiteAnchor) => void; onImport: () => void }) {
   const { view } = tree, scroller = useRef<HTMLDivElement>(null), content = useRef<HTMLDivElement>(null), shown = useRef(false), active = polled(tree, window);
   // Where the keys were before the view took them, which is the composer.
   const [before] = useState(() => document.activeElement);

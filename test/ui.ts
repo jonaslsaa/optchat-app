@@ -1016,13 +1016,27 @@ test('the working line opens to what the agent has thought so far, and Esc on it
   const page = await open('thinks');
   await page.getByRole('textbox', { name: 'Message' }).fill('think about it, and wait');
   await page.keyboard.press('Enter');
-  // The fake Pi is held halfway through its thought: the line says its last line so far, and opens to all of it.
+  // The fake Pi is held halfway through its thought: the line says its last line so far without Markdown markers, and opens to rendered Markdown.
   const line = page.getByRole('button', { name: /^Thinking for/ });
   assert.equal(await line.getAttribute('aria-expanded'), 'false');
-  assert.equal(await page.getByText('The user wants the shutdown path checked.').count(), 0, 'the thought is folded until it is opened');
+  const collapsed = await line.innerText();
+  assert.match(collapsed, /Deciding Next Steps/);
+  assert.doesNotMatch(collapsed, /\*\*/);
+  assert.equal(await page.getByText('Checking the shutdown path').count(), 0, 'the thought is folded until it is opened');
   await line.click();
   assert.equal(await line.getAttribute('aria-expanded'), 'true');
-  await page.getByText('The user wants the shutdown path checked.').waitFor();
+  await page.getByText('Checking the shutdown path').waitFor();
+  assert.deepEqual(await page.locator('.chat-markdown-quiet').evaluate(box => ({
+    bold: [...box.querySelectorAll('strong')].map(el => el.textContent),
+    code: [...box.querySelectorAll('code')].map(el => el.textContent),
+    items: [...box.querySelectorAll('li')].map(el => el.textContent),
+    link: box.querySelector('a')?.getAttribute('href'),
+  })), {
+    bold: ['Checking the shutdown path', 'Deciding Next Steps'],
+    code: ['stop()', 'clearTimeout'],
+    items: ['Check clearTimeout in the shutdown notes.', 'Verify the exit handler.'],
+    link: 'https://example.com/shutdown',
+  });
   assert.ok(await line.evaluate(element => element === document.activeElement), 'the working line has the focus');
   // Its thought done, the agent begins to answer: the line is under the reply now, the same one, open still and with the focus.
   const control = await connect(server.url);

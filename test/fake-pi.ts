@@ -153,7 +153,7 @@ function expanded(text: string) {
 }
 const user = (text: string, images: Image[] = []) => { const message: Said = { role: 'user', content: [{ type: 'text', text }, ...images], timestamp: now() }; write({ type: 'message_start', message }); ended(message); };
 
-const THOUGHT = 'The user wants the shutdown path checked.\n\nFirst `stop()` closes stdin, then waits for the grace period.\nThe timer is never cleared, so a clean exit still waits the whole grace period.\nI should read src/server/pi.ts before saying so.';
+const THOUGHT = '**Checking the shutdown path**\n\nFirst `stop()` closes stdin, then waits for the grace period:\n- Check `clearTimeout` in [the shutdown notes](https://example.com/shutdown).\n- Verify the exit handler.\n\n**Deciding Next Steps**\n\nThe timer is never cleared, so a clean exit still waits the whole grace period. I should inspect `src/server/pi.ts` before saying so, and check whether the grace timer keeps the process alive after stdin closes and exits.';
 let running = false, settled = Promise.resolve(), steering: string[] = [], followUp: string[] = [], release: ((held: { aborted: boolean; answer?: string }) => void) | undefined;
 const held = () => new Promise<{ aborted: boolean; answer?: string }>(resolve => { release = held => { release = undefined; resolve(held); }; });
 

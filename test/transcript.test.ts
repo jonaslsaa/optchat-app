@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 import { cite, citing, whole } from '../src/ui/cite.ts';
 import type { Message, PiRecord } from '../src/protocol.ts';
-import { act, apply, chat, closed, failure, idle, logged, merged, news, paced, parts, quiet, recalled, replay, spoken, stopped, thinking, took, without, worked, LAG, type Item, type PiMessage, type Tool } from '../src/ui/transcript.ts';
+import { act, apply, chat, closed, failure, idle, logged, merged, news, paced, parts, quiet, recalled, replay, spoken, stopped, thinking, thoughtLine, took, without, worked, LAG, type Item, type PiMessage, type Tool } from '../src/ui/transcript.ts';
 
 const T = Date.UTC(2026, 0, 1), at = (seconds: number) => new Date(T + seconds * 1000).toISOString();
 const user = (seconds: number, text: string): PiMessage => ({ role: 'user', timestamp: T + seconds * 1000, content: [{ type: 'text', text }] });
@@ -248,6 +248,14 @@ test('what the reply being written has thought is all of its thought so far, acr
     { text: '18 × 2 = 36.', now: true });
   // A model that does not think, or a provider that sends no thought: nothing to show.
   assert.deepEqual(thinking(run(ended(user(0, 'hi')), ended(reply(1, text('Hello.'))))), { text: '', now: false });
+});
+
+test('the collapsed thinking preview strips Markdown syntax from its last line without mangling prose', () => {
+  assert.equal(thoughtLine('First line\n\n**Deciding Next Steps**'), 'Deciding Next Steps');
+  assert.equal(thoughtLine('### Clarifying `stop()` in [pi.ts](src/server/pi.ts)'), 'Clarifying stop() in pi.ts');
+  assert.equal(thoughtLine('- [x] Check *italic*, _under_, and ~~old~~'), 'Check italic, under, and old');
+  assert.equal(thoughtLine('**Still streaming bold'), 'Still streaming bold');
+  assert.equal(thoughtLine('Keep foo_bar_baz and 2 * 3 * 4 intact'), 'Keep foo_bar_baz and 2 * 3 * 4 intact');
 });
 
 test('how long a reply took is said in hours past an hour', () => {

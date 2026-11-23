@@ -7,7 +7,7 @@ import { among, doing, named, stood } from './agents.ts';
 import { CiteCard, SkillChip } from './Cite.tsx';
 import { asTyped, type Place } from './cite.ts';
 import { Markdown } from './Markdown.tsx';
-import { act, started, took, worked, type Part, type Step, type Thinking, type Tool } from './transcript.ts';
+import { act, started, thoughtLine, took, worked, type Part, type Step, type Thinking, type Tool } from './transcript.ts';
 import { Button, cn, CopyButton, Spinner, StatusDot } from './ui.tsx';
 import { Picture } from './Picture.tsx';
 import { WorkLogDetails, WorkLogRow } from './WorkLog.tsx';
@@ -189,14 +189,14 @@ export function Doing({ from, activity, thinking }: { from: string; activity?: s
   const [open, setOpen] = useState(false), thought = thinking?.text;
   const line = <>
     <span className={cn('shrink-0', activity && 'shimmer')}>{activity ?? (thinking?.now ? 'Thinking' : 'Working')} for <Timer from={from} /></span>
-    {thinking?.now && !open && <span className="min-w-0 flex-1 truncate opacity-70">{thought?.split('\n').at(-1)}</span>}
+    {thinking?.now && !open && thought && <span className="min-w-0 flex-1 truncate opacity-70">{thoughtLine(thought)}</span>}
   </>;
   // The line is the page's, not the chat's: find leaves it out (`data-no-find`, find.ts), as it leaves out the button it is below.
   if (!thought) return <div data-no-find className="flex h-6 min-w-0 items-baseline gap-2 px-1 text-muted-foreground text-sm tabular-nums leading-relaxed">{line}</div>;
   return (
     <>
       <Fold open={open} toggle={() => setOpen(!open)}><span className="flex min-w-0 items-baseline gap-2 text-start">{line}</span></Fold>
-      {open && <WorkLogDetails followLive><p className="whitespace-pre-wrap text-secondary-label text-xs leading-relaxed [overflow-wrap:anywhere]">{thought}</p></WorkLogDetails>}
+      {open && <WorkLogDetails followLive><Markdown text={thought} streaming={thinking.now} className="chat-markdown-quiet text-secondary-label text-xs" /></WorkLogDetails>}
     </>
   );
 }

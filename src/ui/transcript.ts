@@ -160,6 +160,22 @@ export function thinking({ messages, streaming }: Live): Thinking {
   return { text, now: streaming?.blocks.at(-1)?.type === 'thinking' };
 }
 
+/** The last line of what the agent is thinking, in plain words, for the collapsed working line: headings, list marks,
+ * links, inline code and emphasis markers come off so `**Deciding Next Steps**` reads cleanly. */
+export function thoughtLine(text: string): string {
+  const line = text.split('\n').at(-1) ?? '';
+  return line
+    .replace(/^\s{0,3}(?:#{1,6}\s+|(?:>\s*)+|(?:[-*+]|\d+[.)])\s+(?:\[[ xX]\]\s+)?)/, '')
+    .replace(/!\[([^\]]*)\]\([^)]*\)/g, '$1')
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
+    .replace(/`([^`]+)`/g, '$1')
+    .replace(/(\*\*|__|~~)(?=\S)(.+?)(?<=\S)\1/g, '$2')
+    .replace(/(^|[^\w*])\*(?=\S)([^*]+?)(?<=\S)\*(?!\*)/g, '$1$2')
+    .replace(/(^|[^\w_])_(?=\S)([^_]+?)(?<=\S)_(?!\w)/g, '$1$2')
+    .replace(/^\*\*(\S.*)/, '$1')
+    .trim();
+}
+
 /** How long a reply that streams is let take to show what has come, in ms. */
 export const LAG = 200;
 /** How many letters of a reply that streams are shown `ms` after `shown` were. The network brings a reply in bursts (a real

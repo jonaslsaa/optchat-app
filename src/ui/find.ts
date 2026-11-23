@@ -130,9 +130,10 @@ export function finding(content: HTMLElement, scroller: HTMLElement, says: (foun
       [find, rows, at] = [finder(text), new WeakMap(), -1];
       look();
       const top = scroller.getBoundingClientRect().top + began - scroller.scrollTop;
-      let low = 0, high = all.length;
-      while (low < high) { const middle = low + high >> 1; if (live(all[middle]).getBoundingClientRect().bottom < top) low = middle + 1; else high = middle; }
-      at = Math.min(low, all.length - 1);
+      // A match in a tab that is not shown has no place of its own on the page: it is where its card is.
+      const bottom = (range: StaticRange) => (range.startContainer.parentElement?.closest('[data-folded]')?.parentElement ?? live(range)).getBoundingClientRect().bottom;
+      const first = all.findIndex(range => bottom(range) >= top);
+      at = first < 0 ? all.length - 1 : first;
       if (all.length) reveal(); else if (scroller.scrollTop !== began) { scroller.scrollTop = began; moved(); }
       put = scroller.scrollTop;
       tell();

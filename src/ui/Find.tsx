@@ -18,7 +18,12 @@ export function Find({ asked, content, scroller, onClose, onMemory, onMoved }: {
     const made = search.current = content.current && scroller.current ? finding(content.current, scroller.current, setFound, onMoved) : undefined;
     return () => made?.end();
   }, []);
-  const close = () => { onClose(); if (before instanceof HTMLElement && before.isConnected) before.focus(); };
+  // What had the focus may be in a report's tab that find has hidden since: the tab shown then has it.
+  const close = () => {
+    onClose();
+    if (!(before instanceof HTMLElement) || !before.isConnected) return;
+    (before.checkVisibility() ? before : before.closest('[role=tabpanel]')?.parentElement?.querySelector<HTMLElement>('[role=tab][aria-selected=true]'))?.focus();
+  };
   const keyed = (event: KeyboardEvent) => {
     // A key that picks or drops what an input method offers is the box's alone: it is no Enter or Esc of the bar's, nor the chat's.
     if (event.nativeEvent.isComposing) return event.stopPropagation();

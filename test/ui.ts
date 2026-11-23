@@ -1465,13 +1465,16 @@ test('reports that arrived together are tabs: the arrows go from one to the next
   await page.keyboard.press('End');
   await page.keyboard.press('ArrowRight');
   assert.deepEqual([await selected(), await focused(page)], ['Security review #11952', 'Security review #11952']);
-  // What is found in a tab that is not shown is shown, tab and all.
+  // What is found in a tab that is not shown is shown, tab and all; closed, find gives the focus to the tab shown, when what had
+  // it is in the tab it hid.
+  await page.getByRole('tabpanel').getByRole('button', { name: 'Copy this report' }).focus();
   await page.keyboard.press('ControlOrMeta+f');
   await page.keyboard.type('registry.npmjs');
   await page.getByRole('search', { name: 'Find in chat' }).getByText('1/1', { exact: true }).waitFor();
   await page.getByText('503 Service Unavailable from registry.npmjs.org').waitFor();
   assert.equal(await selected(), 'Check the npm tarball');
   await page.keyboard.press('Escape');
+  assert.equal(await focused(page), 'Check the npm tarball');
   await run(page);
   await tab('Check the npm tarball').focus();
   await stops(page, 'on a report\'s tab');

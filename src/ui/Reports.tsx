@@ -22,9 +22,12 @@ type OnAgent = ((agent: string) => void) | undefined;
  * a copy of it is. */
 type Shown = Report & ReturnType<typeof plainly> & { state?: Agent['state']; from?: Agent; name: string; copy: string };
 function shown(report: Report, agents: readonly Agent[]): Shown {
-  const said = plainly(report.body), from = report.agent === undefined ? undefined : agents.find(agent => agent.id === report.agent);
+  // The list has an agent as it is now: one that was started again since has a later run, which is not this report's. It is this
+  // report's run while the list's first line of its report is this one's (the server's `headline`).
+  const said = plainly(report.body), headline = report.body.split('\n').find(line => line.trim())?.trim().slice(0, 200);
+  const from = report.agent === undefined ? undefined : agents.find(agent => agent.id === report.agent && !working(agent) && agent.headline === headline);
   return {
-    ...report, ...said, from, state: from && !working(from) ? from.state : said.ended,
+    ...report, ...said, from, state: from?.state ?? said.ended,
     name: report.title ?? (report.agent ? `Report from ${report.agent}` : 'Report'), copy: [said.lead, said.text].filter(Boolean).join('\n\n'),
   };
 }

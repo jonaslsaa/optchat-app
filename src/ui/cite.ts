@@ -42,7 +42,7 @@ export function place(name = ''): Place | undefined {
 const escaped = (text: string, tag: 'cite' | 'comment') =>
   text.replace(tag === 'cite' ? /&(?=(?:amp|lt);)|<(?=\/cite>)/g : /&(?=(?:amp|lt);)|<(?=\/comment>)/g, sign => sign === '&' ? '&amp;' : '&lt;');
 const plain = (text: string) => text.replace(/&(amp|lt);/g, (_, name: string) => name === 'amp' ? '&' : '<');
-const TAG = /<cite(?: zoom="([\d+]+)")?(?:\/>|>([\s\S]*?)<\/cite>)(?:\n<comment>([\s\S]*?)<\/comment>)?\n?/g, HEAD = new RegExp(`^(?:${TAG.source})+`);
+const TAG = /<cite(?: zoom="([\d+]+)")?(?:\/>|>([\s\S]*?)<\/cite>)(?:\r?\n<comment>([\s\S]*?)<\/comment>)?(?:\r?\n)?/g, HEAD = new RegExp(`^(?:${TAG.source})+`);
 /** A message with what it cites: the citations first, a line each (each with its `<comment>` on the next line when it has one),
  * then what was typed. The agent reads it as it is written here and the page draws it (`cited`), so this is the one place that
  * says how. The place is named after the agent's `zoom` tool, which opens it: a real model goes and reads it then, and under
@@ -63,7 +63,7 @@ export function cited(message: string): { cites: Cite[]; text: string } {
     const at = place(name), note = comment === undefined ? undefined : plain(comment).trim();
     return { text: plain(text), ...at && { at }, ...note && { comment: note } };
   });
-  return { cites, text: message.slice(head.length).replace(/^\n/, '') };
+  return { cites, text: message.slice(head.length).replace(/^\r?\n/, '') };
 }
 /** The skill a message runs: `/skill:name what was typed`, which Pi sends as the skill's file (`body`, from `path`) with what
  * was typed under it. A message as typed has only the name. */
@@ -86,7 +86,7 @@ export function yours(said: string): Yours {
   return given ? { skill: { name: given }, cites: [], text: words.trim() } : cited(message);
 }
 /** Your message as it was typed, which is how it is copied, brought back and sent again: `yours`, written back. */
-export const asTyped = ({ skill, cites, text }: Yours) => skill ? `/skill:${skill.name}${text && ` ${text}`}` : citing(cites, text);
+export const asTyped = ({ skill, cites, text }: Yours) => skill ? `/skill:${skill.name}${text && ` ${text}`}` : citing(cites, text).trimEnd();
 /** Messages that go back into the composer as one: what they cite, then what they say. */
 export function joined(messages: readonly string[]) {
   const all = messages.map(yours);

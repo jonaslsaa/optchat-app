@@ -1,5 +1,5 @@
 import { BoxIcon, QuoteIcon } from 'lucide-react';
-import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react';
+import { useEffect, useImperativeHandle, useLayoutEffect, useRef, useState, type Ref, type RefObject } from 'react';
 import { createPortal } from 'react-dom';
 import { cite, COMMENT_CAP, named, place, type Cite, type Place, type Skill } from './cite.ts';
 import { escapes } from './keys.ts';
@@ -68,11 +68,11 @@ function placePopover(anchor: CiteAnchor, width: number, height: number, above: 
 /** Floating comment editor for a citation (T3 Code's `AssistantCitationCommentEditor` and `assistantCitationCommentDismissal`,
  * MIT, see THIRD_PARTY_NOTICES.md). Opens right where the Cite button or chip was: Enter saves, ⌘/Ctrl+Enter saves and sends,
  * Shift+Enter adds a line, Esc cancels (and removes a fresh citation), and clicking outside commits any edited comment. */
-export function CiteCommentPopover({ item, anchor, above = false, showQuote = false, onSave, onSaveAndSend, onCancel }: { item: Cite; anchor: CiteAnchor; above?: boolean; showQuote?: boolean; onSave: (comment: string, focus: boolean) => void; onSaveAndSend: (comment: string) => void; onCancel: () => void }) {
+export function CiteCommentPopover({ item, anchor, above = false, showQuote = false, opener, canSend = true, onSave, onSaveAndSend, onCancel, ref }: { item: Cite; anchor: CiteAnchor; above?: boolean; showQuote?: boolean; opener?: Element | null; canSend?: boolean; onSave: (comment: string, focus: boolean) => void; onSaveAndSend: (comment: string) => void; onCancel: () => void; ref?: Ref<{ commit: () => boolean; draft: () => string | undefined }> }) {
   const [comment, setComment] = useState(item.comment ?? '');
   const box = useRef<HTMLDivElement>(null), area = useRef<HTMLTextAreaElement>(null), draft = useRef(comment), [pos, setPos] = useState(() => placePopover(anchor, 320, 148, above));
   draft.current = comment;
-  const tooLong = comment.length > COMMENT_CAP;
+  const tooLong = comment.trim().length > COMMENT_CAP;
 
   // Focus the textarea at the end of any existing comment when opened.
   useLayoutEffect(() => {
@@ -96,25 +96,43 @@ export function CiteCommentPopover({ item, anchor, above = false, showQuote = fa
   }, [anchor, above]);
 
   // Clicking outside, tabbing out, or wheel-scrolling outside commits any edited comment (without stealing focus), unless over
-  // the cap. Esc is heard on capture so the chat's run is not stopped while this popover is open.
-  const settled = useRef(false), actions = useRef({ onSave, onCancel });
-  actions.current = { onSave, onCancel };
+  // the cap. Esc is heard on capture so the chat's run is not stopped while this popover is open, except when a modal dialog
+  // or inline rename sits over it (as `useOverlay` guards).
+  const settled = useRef(false), actions = useRef({ onSave, onCancel, opener });
+  actions.current = { onSave, onCancel, opener };
   const commit = (focus: boolean) => {
-    if (settled.current || draft.current.length > COMMENT_CAP) return;
+    if (settled.current) return true;
+    if (draft.current.trim().length > COMMENT_CAP) return false;
     settled.current = true;
     actions.current.onSave(draft.current, focus);
+    return true;
   };
   const cancel = () => {
     if (settled.current) return;
     settled.current = true;
     actions.current.onCancel();
   };
+  useImperativeHandle(ref, () => ({
+    commit: () => commit(false),
+    draft: () => {
+      if (settled.current || draft.current.trim().length > COMMENT_CAP) return undefined;
+      settled.current = true;
+      return draft.current;
+    },
+  }));
   useEffect(() => {
     const outside = (target: EventTarget | null) => !(target instanceof Node && box.current?.contains(target));
-    const away = (event: PointerEvent) => { if (outside(event.target)) commit(false); };
+    const away = (event: PointerEvent) => {
+      if (!outside(event.target)) return;
+      if (event.target instanceof Node && actions.current.opener?.contains(event.target)) return;
+      if (event.target instanceof Element && event.target.closest('[data-cite-action]')) return;
+      commit(false);
+    };
     const wheeled = (event: WheelEvent) => { if (outside(event.target)) commit(false); };
     const pressed = (event: KeyboardEvent) => {
       if (event.isComposing || event.keyCode === 229) return;
+      if (event.target instanceof Element && event.target.closest('[data-renaming]')) return;
+      if (document.querySelector('dialog:modal') && !box.current?.closest('dialog:modal')) return;
       escapes(event, cancel);
     };
     addEventListener('pointerdown', away, true);
@@ -129,7 +147,7 @@ export function CiteCommentPopover({ item, anchor, above = false, showQuote = fa
 
   const submit = () => commit(true);
   const submitAndSend = () => {
-    if (settled.current || tooLong) return;
+    if (settled.current || tooLong || !canSend) return;
     settled.current = true;
     onSaveAndSend(comment);
   };
@@ -138,7 +156,12 @@ export function CiteCommentPopover({ item, anchor, above = false, showQuote = fa
   return createPortal(
     <div ref={box} role="dialog" aria-label="Comment on citation" style={{ left: pos.left, top: pos.top }}
       onPointerDown={event => event.stopPropagation()}
-      onBlur={event => { if (event.relatedTarget && !(event.relatedTarget instanceof Node && box.current?.contains(event.relatedTarget))) commit(false); }}
+      onBlur={event => {
+        const next = event.relatedTarget;
+        if (!next || (next instanceof Node && (box.current?.contains(next) || actions.current.opener?.contains(next)))) return;
+        if (next instanceof Element && next.closest('[data-cite-action]')) return;
+        commit(false);
+      }}
       className="enter enter-grow fixed z-50 w-[min(20rem,calc(100vw-1.5rem))] rounded-xl border bg-popover p-2.5 text-popover-foreground shadow-[0_16px_40px_-18px_rgb(0_0_0/55%)] dark:shadow-[0_18px_44px_-18px_rgb(0_0_0/80%)]">
       {showQuote && quote && (
         <p className="mb-1.5 line-clamp-2 rounded-md bg-black/6 px-2 py-1 text-muted-foreground text-xs leading-snug [overflow-wrap:anywhere] dark:bg-white/8">{quote}</p>

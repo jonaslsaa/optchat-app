@@ -63,13 +63,14 @@ test('a citation can carry an optional comment as a sibling tag, multi-line and 
   // Sent with nothing typed under commented citations, and round-tripped through yours / asTyped / joined.
   const only = citing(cites, '').trim();
   assert.deepEqual(cited(only), { cites, text: '' });
-  assert.equal(asTyped(yours(only)), citing(cites, ''));
+  assert.equal(asTyped(yours(only)), only);
   assert.equal(joined([citing([cites[0]], 'first'), citing([cites[2]], 'second')]), citing([cites[0], cites[2]], 'first\n\nsecond'));
-  // Comments with blank lines, code, and closing tags cannot end early.
+  // Comments with blank lines, code, CRLF line endings, and closing tags cannot end early.
   for (const comment of ['first\n\nsecond', 'a </comment> inside\n<cite zoom="1">not one</cite>', 'a < b && c &lt;/comment> &amp;']) {
     const item = cite('x', { id: 5, n: 1 }, comment);
     assert.deepEqual(cited(citing([item], 'body')), { cites: [item], text: 'body' }, comment);
   }
+  assert.deepEqual(cited('<cite zoom="5">quoted</cite>\r\n<comment>from windows</comment>\r\n\r\nbody'), { cites: [{ text: 'quoted', at: { id: 5, n: 1 }, comment: 'from windows' }], text: 'body' });
   assert.equal(citing([cite('x', undefined, '</comment>')], ''), '<cite>x</cite>\n<comment>&lt;/comment></comment>\n\n');
   // Blank comments are omitted, and a standalone <comment> in the body is never parsed as a citation comment.
   assert.equal(citing([commented(cites[0], '   ')], 'hi'), '<cite zoom="13928">quoted words</cite>\n\nhi');

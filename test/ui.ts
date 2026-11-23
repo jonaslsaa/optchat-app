@@ -1248,6 +1248,7 @@ test('citations open a comment popover right at the trigger: Enter saves, Esc ca
   const commentBox = page.getByRole('textbox', { name: 'Comment on cited text' });
   const chips = () => page.getByRole('list', { name: 'Cited in the message' }).getByRole('listitem').allInnerTexts();
   const report = page.locator('[data-cite] li', { hasText: 'Nothing is replayed twice' }), reply = page.locator('[data-cite] p', { hasText: 'Started two agents.' });
+  await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
   // Esc on a brand-new cite removes the fresh chip cleanly and returns focus to the composer.
   await report.click({ clickCount: 3 });
   await cite.click();
@@ -1266,7 +1267,8 @@ test('citations open a comment popover right at the trigger: Enter saves, Esc ca
   await page.keyboard.press('Enter');
   await commentBox.waitFor({ state: 'detached' });
   assert.deepEqual([await chips(), await focused(page)], [['Is this true on reconnect? Check edge case.'], 'Message']);
-  // Editing an existing chip's comment: Esc discards unsaved edits and keeps the saved comment; Save updates it.
+  // Editing an existing chip's comment: Esc discards unsaved edits and keeps the saved comment; clicking the active pencil
+  // toggles the popover closed and commits; over-cap blocks Save and outside-click; Save updates it.
   await page.getByRole('button', { name: 'Edit citation comment' }).click();
   await commentBox.waitFor();
   assert.equal(await commentBox.inputValue(), 'Is this true on reconnect?\nCheck edge case.');
@@ -1275,11 +1277,43 @@ test('citations open a comment popover right at the trigger: Enter saves, Esc ca
   await commentBox.waitFor({ state: 'detached' });
   assert.deepEqual([await chips(), await focused(page)], [['Is this true on reconnect? Check edge case.'], 'Message']);
   await page.getByRole('button', { name: 'Edit citation comment' }).click();
+  await commentBox.waitFor();
+  await commentBox.fill('Toggled closed');
+  await page.getByRole('button', { name: 'Edit citation comment' }).click();
+  await commentBox.waitFor({ state: 'detached' });
+  assert.deepEqual([await chips(), await focused(page)], [['Toggled closed'], 'Message']);
+  await page.getByRole('button', { name: 'Edit citation comment' }).click();
+  await commentBox.waitFor();
+  await commentBox.fill('x'.repeat(2001));
+  assert.ok(await page.getByRole('button', { name: 'Shorten comment' }).isDisabled());
+  await box.click();
+  await commentBox.waitFor();
+  await commentBox.fill(`  ${'x'.repeat(2000)}  `);
+  assert.ok(await page.getByRole('button', { name: 'Save', exact: true }).isEnabled());
   await commentBox.fill('Verify reconnect dedupe');
   await page.getByRole('button', { name: 'Save', exact: true }).click();
   await commentBox.waitFor({ state: 'detached' });
   assert.deepEqual(await chips(), ['Verify reconnect dedupe']);
-  // Second cite with ⌘Enter saves and sends immediately; sent message carries both <comment> blocks and renders them in CiteCard.
+  // Switching directly from chip 1's pencil to chip 2's pencil commits chip 1 and opens chip 2; clicking × while open removes it.
+  await reply.click({ clickCount: 3 });
+  await cite.click();
+  await commentBox.waitFor();
+  await page.keyboard.press('Enter');
+  await commentBox.waitFor({ state: 'detached' });
+  await page.getByRole('button', { name: 'Edit citation comment' }).first().click();
+  await commentBox.waitFor();
+  await commentBox.fill('Updated chip 1');
+  await page.getByRole('button', { name: 'Add comment to citation' }).click();
+  await commentBox.waitFor();
+  assert.deepEqual([await chips(), await commentBox.inputValue()], [['Updated chip 1', 'Started two agents. I\'ll tell you when they report.'], '']);
+  await page.getByRole('button', { name: 'Remove the citation' }).nth(1).click();
+  await commentBox.waitFor({ state: 'detached' });
+  assert.deepEqual(await chips(), ['Updated chip 1']);
+  // Re-set chip 1 back to Verify reconnect dedupe and send a second cite with ⌘Enter; both <comment> blocks render in CiteCard.
+  await page.getByRole('button', { name: 'Edit citation comment' }).click();
+  await commentBox.fill('Verify reconnect dedupe');
+  await page.keyboard.press('Enter');
+  await commentBox.waitFor({ state: 'detached' });
   await reply.click({ clickCount: 3 });
   await cite.click();
   await commentBox.waitFor();
@@ -1291,10 +1325,15 @@ test('citations open a comment popover right at the trigger: Enter saves, Esc ca
   const expected = '<cite zoom="12">Nothing is replayed twice</cite>\n<comment>Verify reconnect dedupe</comment>\n<cite zoom="11">Started two agents. I\'ll tell you when they report.</cite>\n<comment>Which two?</comment>';
   assert.equal(messages.findLast(message => message.kind === 'user')?.text, expected);
   assert.deepEqual(await page.locator('[data-cite-comment]').allInnerTexts(), ['Verify reconnect dedupe', 'Which two?']);
-  // ⌘F finds text inside a citation comment too.
+  // Copying a sent commented message preserves the exact wire format with <comment> tags.
+  await page.getByRole('button', { name: 'Copy message' }).last().click();
+  assert.equal(await page.evaluate(() => navigator.clipboard.readText()), expected);
+  // ⌘F finds text inside a citation comment, and does not match across the quote/comment boundary.
   await page.keyboard.press('ControlOrMeta+f');
   await page.keyboard.type('reconnect dedupe');
   await page.getByRole('search', { name: 'Find in chat' }).locator('[aria-live]').getByText('1/1').waitFor({ timeout: 3000 });
+  await page.getByRole('searchbox', { name: 'Find in chat' }).fill('twice Verify');
+  await page.getByRole('search', { name: 'Find in chat' }).locator('[aria-live]').getByText('0/0').waitFor({ timeout: 3000 });
   await page.keyboard.press('Escape');
   // Esc in the comment popover while the agent is running cancels the fresh cite without stopping the run, and programmatic
   // scroll updates from the streaming timeline do not dismiss an open comment editor.
@@ -1307,7 +1346,7 @@ test('citations open a comment popover right at the trigger: Enter saves, Esc ca
   await goesOn(page, 'in the citation comment popover');
   await commentBox.waitFor({ state: 'detached' });
   assert.deepEqual(await chips(), []);
-  // Tabbing out of the popover commits the comment rather than dropping it.
+  // Tabbing out of the popover commits the comment; outside wheel commits it too; Alt+M switching to Memory commits it too.
   await report.click({ clickCount: 3 });
   await cite.click();
   await commentBox.waitFor();
@@ -1315,9 +1354,23 @@ test('citations open a comment popover right at the trigger: Enter saves, Esc ca
   await box.focus();
   await commentBox.waitFor({ state: 'detached' });
   assert.deepEqual(await chips(), ['Committed on blur']);
+  await page.getByRole('button', { name: 'Edit citation comment' }).click();
+  await commentBox.waitFor();
+  await commentBox.fill('Committed on wheel');
+  const boxRect = await box.boundingBox();
+  assert.ok(boxRect);
+  await page.mouse.move(boxRect.x + 10, boxRect.y + 10);
+  await page.mouse.wheel(0, 60);
+  await commentBox.waitFor({ state: 'detached' });
+  assert.deepEqual(await chips(), ['Committed on wheel']);
+  await page.getByRole('button', { name: 'Edit citation comment' }).click();
+  await commentBox.waitFor();
+  await commentBox.fill('Committed on Alt+M');
+  await page.keyboard.press('Alt+m');
+  await commentBox.waitFor({ state: 'detached' });
+  assert.deepEqual(await chips(), ['Committed on Alt+M']);
   await page.getByRole('button', { name: 'Remove the citation' }).click();
   // Outside click commits an edited comment when citing from the memory view too.
-  await page.keyboard.press('Alt+m');
   await page.locator('[data-line]').first().hover();
   await page.getByRole('button', { name: 'Cite this line' }).first().click();
   await commentBox.waitFor();

@@ -1,5 +1,5 @@
 import { CircleAlertIcon, CornerUpRightIcon, ImagePlusIcon, ListPlusIcon, PencilIcon, QuoteIcon, XIcon } from 'lucide-react';
-import { useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState, type Ref } from 'react';
+import { useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState, type ComponentRef, type Ref } from 'react';
 import type { PiRecord, WindowState } from '../protocol.ts';
 import { anchorOf, CiteCard, CiteCommentPopover, SkillChip, type CiteAnchor } from './Cite.tsx';
 import { called, cited, citing, commented, joined, yours, type Cite } from './cite.ts';
@@ -107,7 +107,8 @@ export function Composer({ state, window, live, chat, onSend, ref }: { state: St
   // The message as it would be sent: what is typed, under what it cites. The box holds the one, and the chips are the other.
   const [draft, setDraft] = useState(() => app.draft(window.id)), [sending, setSending] = useState(false), { cites, text } = useMemo(() => cited(draft), [draft]);
   // Which citation chip's comment popover is open (`fresh` removes it on Cancel/Esc; `above` opens over a chip in the composer).
-  const [editing, setEditing] = useState<{ index: number; anchor: CiteAnchor; fresh: boolean; above: boolean }>();
+  const [editing, setEditing] = useState<{ index: number; anchor: CiteAnchor; fresh: boolean; above: boolean; opener?: Element | null }>();
+  const popover = useRef<ComponentRef<typeof CiteCommentPopover>>(null);
   const images = state.attached[window.id] ?? [], [refused, setRefused] = useState<string>(), [reading, setReading] = useState(0);
   const area = useRef<HTMLTextAreaElement>(null), picker = useRef<HTMLInputElement>(null), root = useRef<HTMLDivElement>(null), [caret, setCaret] = useState(0);
   const running = window.status === 'running', queued = [...live.queued.steering, ...live.queued.followUp];
@@ -138,7 +139,10 @@ export function Composer({ state, window, live, chat, onSend, ref }: { state: St
       if (anchor) setEditing({ index: next.length - 1, anchor, fresh: true, above: false });
       else area.current?.focus();
     },
-    closeComment: () => setEditing(undefined),
+    closeComment: () => {
+      if (popover.current) popover.current.commit();
+      setEditing(undefined);
+    },
   }));
   const empty = !text.trim() && !images.length && !cites.length;
 
@@ -159,7 +163,7 @@ export function Composer({ state, window, live, chat, onSend, ref }: { state: St
     if (focus) area.current?.focus();
   };
   const saveAndSend = (comment: string) => {
-    if (!editing || !cites[editing.index]) return;
+    if (!editing || !cites[editing.index] || sending || reading > 0) return;
     const next = cites.map((item, at) => at === editing.index ? commented(item, comment) : item);
     keep(citing(next, text));
     const message = citing(next, text.trim()).trim();
@@ -216,19 +220,29 @@ export function Composer({ state, window, live, chat, onSend, ref }: { state: St
                 <li key={at} title={cite.comment ? `${cite.text}\n— ${cite.comment}` : called(cite) === cite.text ? undefined : cite.text} className="enter flex min-w-0 max-w-64 items-center gap-1 rounded-md bg-black/6 py-0.5 ps-1.5 pe-0.5 text-muted-foreground text-xs dark:bg-white/8">
                   <QuoteIcon className="size-3 shrink-0" />
                   <span className="min-w-0 truncate text-foreground/90">{called(cite)}</span>
-                  <button type="button" aria-label={cite.comment ? 'Edit citation comment' : 'Add comment to citation'} title={cite.comment ? 'Edit comment' : 'Add comment'}
-                    onPointerDown={event => { if (editing?.index === at) event.stopPropagation(); }}
-                    onClick={event => setEditing(open => open?.index === at ? undefined : { index: at, anchor: anchorOf(event.currentTarget), fresh: false, above: true })}
+                  <button type="button" data-cite-action aria-label={cite.comment ? 'Edit citation comment' : 'Add comment to citation'} title={cite.comment ? 'Edit comment' : 'Add comment'}
+                    onClick={event => {
+                      if (editing?.index === at) { if (popover.current?.commit()) area.current?.focus(); return; }
+                      if (popover.current && !popover.current.commit()) return;
+                      setEditing({ index: at, anchor: anchorOf(event.currentTarget), fresh: false, above: true, opener: event.currentTarget });
+                    }}
                     className={cn('shrink-0 rounded-sm p-0.5 hover:bg-foreground/10 hover:text-foreground', cite.comment && 'text-foreground/80')}><PencilIcon className="size-3" /></button>
-                  <button type="button" aria-label="Remove the citation" onClick={() => { if (editing?.index === at) setEditing(undefined); else if (editing && editing.index > at) setEditing({ ...editing, index: editing.index - 1 }); keep(citing(cites.filter((_, index) => index !== at), text)); area.current?.focus(); }} className="shrink-0 rounded-sm p-0.5 hover:bg-foreground/10 hover:text-foreground"><XIcon className="size-3" /></button>
+                  <button type="button" data-cite-action aria-label="Remove the citation" onClick={() => {
+                    const updated = editing && editing.index !== at ? popover.current?.draft() : undefined;
+                    const next = cites.map((item, index) => updated !== undefined && index === editing?.index ? commented(item, updated) : item).filter((_, index) => index !== at);
+                    setEditing(undefined);
+                    keep(citing(next, text));
+                    area.current?.focus();
+                  }} className="shrink-0 rounded-sm p-0.5 hover:bg-foreground/10 hover:text-foreground"><XIcon className="size-3" /></button>
                 </li>
               ))}
             </ul>
           )}
           {edited && editing && (
             <CiteCommentPopover
+              ref={popover}
               key={`${editing.index}-${editing.fresh}-${editing.anchor.top}-${editing.anchor.right}`}
-              item={edited} anchor={editing.anchor} above={editing.above} showQuote={editing.above}
+              item={edited} anchor={editing.anchor} above={editing.above} showQuote={editing.above} opener={editing.opener} canSend={!sending && reading === 0}
               onSave={(comment, focus) => saveComment(comment, focus)}
               onSaveAndSend={saveAndSend}
               onCancel={cancelComment}

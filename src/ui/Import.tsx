@@ -3,7 +3,7 @@ import { useDeferredValue, useEffect, useMemo, useRef, useState, type Dispatch, 
 import type { Found, ImportPreview } from '../protocol.ts';
 import { asks, chosen, modes, underway, foundIn, key, LOCAL, NAMES, picked, progress, projects, RANGES, standing, summary, toggled, unit, type Mode, type Project, type Range, type Scans, type Source, type Underway } from './imports.ts';
 import { Mark } from './Mark.tsx';
-import { app, mainOf, useApp, type State } from './store.ts';
+import { app, mainOf, profileName, useApp, type State } from './store.ts';
 import { Button, Choice, cn, Spinner } from './ui.tsx';
 
 /** The Import page, in place of the chat as the settings are: other tools' histories found on this Mac, picked down to single
@@ -174,10 +174,10 @@ const Bar = ({ share, moving }: { share: number; moving: boolean }) => (
     <div className={cn('h-full rounded-full transition-[width] duration-500', moving ? 'bg-sky-500 dark:bg-sky-400' : 'bg-foreground/40')} style={{ width: `${Math.max(2, 100 * share)}%` }} />
   </div>
 );
-function Underway({ profile, status }: { profile: string; status: Underway }) {
+function Underway({ profile, name, status }: { profile: string; name: string; status: Underway }) {
   const [refused, setRefused] = useState<string>(), [sure, setSure] = useState(false), [asking, setAsking] = useState(false), { share, text, percent } = progress(status);
   const act = async (action: 'pause' | 'resume' | 'discard') => { setAsking(true); setRefused(await app.controlImport(profile, action)); setAsking(false); setSure(false); };
-  const title = { running: `Importing into ${profile}`, paused: 'Import paused', failed: 'Import stopped' }[status.state];
+  const title = { running: `Importing into ${name}`, paused: 'Import paused', failed: 'Import stopped' }[status.state];
   return (
     <Card>
       <div>
@@ -189,7 +189,7 @@ function Underway({ profile, status }: { profile: string; status: Underway }) {
         <p className="flex justify-between text-muted-foreground text-xs tabular-nums"><span>{text} messages · {status.summaries.toLocaleString('en-US')} summaries</span><span>{percent}</span></p>
       </div>
       {status.error && <p role="status" className={cn('rounded-md px-3 py-2 text-sm', status.state === 'failed' ? 'bg-error-surface text-error-foreground' : 'bg-warning-surface text-warning-foreground')}>{status.state === 'failed' ? status.error : `Retrying: ${status.error}`}</p>}
-      <p className="text-muted-foreground text-xs">{status.state === 'running' ? `The chat in ${profile} waits until this is done; other profiles go on. The memory it had stays as it was until the end.` : `The chat in ${profile} takes messages again once you resume and it finishes, or discard it. The memory it had is untouched.`}</p>
+      <p className="text-muted-foreground text-xs">{status.state === 'running' ? `The chat in ${name} waits until this is done; other profiles go on. The memory it had stays as it was until the end.` : `The chat in ${name} takes messages again once you resume and it finishes, or discard it. The memory it had is untouched.`}</p>
       {refused && <p role="alert" className="text-error-foreground text-xs">{refused}</p>}
       <div className="flex justify-end gap-2">
         {status.state === 'running' ? <Button variant="outline" disabled={asking} onClick={() => void act('pause')}><PauseIcon />Pause</Button> : <>
@@ -202,12 +202,12 @@ function Underway({ profile, status }: { profile: string; status: Underway }) {
 }
 /** The first thing worth asking a memory that now has another tool's history in it. */
 export const FIRST_QUESTION = 'What have I worked on across the history I just imported, and what did I leave unfinished?';
-function Done({ profile, added, onMemory, onAsk, onMore }: { profile: string; added: number; onMemory: () => void; onAsk: () => void; onMore: () => void }) {
+function Done({ name, added, onMemory, onAsk, onMore }: { name: string; added: number; onMemory: () => void; onAsk: () => void; onMore: () => void }) {
   return (
     <Card>
       <div className="flex items-start gap-3">
         <span className="grid size-8 shrink-0 place-items-center rounded-full bg-success-foreground/12 text-success-foreground"><CheckIcon className="size-4" /></span>
-        <div><h2 className="font-medium text-lg">Imported into {profile}</h2><p className="text-muted-foreground text-sm">{added.toLocaleString('en-US')} messages are in its memory now, summarized and searchable.</p></div>
+        <div><h2 className="font-medium text-lg">Imported into {name}</h2><p className="text-muted-foreground text-sm">{added.toLocaleString('en-US')} messages are in its memory now, summarized and searchable.</p></div>
       </div>
       <button type="button" onClick={onAsk} className="group rounded-xl border bg-background p-3 text-left text-sm hover:bg-accent/60 focus-visible:ring-2 focus-visible:ring-ring">
         <span className="block text-muted-foreground text-xs">Try asking</span>“{FIRST_QUESTION}”
@@ -222,13 +222,13 @@ function Done({ profile, added, onMemory, onAsk, onMore }: { profile: string; ad
  * it. Nothing is picked until you pick it, and starting empty is as near as Esc. When nothing is found on this Mac it says
  * so, and the way on is the page's place for a ChatGPT export. */
 export function BringHistory({ state, profile, onEmpty, onChoose }: { state: State; profile: string; onEmpty: () => void; onChoose: (from: Source[]) => void }) {
-  const [from, setFrom] = useState<Source[]>([]);
+  const [from, setFrom] = useState<Source[]>([]), name = profileName(state, profile);
   useEffect(() => { for (const source of LOCAL) if (!(source in state.scans)) void app.scan(source); }, []);
   // A source being looked for has its key with nothing under it yet: nothing is said of it until its scan has come.
   const none = LOCAL.every(source => state.scans[source] !== undefined && !foundIn(state.scans, source).length);
   if (none) return (
     <form onSubmit={event => { event.preventDefault(); onChoose([]); }}>
-      <p className="mt-1 text-muted-foreground text-xs">{profile} starts with an empty memory. No history from Claude Code, Codex or Pi was found on this Mac.</p>
+      <p className="mt-1 text-muted-foreground text-xs">{name} starts with an empty memory. No history from Claude Code, Codex or Pi was found on this Mac.</p>
       <p className="mt-2 text-muted-foreground text-xs">A ChatGPT export can still be brought in: the next page takes the ZIP, and shows what it would cost before anything starts.</p>
       <div className="mt-4 flex justify-end gap-2">
         <Button variant="ghost-muted" onClick={onEmpty}>Start empty</Button>
@@ -238,7 +238,7 @@ export function BringHistory({ state, profile, onEmpty, onChoose }: { state: Sta
   );
   return (
     <form onSubmit={event => { event.preventDefault(); onChoose(from); }}>
-      <p className="mt-1 text-muted-foreground text-xs">{profile} starts with an empty memory. Claude Code, Codex and Pi kept what you did with them on this Mac: pick some, and {profile} knows it from its first message.</p>
+      <p className="mt-1 text-muted-foreground text-xs">{name} starts with an empty memory. Claude Code, Codex and Pi kept what you did with them on this Mac: pick some, and {name} knows it from its first message.</p>
       <ul aria-label="Sources" className="mt-3 grid gap-2 min-[30rem]:grid-cols-2">
         {LOCAL.map(source => {
           const { scan, found, status, projects } = standing(state.scans, source), on = from.includes(source);
@@ -299,11 +299,11 @@ export function ImportPage({ state, profile, from = [], onClose, onMemory, onCha
   return (
     <main className="flex min-h-0 flex-1 flex-col bg-background">
       <header className="window-bar window-start flex h-(--topbar-height) shrink-0 items-center gap-2 px-5">
-        <h1 className="min-w-0 flex-1 truncate font-medium text-sm">Import into <span className="text-foreground">{profile}</span></h1>
+        <h1 className="min-w-0 flex-1 truncate font-medium text-sm">Import into <span className="text-foreground">{profileName(state, profile)}</span></h1>
         <Button variant="ghost-muted" size="icon-sm" aria-label="Close the import" onClick={onClose}><XIcon /></Button>
       </header>
-      {busy ? <div className="flex min-h-0 flex-1 overflow-y-auto p-5"><Underway profile={profile} status={busy} /></div>
-        : done ? <div className="flex min-h-0 flex-1 overflow-y-auto p-5"><Done profile={profile} added={done.added} onMemory={() => { app.seenImport(profile); onMemory(); }} onAsk={ask} onMore={() => app.seenImport(profile)} /></div>
+      {busy ? <div className="flex min-h-0 flex-1 overflow-y-auto p-5"><Underway profile={profile} name={profileName(state, profile)} status={busy} /></div>
+        : done ? <div className="flex min-h-0 flex-1 overflow-y-auto p-5"><Done name={profileName(state, profile)} added={done.added} onMemory={() => { app.seenImport(profile); onMemory(); }} onAsk={ask} onMore={() => app.seenImport(profile)} /></div>
         : <>
           {/* Narrow, the page scrolls as one, the sources over the projects; wide, each column scrolls by itself. */}
           <div className="enter mx-auto flex min-h-0 w-full max-w-5xl flex-1 flex-col gap-4 overflow-y-auto px-5 pt-2 md:flex-row md:gap-6 md:overflow-visible">

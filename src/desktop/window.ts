@@ -35,12 +35,14 @@ export function recovery(most = 3, within = 60_000) {
  * only where it can be done. Electron has no such menu of its own. */
 export function contextMenu(
   { misspelledWord, dictionarySuggestions, linkURL, mediaType, editFlags }: Pick<ContextMenuParams, 'misspelledWord' | 'dictionarySuggestions' | 'linkURL' | 'mediaType' | 'editFlags'>,
-  page: string, does: { replace(word: string): void; copyLink(): void; copyImage(): void; row?: (action: RowAction) => void },
+  page: string, does: { replace(word: string): void; copyLink(): void; copyImage(): void; row?: (action: RowAction) => void; tab?: () => void },
 ): MenuItemConstructorOptions[] {
   const separator: MenuItemConstructorOptions = { type: 'separator' };
   return [
     // On a connected window's row in the sidebar (main.ts).
     ...does.row ? [{ label: 'Rename', click: () => does.row?.('rename') }, { label: 'Remove', click: () => does.row?.('remove') }, separator] : [],
+    // On a profile's tab.
+    ...does.tab ? [{ label: 'Rename', click: does.tab }, separator] : [],
     ...misspelledWord ? [...dictionarySuggestions.slice(0, 5).map(word => ({ label: word, click: () => does.replace(word) })), ...dictionarySuggestions.length ? [] : [{ label: 'No suggestions', enabled: false }], separator] : [],
     ...destination(linkURL, page) !== 'nowhere' ? [{ label: 'Copy Link', click: does.copyLink }, separator] : [],
     ...mediaType === 'image' ? [{ label: 'Copy Image', click: does.copyImage }, separator] : [],

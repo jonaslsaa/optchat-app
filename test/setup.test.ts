@@ -74,6 +74,24 @@ test('the settings are kept in the app\'s own folder, reach every page, and name
   assert.equal(appHome(), join(homedir(), 'somewhere'));
 });
 
+test('a profile\'s name is the app\'s own: kept trimmed, by its id, and gone when emptied or the id itself', async t => {
+  const { app, request } = await setup(t), names = async () => (await request('settings', {})).names;
+  assert.deepEqual((await request('setSettings', { names: { work: '  Kahoot Work ' } })).names, { work: 'Kahoot Work' });
+  // Each profile's is changed by itself, and the rest of the settings stay.
+  assert.deepEqual(await request('setSettings', { names: { home: 'Home' } }), { theme: 'system', art: true, awake: true, reports: 'tabs', names: { work: 'Kahoot Work', home: 'Home' } });
+  assert.deepEqual(JSON.parse(readFileSync(join(app, 'settings.json'), 'utf8')).names, { work: 'Kahoot Work', home: 'Home' });
+  // Empty, blank, `null` or the id itself: the profile is shown by its id again, and nothing is kept for it.
+  await request('setSettings', { names: { home: '   ' } });
+  assert.deepEqual(await names(), { work: 'Kahoot Work' });
+  await request('setSettings', { names: { work: 'work' } });
+  assert.equal(await names(), undefined);
+  await request('setSettings', { names: { work: 'Work' } });
+  await request('setSettings', { names: { work: null } });
+  assert.deepEqual(await request('settings', {}), { theme: 'system', art: true, awake: true, reports: 'tabs' });
+  // A name is no longer than an id can be.
+  await assert.rejects(request('setSettings', { names: { work: 'x'.repeat(65) } }));
+});
+
 test('setup tells a Pi that is ready from one that lacks pi-optchat, has an old one, or has no login', async t => {
   const { folder, request } = await setup(t, {}, { version: '1.5.2', providers: [], packages: {} });
   const bare = await request('setup', {});

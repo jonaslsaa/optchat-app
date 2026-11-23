@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { chromium, type Browser, type Locator, type Page } from 'playwright-core';
 import { build } from 'vite';
 import { connect, type Client } from '../src/client.ts';
-import { ROW_EVENT } from '../src/menu.ts';
+import { ROW_EVENT, TAB_EVENT } from '../src/menu.ts';
 import { startServer } from '../src/server/server.ts';
 // pi-optchat's own lock, which only Pi takes: here it stands for a Pi in a terminal.
 import { defaults, describeOwner, lockProfile } from 'pi-optchat/files';
@@ -314,13 +314,16 @@ async function pictures(browser: Browser, control: Client) {
   await first.getByText('The app installed this Pi into its own folder.').waitFor();
   await first.getByText('Not installed in this Pi.').waitFor();
   await shot(first, '20-pi-installed');
-  // The first profile's name, when it will not do: why is said under it.
+  // The first profile's id, when it will not do: why is said under it.
   await first.getByRole('textbox', { name: 'Profile name' }).fill('My Chat');
+  await first.getByRole('textbox', { name: 'Profile ID' }).fill('My Chat');
   await first.getByRole('button', { name: 'Create profile' }).click();
   await first.getByRole('alert').waitFor();
   await shot(first, '145-first-profile-refused');
-  // Later, with a profile: the settings still say where the app's Pi is, and how to put it on your PATH.
-  await first.getByRole('textbox', { name: 'Profile name' }).fill('work');
+  // Later, with a profile: the settings still say where the app's Pi is, and how to put it on your PATH. Emptied, the id
+  // follows the name again.
+  await first.getByRole('textbox', { name: 'Profile ID' }).fill('');
+  await first.getByRole('textbox', { name: 'Profile name' }).fill('Work');
   await first.getByRole('button', { name: 'Create profile' }).click();
   // pi-optchat is not in this Pi yet, so nothing could be imported: the profile is not asked what history it brings.
   await first.getByRole('button', { name: 'Settings' }).click();
@@ -896,19 +899,45 @@ async function pictures(browser: Browser, control: Client) {
   await naming.getByRole('button', { name: 'Open a profile' }).click();
   await shot(naming, '141-profiles-list', naming.getByRole('button', { name: 'Import history…' }));
   await naming.getByRole('button', { name: 'New profile…' }).click();
-  await naming.getByRole('textbox', { name: 'Profile name' }).fill('research');
+  // The id is made from the name as it is typed.
+  await naming.getByRole('textbox', { name: 'Profile name' }).fill('Research Notes');
   await shot(naming, '142-new-profile');
-  await naming.getByRole('textbox', { name: 'Profile name' }).fill('work');
+  await naming.getByRole('textbox', { name: 'Profile name' }).fill('Work');
   await naming.keyboard.press('Enter');
   await naming.getByRole('dialog').getByRole('alert').waitFor();
   await shot(naming, '143-new-profile-taken');
   const pocketed = await open(['work'], { width: 420, dark: true });
   await pocketed.getByRole('button', { name: 'Open a profile' }).click();
   await pocketed.getByRole('button', { name: 'New profile…' }).click();
-  await pocketed.getByRole('textbox', { name: 'Profile name' }).fill('Not a name');
+  await pocketed.getByRole('textbox', { name: 'Profile name' }).fill('Not an id');
+  await pocketed.getByRole('textbox', { name: 'Profile ID' }).fill('Not an id');
   await pocketed.keyboard.press('Enter');
   await pocketed.getByRole('dialog').getByRole('alert').waitFor();
   await shot(pocketed, '144-new-profile-refused-dark-narrow');
+
+  // Profiles shown by names of their own, apart from their ids, which pi-optchat and their folders keep: in the tabs, and in
+  // the list with the id beside the name; light and dark; and the name in the profile's settings. Taken away after, so no
+  // other picture has them.
+  await control.request('setSettings', { names: { work: 'Kahoot Work', notes: 'Notes & Ideas' } });
+  for (const [dark, name] of [[false, '300-profile-names'], [true, '301-profile-names-dark']] as const) {
+    const page = await open(['work', 'notes'], { width: 900, height: 520, dark });
+    await page.getByRole('tab', { name: 'Kahoot Work' }).waitFor();
+    await page.getByRole('button', { name: 'Open a profile' }).click();
+    await page.getByRole('option', { name: /Kahoot Work/ }).getByRole('button').and(page.locator(':focus')).waitFor();
+    await shot(page, name);
+  }
+  const renaming = await open(['work']);
+  await renaming.getByRole('button', { name: 'Settings' }).click();
+  await renaming.getByRole('tab', { name: 'Profile' }).click();
+  await renaming.locator('input[aria-label="Display name"][value="Kahoot Work"]').waitFor();
+  await shot(renaming, '302-settings-profile-name');
+  // A tab renamed from the desktop app's right-click Rename (its event, as the shell sends it), with a new name typed.
+  const retitled = await open(['work', 'notes'], { width: 900, height: 520 });
+  await retitled.getByRole('tab', { name: 'Notes & Ideas' }).waitFor();
+  await retitled.evaluate(([event, profile]) => dispatchEvent(new CustomEvent(event, { detail: { profile } })), [TAB_EVENT, 'notes']);
+  await retitled.getByRole('textbox', { name: 'Tab name' }).fill('Reading list');
+  await shot(retitled, '303-profile-tab-rename');
+  await control.request('setSettings', { names: { work: null, notes: null } });
 
   // The app started again after its Pis closed with agents at work, in two profiles: `work`'s Pi crashed (its agents are still
   // saved as working) and `notes`'s closed (pi-optchat marked its agent cut off). One bar offers to resume them, a line a

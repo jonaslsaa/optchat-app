@@ -9,7 +9,7 @@ import { startServer } from '../src/server/server.ts';
 import { transcript } from '../src/ui/agents.ts';
 import { building, listed, path, polled } from '../src/ui/memory.ts';
 import { cite, citing } from '../src/ui/cite.ts';
-import { App, cutOffShown, shelved, title, UNTITLED, type State } from '../src/ui/store.ts';
+import { App, byName, cutOffShown, profileName, shelved, slug, title, UNTITLED, type State } from '../src/ui/store.ts';
 import { chat } from '../src/ui/transcript.ts';
 // pi-optchat's own lock, which only Pi takes: here it stands for a Pi in a terminal.
 import { describeOwner, lockProfile } from 'pi-optchat/files';
@@ -217,6 +217,40 @@ test('the first profile is made from the page: pi-optchat makes it, and it opens
   assert.equal(await app.createProfile('second'), undefined);
   await app.openProfile('second');
   assert.deepEqual([app.state.profiles, app.state.tabs, app.state.profile, app.state.windows.map(window => window.id).sort()], [['first', 'second'], ['first', 'second'], 'second', ['first/main', 'second/main']]);
+});
+
+test('a new profile\'s id follows its name by pi-optchat\'s rule for an id', () => {
+  assert.equal(slug('Kahoot Work'), 'kahoot-work');
+  assert.equal(slug('  Ålesund — Fjord Trip!  '), 'alesund-fjord-trip');
+  assert.equal(slug('Smørbrød & Œuvre, Straße'), 'smorbrod-oeuvre-strasse');
+  assert.equal(slug('my_notes 2'), 'my_notes-2');
+  // The first is a letter or a digit, and nothing is left hanging at the end, also where a long name is cut at 64.
+  assert.equal(slug('__Draft'), 'draft');
+  assert.equal(slug(`${'a'.repeat(63)} b`), 'a'.repeat(63));
+  // A name with nothing an id can spell gives none: the id is then typed.
+  assert.equal(slug('🚀 ✨'), '');
+});
+
+test('a profile is made under its id and shown by its name, which is the app\'s and not on disk', async t => {
+  const home = temporaryHome();
+  const server = await startServer({ home, app: mkdtempSync(join(home, 'app-')), cwd: home, pi });
+  t.after(() => server.close());
+  const { app } = page(t);
+  await app.start(server.url);
+  assert.equal(await app.createProfile('kahoot-work', 'Kahoot Work'), undefined);
+  assert.deepEqual([app.state.profiles, app.state.settings?.names], [['kahoot-work'], { 'kahoot-work': 'Kahoot Work' }], 'named as it is there to open');
+  assert.equal(profileName(app.state, 'kahoot-work'), 'Kahoot Work');
+  assert.deepEqual(readdirSync(join(home, 'profiles')), ['kahoot-work']);
+  // A name that is the id is none, and an id that is refused keeps no name.
+  assert.equal(await app.createProfile('plain', 'plain'), undefined);
+  assert.match(await app.createProfile('Not An Id', 'Pretty') ?? '', /Profile names:/);
+  assert.deepEqual(app.state.settings?.names, { 'kahoot-work': 'Kahoot Work' });
+  assert.equal(profileName(app.state, 'plain'), 'plain');
+  // An id that is a name every object has is still its own.
+  assert.equal(profileName(app.state, 'constructor'), 'constructor');
+  // The list of profiles is in the order of the names they are shown by, whatever their case.
+  const settings = { theme: 'system', art: true, awake: true, reports: 'tabs' } as const;
+  assert.deepEqual(byName({ profiles: ['alpha', 'mid', 'zeta'], settings: { ...settings, names: { zeta: 'Beta', alpha: 'zulu' } } }), ['zeta', 'mid', 'alpha']);
 });
 
 test('a tab dragged to another place stays there, on the page opened again, and the one in front stays in front', async t => {

@@ -9,3 +9,6 @@ export type MenuAction = typeof MENU_ACTIONS[number];
  * as its ✕ does. */
 export const ROW_EVENT = 'optchat-row';
 export type RowAction = 'rename' | 'remove';
+/** What the desktop app's right click offers on a profile's tab (`data-tab`, the profile's id): Rename, said with an event of
+ * this name whose `detail` is `{ profile }`, and the tab opens its name to be renamed. */
+export const TAB_EVENT = 'optchat-tab';

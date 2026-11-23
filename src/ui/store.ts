@@ -95,6 +95,21 @@ export function shelved(windows: WindowState[], open: Record<Shelf, boolean>, se
 /** The profiles the bar over the page offers to resume: cut off, and not dismissed since. */
 export const cutOffShown = ({ cutOff, dismissed }: Pick<State, 'cutOff' | 'dismissed'>) =>
   cutOff.filter(({ profile, agents }) => agents.some(({ started }) => started > (Object.hasOwn(dismissed, profile) ? dismissed[profile] : -Infinity)));
+/** The name you gave a profile (`names` in the settings), if you gave it one: only its own, as an id may be `constructor`. */
+export const givenName = ({ settings }: Pick<State, 'settings'>, profile: string) => settings?.names && Object.hasOwn(settings.names, profile) ? settings.names[profile] : undefined;
+/** What a profile is called: the name you gave it, else its id, which is pi-optchat's and its folder's. */
+export const profileName = (state: Pick<State, 'settings'>, profile: string) => givenName(state, profile) ?? profile;
+/** The profiles in the order of the names they are shown by, as the list of profiles has them. */
+export const byName = (state: Pick<State, 'profiles' | 'settings'>) => state.profiles.toSorted((one, other) => profileName(state, one).localeCompare(profileName(state, other), 'en', { sensitivity: 'base' }));
+/** Letters NFKD leaves whole, as English spells them. */
+const SPELLED: Record<string, string> = { æ: 'ae', ø: 'o', œ: 'oe', ß: 'ss', đ: 'd', ð: 'd', ł: 'l', þ: 'th', ı: 'i' };
+/** The id a profile named `name` gets unless you type one, by pi-optchat's rule for an id: 1–64 lowercase letters, digits,
+ * hyphens and underscores, the first a letter or a digit. Accents are dropped, and whatever else is between words is a
+ * hyphen: `Kahoot Work` is `kahoot-work`, `Ålesund` `alesund`. A name with no letter or digit in it gives none. */
+export function slug(name: string) {
+  const plain = name.toLowerCase().normalize('NFKD').replace(/\p{M}/gu, '').replace(/[æøœßđðłþı]/g, letter => SPELLED[letter]);
+  return plain.replace(/[^a-z0-9_]+/g, '-').replace(/^[-_]+/, '').slice(0, 64).replace(/-+$/, '');
+}
 /** What a window is called: the main chat, or a connected window by the name you gave it (`rename`), else by the first message of
  * the conversation it is in, once it has one. */
 export function title(window: WindowState, state: State) {
@@ -267,11 +282,14 @@ export class App {
     const setup = await this.ask('setup', { fresh });
     if (setup) this.set({ setup });
   }
-  /** Makes a profile, which is then there to open. Why not, when pi-optchat will not make it (a name that will not do, or one
-   * there is already): that is said where the name was typed, not over the page. */
-  async createProfile(name: string) {
+  /** Makes a profile with id `name`, shown by `shown` if that is given, which is then there to open. Why not, when pi-optchat
+   * will not make it (an id that will not do, or one there is already): that is said where it was typed, not over the page. */
+  async createProfile(name: string, shown?: string) {
     try { await this.request('createProfile', { name }); } catch (error) { return reason(error); }
-    this.set({ profiles: [...this.state.profiles, name].sort() });
+    // Named before it is there to open, so its tab never shows the id first.
+    const settings = shown && shown !== name ? await this.saveSettings({ names: { [name]: shown } }) : undefined;
+    // The list may have found it on disk meanwhile (`findProfiles`): it is there once.
+    this.set({ profiles: [...new Set([...this.state.profiles, name])].sort(), ...settings && { settings } });
   }
   /** The profiles as they are now. Once there is one, it is opened. */
   async findProfiles() {

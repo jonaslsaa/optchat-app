@@ -153,7 +153,7 @@ function expanded(text: string) {
 }
 const user = (text: string, images: Image[] = []) => { const message: Said = { role: 'user', content: [{ type: 'text', text }, ...images], timestamp: now() }; write({ type: 'message_start', message }); ended(message); };
 
-const THOUGHT = 'The user wants the shutdown path checked.\n\nFirst `stop()` closes stdin, then waits for the grace period.\nThe timer is never cleared, so a clean exit still waits the whole grace period.\nI should read src/server/pi.ts before saying so.';
+const THOUGHT = '**Checking the shutdown path**\n\nFirst `stop()` closes stdin, then waits for the grace period:\n- Check `clearTimeout` in [the shutdown notes](https://example.com/shutdown).\n- Verify the exit handler.\n\n**Deciding Next Steps**\n\nThe timer is never cleared, so a clean exit still waits the whole grace period. I should inspect `src/server/pi.ts` before saying so, and check whether the grace timer keeps the process alive after stdin closes and exits.';
 let running = false, settled = Promise.resolve(), steering: string[] = [], followUp: string[] = [], release: ((held: { aborted: boolean; answer?: string }) => void) | undefined;
 const held = () => new Promise<{ aborted: boolean; answer?: string }>(resolve => { release = held => { release = undefined; resolve(held); }; });
 
@@ -209,7 +209,8 @@ async function run(text: string, images?: Image[]) {
     content.filter(block => block.type === 'toolCall').forEach((call, at) => tool(call, results[at]));
   }
   // Asked to think, it thinks first, as a model does that Pi lets think, and a "wait" then holds it in the middle of its thought, and once it is released, in the middle of its answer ("slowly": and again with all of it out).
-  const thought: Content[] = text.includes('think') ? [{ type: 'thinking', thinking: THOUGHT }] : [];
+  const longThought = Array.from({ length: 30 }, (_, n) => `Paragraph ${n + 1} checking \`step_${n + 1}\` in the shutdown path.`).join('\n\n');
+  const thought: Content[] = text.includes('think') ? [{ type: 'thinking', thinking: text.includes('long') ? longThought : THOUGHT }] : [];
   if (!aborted) aborted = await reply([...thought, { type: 'text', text: scripted?.answer ?? answer }], 'stop', text.includes('wait') ? { at: thought.length ? [0, 1] : [0], again: text.includes('slowly') } : undefined);
   write({ type: 'agent_end', messages: [] });
   const next = aborted ? undefined : steering.shift() ?? followUp.shift();

@@ -1016,13 +1016,27 @@ test('the working line opens to what the agent has thought so far, and Esc on it
   const page = await open('thinks');
   await page.getByRole('textbox', { name: 'Message' }).fill('think about it, and wait');
   await page.keyboard.press('Enter');
-  // The fake Pi is held halfway through its thought: the line says its last line so far, and opens to all of it.
+  // The fake Pi is held halfway through its thought: the line says its last line so far without Markdown markers, and opens to rendered Markdown.
   const line = page.getByRole('button', { name: /^Thinking for/ });
   assert.equal(await line.getAttribute('aria-expanded'), 'false');
-  assert.equal(await page.getByText('The user wants the shutdown path checked.').count(), 0, 'the thought is folded until it is opened');
+  const collapsed = await line.innerText();
+  assert.match(collapsed, /Deciding Next Steps/);
+  assert.doesNotMatch(collapsed, /\*\*/);
+  assert.equal(await page.getByText('Checking the shutdown path').count(), 0, 'the thought is folded until it is opened');
   await line.click();
   assert.equal(await line.getAttribute('aria-expanded'), 'true');
-  await page.getByText('The user wants the shutdown path checked.').waitFor();
+  await page.getByText('Checking the shutdown path').waitFor();
+  assert.deepEqual(await page.locator('.chat-markdown-quiet').evaluate(box => ({
+    bold: [...box.querySelectorAll('strong')].map(el => el.textContent),
+    code: [...box.querySelectorAll('code')].map(el => el.textContent),
+    items: [...box.querySelectorAll('li')].map(el => el.textContent),
+    link: box.querySelector('a')?.getAttribute('href'),
+  })), {
+    bold: ['Checking the shutdown path', 'Deciding Next Steps'],
+    code: ['stop()', 'clearTimeout'],
+    items: ['Check clearTimeout in the shutdown notes.', 'Verify the exit handler.'],
+    link: 'https://example.com/shutdown',
+  });
   assert.ok(await line.evaluate(element => element === document.activeElement), 'the working line has the focus');
   // Its thought done, the agent begins to answer: the line is under the reply now, the same one, open still and with the focus.
   const control = await connect(server.url);
@@ -1041,6 +1055,26 @@ test('the working line opens to what the agent has thought so far, and Esc on it
   await stops(page, 'in the chat');
   control.close();
   await page.context().close();
+
+  // With normal motion, Markdown paces streamed thinking across animation frames; the open drawer keeps following as it overflows.
+  const moving = await open('thinks', WIDE, 'no-preference');
+  await moving.getByRole('textbox', { name: 'Message' }).fill('think long, wait slowly');
+  await moving.keyboard.press('Enter');
+  const toggle = moving.getByRole('button', { name: /^Thinking for/ });
+  await toggle.click();
+  await moving.getByText('Paragraph 1 checking').waitFor();
+  const ctl = await connect(server.url);
+  await ctl.request('command', { window: 'thinks/main', command: { type: 'release' } });
+  await moving.getByText('Paragraph 30 checking').waitFor({ timeout: 5000 });
+  const scroller = moving.locator('.chat-markdown-quiet').locator('..');
+  await moving.waitForFunction(el => el.scrollHeight > el.clientHeight && el.scrollHeight - el.scrollTop - el.clientHeight <= 4, await scroller.elementHandle(), { timeout: 3000 });
+  // Scrolling up stops auto-following while the drawer stays open.
+  await scroller.evaluate(el => { el.scrollTop = 0; });
+  await moving.waitForTimeout(100);
+  assert.equal(await scroller.evaluate(el => el.scrollTop), 0, 'scrolling up stays where the user scrolled');
+  await stops(moving, 'on the long thought');
+  ctl.close();
+  await moving.context().close();
 });
 
 test('a long edit opens as its diff, which scrolls in its box and does not make the page longer', async () => {

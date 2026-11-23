@@ -283,6 +283,13 @@
 .chat-markdown :is(th, td):last-child { padding-inline-end: 0; }
 .chat-markdown thead th { border-bottom: 1px solid color-mix(in srgb, var(--border) 60%, transparent); font-weight: 600; }
 .chat-markdown tbody tr:not(:last-child) td { border-bottom: 1px solid color-mix(in srgb, var(--border) 60%, transparent); }
+/* Smaller, quieter Markdown for the agent's thought drawer, so headings and spacing stay in scale with `text-xs`. */
+.chat-markdown-quiet p, .chat-markdown-quiet ul, .chat-markdown-quiet ol, .chat-markdown-quiet blockquote, .chat-markdown-quiet .table-container { margin: 0.4rem 0; }
+.chat-markdown-quiet :is(h1, h2, h3, h4, h5, h6) { margin: 0.65rem 0 0.25rem; font-size: 0.75rem; color: inherit; }
+.chat-markdown-quiet > :first-child { margin-top: 0; }
+.chat-markdown-quiet > :last-child { margin-bottom: 0; }
+.chat-markdown-quiet strong { font-weight: 600; }
+.chat-markdown-quiet pre { font-size: 0.6875rem; }
 @media (prefers-reduced-motion: no-preference) {
   .chat-markdown[data-streaming] > * {
     transition: opacity 600ms ease-out;

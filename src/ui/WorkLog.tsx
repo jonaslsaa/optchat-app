@@ -1,6 +1,6 @@
 // From T3 Code (MIT, see THIRD_PARTY_NOTICES.md): the row and its details from apps/web/src/components/chat/WorkLog.tsx, without
 // the grouping, button and panel variants this app does not use.
-import { useLayoutEffect, useRef, type ComponentProps, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, type ComponentProps, type ReactNode } from "react";
 import { cn } from "./ui.tsx";
 
 type RowContent = {
@@ -58,18 +58,37 @@ const LIVE_EDGE_PX = 4;
 export function WorkLogDetails({ children, followLive = false }: { children: ReactNode; followLive?: boolean }) {
   const scrollerRef = useRef<HTMLDivElement>(null);
   const atLiveEdgeRef = useRef(true);
+  const lastTopRef = useRef(0);
   useLayoutEffect(() => {
     const scroller = scrollerRef.current;
     if (followLive && atLiveEdgeRef.current && scroller) {
       scroller.scrollTop = scroller.scrollHeight;
+      lastTopRef.current = scroller.scrollTop;
     }
   });
+  // A child can grow without this wrapper re-rendering (for instance Markdown pacing streamed text on animation frames).
+  useEffect(() => {
+    const scroller = scrollerRef.current;
+    if (!followLive || !scroller) return;
+    const follow = () => {
+      if (!atLiveEdgeRef.current) return;
+      scroller.scrollTop = scroller.scrollHeight;
+      lastTopRef.current = scroller.scrollTop;
+    };
+    const resized = new ResizeObserver(follow);
+    const mutated = new MutationObserver(follow);
+    for (const child of scroller.children) resized.observe(child);
+    mutated.observe(scroller, { childList: true, characterData: true, subtree: true });
+    return () => { resized.disconnect(); mutated.disconnect(); };
+  }, [followLive]);
   return (
     <div
       ref={scrollerRef}
       onScroll={(event) => {
         const { scrollHeight, scrollTop, clientHeight } = event.currentTarget;
-        atLiveEdgeRef.current = scrollHeight - scrollTop - clientHeight <= LIVE_EDGE_PX;
+        const near = scrollHeight - scrollTop - clientHeight <= LIVE_EDGE_PX;
+        if (near || scrollTop < lastTopRef.current) atLiveEdgeRef.current = near;
+        lastTopRef.current = scrollTop;
       }}
       className="enter ms-7 flex max-h-96 cursor-auto flex-col gap-3 overflow-auto px-0.5 py-1 select-text"
       onClick={(event) => event.stopPropagation()}

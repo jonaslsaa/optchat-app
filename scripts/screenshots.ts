@@ -777,11 +777,14 @@ async function pictures(browser: Browser, control: Client) {
     await shot(page, light ? '212-gallery-zoomed' : '213-gallery-zoomed-dark');
   }
 
-  // What the agent is thinking, opened from the line under your message while it thinks: wide, then narrow.
-  for (const [name, options] of [['101-thinking-opened', {}], ['102-thinking-opened-narrow', { width: 420 }]] as const) {
+  // What the agent is thinking: collapsed with its last line stripped of Markdown, then opened as rendered Markdown (wide, dark and narrow).
+  for (const [name, options] of [['101-thinking-opened', {}], ['102-thinking-opened-narrow', { width: 420 }], ['103-thinking-opened-dark', { dark: true }]] as const) {
     const thinks = await open(['changes'], options);
     await say(thinks, 'Have a think about the shutdown path, and wait');
-    await thinks.getByRole('button', { name: /^Thinking for/ }).click();
+    const line = thinks.getByRole('button', { name: /^Thinking for/ });
+    await line.waitFor();
+    if (name === '101-thinking-opened') await shot(thinks, '100-thinking-collapsed');
+    await line.click();
     await shot(thinks, name);
     await thinks.keyboard.press('Escape');
     await thinks.getByRole('button', { name: 'Send', exact: true }).waitFor();

@@ -5,8 +5,9 @@ import { cite, COMMENT_CAP, named, place, placed, type Cite, type Place, type Sk
 import { escapes, label } from './keys.ts';
 import { Button, cn, Kbd } from './ui.tsx';
 
-/** Where a citation came from on screen, in viewport coordinates, so its comment popover opens right there. */
-export interface CiteAnchor { left: number; right: number; top: number; bottom: number }
+/** Where a citation came from on screen, in viewport coordinates, so its comment popover opens right there; and for one cited
+ * from a selection, the words it was (`range`), which stay marked while the popover is open. */
+export interface CiteAnchor { left: number; right: number; top: number; bottom: number; range?: Range }
 export const anchorOf = (element: Element): CiteAnchor => {
   const { left, right, top, bottom } = element.getBoundingClientRect();
   return { left, right, top, bottom };
@@ -25,12 +26,6 @@ function selected(content: HTMLElement) {
   const line = [...range.getClientRects()].findLast(line => line.top >= said.top - 1 && line.bottom <= said.bottom + 1), frame = content.getBoundingClientRect();
   return range.toString().trim() && line ? { range, at: place(source.dataset.cite), left: Math.min(line.right - frame.left, frame.width - 80), top: line.bottom - frame.top } : undefined;
 }
-/** What was just cited stays marked where it was selected, with the browser's own highlights, while its comment popover is
- * open (the selection itself is gone: it would take the popover's caret with it). */
-const mark = (range?: Range) => {
-  if (typeof Highlight === 'undefined') return;
-  if (range) CSS.highlights.set('cited', new Highlight(range)); else CSS.highlights.delete('cited');
-};
 /** A "Cite" button by what is selected in `content`, which it stands in: in the chat and in the memory view alike. `logged`
  * is the last message the profile's log has: what is selected in a later one, or in a chat that is not the log, is cited
  * without a place, since the number it is drawn under is not the log's yet. */
@@ -53,7 +48,7 @@ export function CiteSelection({ content, logged = -1, onCite }: { content: RefOb
     // box's caret with it, so it looks as if it has no keys. Esc on the button takes both away, and is then not the chat's key.
     <span className="enter enter-grow absolute z-20 mt-1 flex" style={{ left: found.left, top: found.top }}>
       <Button size="xs" variant="glass" onPointerDown={event => event.preventDefault()} onKeyDown={event => escapes(event, drop)}
-        onClick={event => { const where = anchorOf(event.currentTarget), cited = cite(words(found.range), found.at && found.at.id + found.at.n - 1 <= logged ? found.at : undefined); drop(); mark(found.range); onCite(cited, where); }}>
+        onClick={event => { const where = { ...anchorOf(event.currentTarget), range: found.range }, cited = cite(words(found.range), found.at && found.at.id + found.at.n - 1 <= logged ? found.at : undefined); drop(); onCite(cited, where); }}>
         <QuoteIcon className="size-3.5" />Cite
       </Button>
     </span>
@@ -81,7 +76,13 @@ export function CiteCommentPopover({ item, anchor, above = false, showQuote = fa
   draft.current = comment;
   const tooLong = comment.trim().length > COMMENT_CAP;
 
-  useEffect(() => () => mark(), []);
+  // What was just cited stays marked where it was selected, with the browser's own highlights, while this is open (the
+  // selection itself is gone: it would take the caret with it).
+  useEffect(() => {
+    if (!anchor.range || typeof Highlight === 'undefined') return;
+    CSS.highlights.set('cited', new Highlight(anchor.range));
+    return () => { CSS.highlights.delete('cited'); };
+  }, [anchor]);
   // Focus the textarea at the end of any existing comment when opened.
   useLayoutEffect(() => {
     const input = area.current;
@@ -246,7 +247,7 @@ export function CiteGroup({ cites, onOpen, queued = false, alone = false, classN
   return (
     <div data-cites className={cn('min-w-0 text-start shadow-[inset_0_0_0_1px_var(--cite-line)]', alone ? 'rounded-[11px]' : 'rounded-[10px]', queued ? 'bg-transparent' : 'bg-cite-card', className)}>
       {many && <p data-no-find className="flex items-center gap-1.5 px-3 pt-2 font-medium text-muted-foreground text-xs leading-snug"><QuoteIcon className="size-3 text-cite-ink" />Citing {cites.length}</p>}
-      {cites.map((cite, at) => <Cited key={at} cite={cite} lines={many ? 1 : 2} under={at ? 'cite' : many ? 'head' : undefined} onOpen={queued ? undefined : onOpen} />)}
+      {cites.map((cite, at) => <Cited key={`${at}:${cite.text}`} cite={cite} lines={many ? 1 : 2} under={at ? 'cite' : many ? 'head' : undefined} onOpen={queued ? undefined : onOpen} />)}
     </div>
   );
 }

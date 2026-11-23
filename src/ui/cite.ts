@@ -27,6 +27,18 @@ export const commented = (item: Cite, comment: string): Cite => {
   return note ? { ...rest, comment: note } : rest;
 };
 
+const same = (one: Cite, other: Cite) => one.text === other.text && one.at?.id === other.at?.id && one.at?.n === other.at?.n;
+/** Each citation of a message paired with the first of `marks` made for the same words at the same place that no citation
+ * before it took (its comment may have changed since): so a mark follows its citation wherever the message moves it, and is
+ * left over once that is gone. */
+export function paired<Mark extends { cite: Cite }>(cites: readonly Cite[], marks: readonly Mark[]): (Mark | undefined)[] {
+  const left = [...marks];
+  return cites.map(cite => {
+    const at = left.findIndex(mark => same(mark.cite, cite));
+    return at < 0 ? undefined : left.splice(at, 1)[0];
+  });
+}
+
 /** A place as it is written: a message by its number, a line as pi-optchat's view heads it (`id+n`). */
 export const named = (at: Place) => at.n === 1 ? String(at.id) : key(at);
 /** What a citation is called on its chip in the composer: your comment when it has one, else its words, and one with no words

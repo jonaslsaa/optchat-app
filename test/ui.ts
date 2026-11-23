@@ -47,6 +47,9 @@ remember(gutter, 4);
 const citedComments = createProfile(home, 'cited-comments');
 seed(citedComments, TEAM.length, Date.now(), TEAM);
 remember(citedComments, 4);
+const citeMarks = createProfile(home, 'cite-marks');
+seed(citeMarks, TEAM.length, Date.now(), TEAM);
+remember(citeMarks, 4);
 writeMemory(createProfile(home, 'thinks'), 4);
 seed(createProfile(home, 'formulas'), 1, Date.now(), FORMULAS);
 writeFileSync(join(home, 'chart.png'), png(120, [38, 99, 235]));
@@ -1424,6 +1427,108 @@ test('citations open a comment popover right at the trigger: Enter saves, Esc ca
   await box.click();
   await commentBox.waitFor({ state: 'detached' });
   assert.deepEqual([await chips(), await focused(page)], [['Summarize this range'], 'Message']);
+  await page.context().close();
+});
+
+test('the words a message in the composer cites stay marked until it no longer cites them, and a click on them opens their comment', async () => {
+  const page = await open('cite-marks'), box = page.getByRole('textbox', { name: 'Message' }), cite = page.getByRole('button', { name: 'Cite', exact: true });
+  const commentBox = page.getByRole('textbox', { name: 'Comment on cited text' }), lines = page.locator('[data-line]');
+  const chips = () => page.getByRole('list', { name: 'Cited in the message' }).getByRole('listitem').allInnerTexts();
+  const report = page.locator('[data-cite] li', { hasText: 'Nothing is replayed twice' }), reply = page.locator('[data-cite] p', { hasText: 'Started two agents.' });
+  // The words marked, as the page has them, and a point on the words of the one at `index`, brought into sight.
+  const marks = () => page.evaluate(() => { const words: string[] = []; CSS.highlights.get('cited')?.forEach(range => { if (range instanceof Range && !range.collapsed) words.push(range.toString().trim()); }); return words; });
+  const on = async (index: number) => {
+    const at = await page.evaluate(index => { const ranges: Range[] = []; CSS.highlights.get('cited')?.forEach(range => { if (range instanceof Range && !range.collapsed) ranges.push(range); }); ranges[index].startContainer.parentElement?.scrollIntoView({ block: 'center' }); const { x, y, height } = ranges[index].getClientRects()[0]; return { x: x + 12, y: y + height / 2 }; }, index);
+    await page.mouse.move(at.x, at.y);
+    return at;
+  };
+  const clickOn = async (index: number) => { const { x, y } = await on(index); await page.mouse.click(x, y); };
+  const said = 'Started two agents. I\'ll tell you when they report.';
+  // Saved, a citation's words stay marked; and those of the next one too.
+  await report.click({ clickCount: 3 });
+  await cite.click();
+  await commentBox.waitFor();
+  await page.keyboard.press('Enter');
+  await commentBox.waitFor({ state: 'detached' });
+  assert.deepEqual(await marks(), ['Nothing is replayed twice']);
+  await reply.click({ clickCount: 3 });
+  await cite.click();
+  await commentBox.waitFor();
+  await page.keyboard.type('Which two?');
+  await page.keyboard.press('Enter');
+  await commentBox.waitFor({ state: 'detached' });
+  assert.deepEqual(await marks(), ['Nothing is replayed twice', said]);
+  // The pointer on them says they can be clicked, and a click opens that citation's comment, with no citation added.
+  const over = await on(0);
+  assert.equal(await page.evaluate(({ x, y }) => getComputedStyle(document.elementFromPoint(x, y) ?? document.body).cursor, over), 'pointer');
+  await clickOn(0);
+  await commentBox.waitFor();
+  assert.deepEqual([await commentBox.inputValue(), await chips()], ['', ['Nothing is replayed twice', 'Which two?']]);
+  // A click on the same words leaves it open; on the other's, it is saved and the other's opens.
+  await page.keyboard.type('Replayed how?');
+  await clickOn(0);
+  assert.deepEqual([await commentBox.inputValue(), await focused(page)], ['Replayed how?', 'Comment on cited text']);
+  await clickOn(1);
+  assert.deepEqual([await commentBox.inputValue(), await chips()], ['Which two?', ['Replayed how?', 'Which two?']]);
+  // Esc there leaves the citation and its mark as they were.
+  await page.keyboard.press('Escape');
+  await commentBox.waitFor({ state: 'detached' });
+  assert.deepEqual([await chips(), await marks()], [['Replayed how?', 'Which two?'], ['Nothing is replayed twice', said]]);
+  // Words selected across the marks are a selection to cite, not a click on them.
+  const start = await on(1);
+  await page.mouse.down();
+  await page.mouse.move(start.x + 120, start.y, { steps: 4 });
+  await page.mouse.up();
+  await cite.waitFor();
+  assert.equal(await commentBox.count(), 0);
+  await box.click();
+  // The first taken off, the second is the first: its words open its comment.
+  await page.getByRole('button', { name: 'Remove the citation' }).first().click();
+  assert.deepEqual([await chips(), await marks()], [['Which two?'], [said]]);
+  await clickOn(0);
+  await commentBox.waitFor();
+  assert.equal(await commentBox.inputValue(), 'Which two?');
+  await page.keyboard.press('Escape');
+  // Backspace in an empty box takes the mark with the citation; a cancelled fresh one has none, and a message sent none.
+  await box.focus();
+  await page.keyboard.press('Backspace');
+  assert.deepEqual([await chips(), await marks()], [[], []]);
+  await report.click({ clickCount: 3 });
+  await cite.click();
+  await commentBox.waitFor();
+  assert.deepEqual(await marks(), ['Nothing is replayed twice']);
+  await page.keyboard.press('Escape');
+  await commentBox.waitFor({ state: 'detached' });
+  assert.deepEqual(await marks(), []);
+  await report.click({ clickCount: 3 });
+  await cite.click();
+  await commentBox.waitFor();
+  await page.keyboard.press('ControlOrMeta+Enter');
+  await page.getByText('reply', { exact: true }).waitFor();
+  assert.deepEqual(await marks(), []);
+  // In the memory view, a click on the words cited from a line opens their comment, and not the line.
+  await page.keyboard.press('Alt+m');
+  const words = await lines.nth(3).getByText('Started two agents').boundingBox();
+  assert.ok(words);
+  await page.mouse.move(words.x + 40, words.y + words.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(words.x + 160, words.y + words.height / 2, { steps: 4 });
+  await page.mouse.up();
+  await cite.click();
+  await commentBox.waitFor();
+  await page.keyboard.press('Enter');
+  await commentBox.waitFor({ state: 'detached' });
+  assert.equal((await marks()).length, 1);
+  await clickOn(0);
+  await commentBox.waitFor();
+  assert.equal(await lines.nth(3).getAttribute('aria-expanded'), 'false');
+  // The line takes the focus from a press on them while the comment is open, which saves nothing: Esc still discards it.
+  await page.keyboard.type('not yet');
+  await clickOn(0);
+  assert.deepEqual([await commentBox.inputValue(), await focused(page)], ['not yet', 'Comment on cited text']);
+  await page.keyboard.press('Escape');
+  await commentBox.waitFor({ state: 'detached' });
+  assert.ok(!(await chips()).includes('not yet'), 'a press on the words saved the comment');
   await page.context().close();
 });
 

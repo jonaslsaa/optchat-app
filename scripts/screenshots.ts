@@ -653,6 +653,13 @@ async function pictures(browser: Browser, control: Client) {
   await commentBox.waitFor({ state: 'detached' });
   await citing.getByRole('textbox', { name: 'Message' }).fill('Is that still how ours works?');
   await shot(citing, '150-cited-in-composer');
+  // The words cited stay marked while the message cites them, and a click on them opens that citation's comment there.
+  const marked = await citing.evaluate(() => { const ranges: Range[] = []; CSS.highlights.get('cited')?.forEach(range => { if (range instanceof Range) ranges.push(range); }); const line = ranges[0]?.getClientRects()[0]; return line && { x: line.x + 12, y: line.y + line.height / 2 }; });
+  if (marked) await citing.mouse.click(marked.x, marked.y);
+  await commentBox.waitFor();
+  await shot(citing, '294-cite-mark-clicked');
+  await citing.keyboard.press('Escape');
+  await commentBox.waitFor({ state: 'detached' });
   await citing.getByRole('button', { name: 'Edit citation comment' }).click();
   await commentBox.waitFor();
   await shot(citing, '282-cite-comment-edit');

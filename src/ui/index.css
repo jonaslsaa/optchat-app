@@ -219,6 +219,8 @@
    text and are no part of the page. */
 ::highlight(find) { color: oklch(0.216 0.028 77.4); background-color: oklch(0.915 0.11 85); }
 ::highlight(cited) { background-color: color-mix(in srgb, var(--primary) 18%, transparent); text-decoration: underline 1.5px color-mix(in srgb, var(--primary) 70%, transparent); text-underline-offset: 3px; }
+/* Words a message in the composer cites stay marked (`useMarks` in Cite.tsx), and the pointer on them says a click opens their comment. */
+:root[data-on-cite], :root[data-on-cite] * { cursor: pointer; }
 :is(.dark, .dark *)::highlight(find) { color: oklch(0.97 0 0); background-color: oklch(0.55 0.1 85); }
 ::highlight(find-at) { color: oklch(0.216 0.028 77.4); background-color: oklch(0.774 0.152 74.3); }
 

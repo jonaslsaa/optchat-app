@@ -1,8 +1,8 @@
 import { CircleAlertIcon, CornerUpRightIcon, ImagePlusIcon, ListPlusIcon, PencilIcon, QuoteIcon, XIcon } from 'lucide-react';
 import { useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState, type ComponentRef, type MouseEvent, type Ref } from 'react';
 import type { PiRecord, WindowState } from '../protocol.ts';
-import { anchorOf, CiteCommentPopover, CiteGroup, SkillChip, type CiteAnchor } from './Cite.tsx';
-import { called, cited, citing, commented, joined, yours, type Cite } from './cite.ts';
+import { anchorOf, CiteCommentPopover, CiteGroup, SkillChip, useMarks, type CiteAnchor } from './Cite.tsx';
+import { called, cited, citing, commented, joined, paired, yours, type Cite } from './cite.ts';
 import { useCommands, useMentions } from './Commands.tsx';
 import { address, image, KINDS, sorted } from './images.ts';
 import { escapes, label, matches, useHeld, useShortcuts } from './keys.ts';
@@ -116,6 +116,23 @@ export function Composer({ state, window, live, chat, onSend, ref }: { state: St
   // Which citation chip's comment popover is open (`fresh` removes it on Cancel/Esc; `above` opens over a chip in the composer).
   const [editing, setEditing] = useState<{ index: number; anchor: CiteAnchor; fresh: boolean; above: boolean; opener?: Element | null }>();
   const popover = useRef<ComponentRef<typeof CiteCommentPopover>>(null);
+  // The words each citation was selected from, while they are on the page: a citation the message no longer has leaves its
+  // mark behind (`paired`), however it went (a draft brought back with ↑, sent), and so does one whose words left the page
+  // (the memory view took the chat's place). A chip taken off takes its own mark (`unmark`), not that of another with the
+  // same words. A citation of a whole line, or from before the page was opened, has none.
+  const marks = useRef<{ cite: Cite; range: Range }[]>([]);
+  const ranges = useMemo(() => {
+    const now = paired(cites, marks.current.filter(mark => !mark.range.collapsed));
+    marks.current = now.filter(mark => mark !== undefined);
+    return now.map(mark => mark?.range);
+  }, [cites]);
+  const unmark = (index: number) => { marks.current = marks.current.filter(mark => mark.range !== ranges[index]); };
+  // A click on them opens their comment there, as the pencil on the chip does: once more on the one open, it stays open.
+  useMarks(ranges, (index, anchor) => {
+    if (editing?.index === index) return popover.current?.focus();
+    if (popover.current && !popover.current.commit()) return;
+    setEditing({ index, anchor, fresh: false, above: false });
+  });
   const images = state.attached[window.id] ?? [], [refused, setRefused] = useState<string>(), [reading, setReading] = useState(0);
   const area = useRef<HTMLTextAreaElement>(null), picker = useRef<HTMLInputElement>(null), root = useRef<HTMLDivElement>(null), [caret, setCaret] = useState(0);
   const running = window.status === 'running', queued = [...live.queued.steering, ...live.queued.followUp];
@@ -144,6 +161,7 @@ export function Composer({ state, window, live, chat, onSend, ref }: { state: St
   useImperativeHandle(ref, () => ({
     cite: (cite, anchor) => {
       const next = [...cites, cite];
+      if (anchor?.range) marks.current.push({ cite, range: anchor.range });
       keep(citing(next, text));
       if (anchor) setEditing({ index: next.length - 1, anchor, fresh: true, above: false });
       else area.current?.focus();
@@ -158,9 +176,10 @@ export function Composer({ state, window, live, chat, onSend, ref }: { state: St
   const send = async (later: boolean, override?: string) => {
     const message = override ?? citing(cites, text.trim()).trim();
     if ((!override && empty) || sending || reading) return;
+    const marked = marks.current;
     setEditing(undefined); setSending(true); keep(''); app.attach(window.id, []); setRefused(undefined); onSend?.();
-    // A message the server refused goes back where it was typed, with its images, before what was typed since.
-    if (!await app.send(window.id, message, later, images)) { keep(joined([message, app.draft(window.id)])); app.attach(window.id, [...images, ...attached()]); }
+    // A message the server refused goes back where it was typed, with its images and marks, before what was typed since.
+    if (!await app.send(window.id, message, later, images)) { marks.current = [...marked, ...marks.current]; keep(joined([message, app.draft(window.id)])); app.attach(window.id, [...images, ...attached()]); }
     setSending(false);
   };
   const edited = editing && cites[editing.index];
@@ -180,7 +199,7 @@ export function Composer({ state, window, live, chat, onSend, ref }: { state: St
   };
   const cancelComment = () => {
     if (!editing) return;
-    if (editing.fresh) keep(citing(cites.filter((_, at) => at !== editing.index), text));
+    if (editing.fresh) { unmark(editing.index); keep(citing(cites.filter((_, at) => at !== editing.index), text)); }
     setEditing(undefined);
     area.current?.focus();
   };
@@ -233,13 +252,14 @@ export function Composer({ state, window, live, chat, onSend, ref }: { state: St
                     onClick={event => {
                       if (editing?.index === at) { if (popover.current?.commit()) area.current?.focus(); return; }
                       if (popover.current && !popover.current.commit()) return;
-                      setEditing({ index: at, anchor: anchorOf(event.currentTarget), fresh: false, above: true, opener: event.currentTarget });
+                      setEditing({ index: at, anchor: { ...anchorOf(event.currentTarget), range: ranges[at] }, fresh: false, above: true, opener: event.currentTarget });
                     }}
                     className={cn(CHIP_ACTION, editing?.index === at && 'bg-accent text-foreground dark:bg-white/9')}><PencilIcon className="size-3" /></button>
                   <button type="button" data-cite-action aria-label="Remove the citation" onClick={() => {
                     const updated = editing && editing.index !== at ? popover.current?.draft() : undefined;
                     const next = cites.map((item, index) => updated !== undefined && index === editing?.index ? commented(item, updated) : item).filter((_, index) => index !== at);
                     setEditing(undefined);
+                    unmark(at);
                     keep(citing(next, text));
                     area.current?.focus();
                   }} className={CHIP_ACTION}><XIcon className="size-3" /></button>
@@ -251,7 +271,7 @@ export function Composer({ state, window, live, chat, onSend, ref }: { state: St
             <CiteCommentPopover
               ref={popover}
               key={`${editing.index}-${editing.fresh}-${editing.anchor.top}-${editing.anchor.right}`}
-              item={edited} anchor={editing.anchor} above={editing.above} showQuote={editing.above} opener={editing.opener} canSend={!sending && reading === 0}
+              item={edited} anchor={editing.anchor} above={editing.above} showQuote={editing.above} fresh={editing.fresh} opener={editing.opener} canSend={!sending && reading === 0}
               onSave={(comment, focus) => saveComment(comment, focus)}
               onSaveAndSend={saveAndSend}
               onCancel={cancelComment}
@@ -272,7 +292,7 @@ export function Composer({ state, window, live, chat, onSend, ref }: { state: St
                 // The list a `/` or an `@` opens gets its keys first: the arrows, Tab and Enter.
                 if (mentions.keyed(event) || commands.keyed(event)) return;
                 // Backspace in an empty box takes the last citation off, as it would the letter before the caret.
-                if (event.key === 'Backspace' && !text && cites.length) { event.preventDefault(); keep(citing(cites.slice(0, -1), '')); return; }
+                if (event.key === 'Backspace' && !text && cites.length) { event.preventDefault(); unmark(cites.length - 1); keep(citing(cites.slice(0, -1), '')); return; }
                 // ⌥↑ takes the messages still waiting back into the box, to be edited and sent again; the run goes on.
                 if (queued.length && matches(event, 'alt+arrowup') && !event.nativeEvent.isComposing) { event.preventDefault(); void takeBack('dequeue'); return; }
                 if (event.shiftKey || event.altKey || event.nativeEvent.isComposing) return;

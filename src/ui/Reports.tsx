@@ -99,7 +99,7 @@ const Worked = ({ report: { from } }: { report: Shown }) => from ? <span classNa
  * tab to tab, as a tab list's do. The others are on the page all the same, hidden, so find in the chat finds in them and shows the
  * one it found in (`data-folded`, find.ts). */
 function Tabs({ part, reports, onAgent }: { part: Work; reports: Shown[]; onAgent: OnAgent }) {
-  const [at, setAt] = useState(0), id = useId(), shownAt = Math.min(at, reports.length - 1);
+  const [shownAt, setAt] = useState(0), id = useId();
   const arrow = (event: KeyboardEvent) => {
     const to = { ArrowLeft: shownAt - 1, ArrowRight: shownAt + 1, Home: 0, End: reports.length - 1 }[event.key];
     if (to === undefined) return;

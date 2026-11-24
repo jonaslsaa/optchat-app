@@ -10,7 +10,7 @@ import { startServer } from '../src/server/server.ts';
 import { defaults, describeOwner, lockProfile } from 'pi-optchat/files';
 import { createProfile, give, png, writeRun } from '../test/support.ts';
 import { chatgptExport, writeHistories } from '../test/histories.ts';
-import { agents, CHANGES, demo, FAILED, FILES, FORMULAS, grouped, GROUPED, limited, NAMED, PICTURED, remember, RESIZED, RESIZED_IMAGE, seed, SEEN, SEEN_IMAGE, SHIPPED, SHIPPING, SKILLED, spend, TEAM } from './seed.ts';
+import { agents, CHANGES, demo, FAILED, FILES, FORMULAS, grouped, GROUPED, limited, NAMED, PICTURED, remember, RESIZED, RESIZED_IMAGE, seed, SENT, SENT_IMAGE, SEEN, SEEN_IMAGE, SHIPPED, SHIPPING, SKILLED, spend, TEAM } from './seed.ts';
 
 /** `npm run screenshots [directory] [--dark]`: a PNG of every main state of the UI, in /tmp/optchat-app-shots unless a directory
  * is named, and all of them in dark mode with `--dark`. It builds the UI, serves it against throwaway profiles under /tmp with
@@ -90,6 +90,10 @@ const resized = createProfile(home, 'resized');
 seed(resized, 1, NOW, RESIZED);
 mkdirSync(join(resized, 'images'));
 writeFileSync(join(resized, 'images', `${RESIZED_IMAGE}.png`), png(240, [234, 138, 30]));
+const sent = createProfile(home, 'sent');
+seed(sent, 1, NOW, SENT);
+mkdirSync(join(sent, 'images'));
+writeFileSync(join(sent, 'images', `${SENT_IMAGE}.png`), png(120, [38, 99, 235]));
 seed(createProfile(home, 'skills'), 1, NOW, SKILLED);
 // Four agents that reported together: two long reviews, one that failed and one that was stopped.
 const together = createProfile(home, 'grouped');
@@ -772,6 +776,13 @@ async function pictures(browser: Browser, control: Client) {
     await page.getByText('Why is the gap under the composer so big?').waitFor();
     await page.waitForFunction(() => [...document.images].every(image => image.complete));
     await shot(page, '202-resized-picture');
+  }
+  // Pictures you sent: with words they keep to the words' edge, alone they fill the bubble; light and dark.
+  for (const [name, options] of [['304-sent-pictures', {}], ['305-sent-pictures-dark', { dark: true }]] as const) {
+    const page = await open(['sent'], { ...options, height: 1000 });
+    await page.getByText('And in the sidebar?').waitFor();
+    await page.waitForFunction(() => [...document.images].every(image => image.complete));
+    await shot(page, name);
   }
   // A reply that names files: the two in the window's folder are links to your editor, the one that is not stays code.
   // A profile's instructions, with the button that opens them in your editor, and the editors it lists.

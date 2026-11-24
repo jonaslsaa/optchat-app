@@ -6,12 +6,13 @@ import { Button, cn } from './ui.tsx';
 
 /** A picture, and the same one large over the page once it is clicked, with the other pictures of its message to step
  * through, to zoom into and move about. The looks, the keys and the zoom are T3 Code's (MIT, see THIRD_PARTY_NOTICES.md):
- * `ExpandedImageDialog.tsx`, `ZoomableImage.tsx` and `markdownImageGallery.ts`. */
+ * `ExpandedImageDialog.tsx`, `ZoomableImage.tsx` and `markdownImageGallery.ts`. The focus ring is the picture's, so it takes
+ * the corners `className` gives it. */
 export function Picture({ src, alt = '', className, onError }: { src: string; alt?: string; className?: string; onError?: () => void }) {
   const [shown, setShown] = useState<Gallery>(), opener = useRef<HTMLButtonElement>(null);
   return (
     <>
-      <button ref={opener} type="button" data-picture="" aria-label={['Show the image large', alt].filter(Boolean).join(': ')} onClick={event => setShown(gallery(event.currentTarget))} className="inline-block cursor-zoom-in rounded-lg align-top outline-none focus-visible:ring-2 focus-visible:ring-ring"><img src={src} alt={alt} className={className} onError={onError} /></button>
+      <button ref={opener} type="button" data-picture="" aria-label={['Show the image large', alt].filter(Boolean).join(': ')} onClick={event => setShown(gallery(event.currentTarget))} className="group inline-block cursor-zoom-in align-top outline-none"><img src={src} alt={alt} className={cn(className, 'group-focus-visible:ring-2 group-focus-visible:ring-ring')} onError={onError} /></button>
       {shown && <Viewer {...shown} opener={opener} onClose={() => setShown(undefined)} />}
     </>
   );

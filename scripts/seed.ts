@@ -164,6 +164,16 @@ export const RESIZED: Said[][] = [[
   ['user', `Why is the gap under the composer so big?\n\n[Image: original 2532x1690, displayed at 2000x1335. Multiply coordinates by 1.27 to map to original image.]\n[image ${RESIZED_IMAGE}]`],
   ['talk', 'The composer keeps a 24px margin under it on top of the window\'s own padding. I\'ll drop the margin.'],
 ]];
+/** Pictures you sent: with words, alone, and with words under what they cite (`SENT_IMAGE`, which whoever seeds it writes). */
+export const SENT_IMAGE = '5e1d2c3b4a596877';
+export const SENT: Said[][] = [[
+  ['user', `Is the badge centred now?\n[image ${SENT_IMAGE}]`],
+  ['talk', 'Yes: the letters sit on the badge\'s middle now, not 1px above it.'],
+  ['user', `[image ${SENT_IMAGE}]`],
+  ['talk', 'That is the same badge, in the dark theme. It is centred there too.'],
+  ['user', `<cite zoom="1">the letters sit on the badge's middle now</cite>\n\nAnd in the sidebar?\n[image ${SENT_IMAGE}]`],
+  ['talk', 'The sidebar draws the same badge, so it is centred there as well.'],
+]];
 /** A message that runs a skill, as Pi sends `/skill:sol-loop …`: the skill's file, and what was typed under it. */
 const LOOP = '# Sol loop\n\nReview the change with a GPT Sol subagent, fix what it finds, and review again until it finds nothing.\n\n## Steps\n\n1. Diff the branch against `main`.\n2. Spawn the reviewer with the diff and the repository\'s AGENTS.md.\n3. Fix every finding that is real; say why for the rest.\n4. Repeat until the reviewer passes it.';
 export const SKILLED: Said[][] = [[

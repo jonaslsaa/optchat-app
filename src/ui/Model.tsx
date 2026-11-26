@@ -129,21 +129,25 @@ function placed(chip: HTMLElement): Place {
  * Before the window's Pi runs it says what that will start on: the pick, the model the profile keeps for its main chat, or
  * Pi's own default. The list is read when the window is shown, for the names, and again each time it is opened: logging in
  * to a provider adds its models. Esc closes the list and nothing else, and a click anywhere else closes it too
- * (`useOverlay`). The list opens at the button, over it or under it (`placed`), and is placed again when the window is resized. */
+ * (`useOverlay`). The list opens at the button, over it or under it (`placed`), and is placed again when the window or the composer is resized. */
 export function Model({ state, window }: { state: State; window: WindowState }) {
   const [open, setOpen] = useState<Place>(), root = useRef<HTMLDivElement>(null), chip = useRef<HTMLButtonElement>(null);
   const models = state.models[window.id], model = window.model ?? models?.preset;
-  useEffect(() => { if (open || !models) void app.readModels(window.id); }, [window.id, open]);
-  useOverlay(open !== undefined, () => setOpen(undefined), root, chip);
+  const shown = open !== undefined;
+  useEffect(() => { if (shown || !models) void app.readModels(window.id); }, [window.id, shown]);
+  useOverlay(shown, () => setOpen(undefined), root, chip);
+  // Placed again when the window or the composer changes size: a draft typed while it is open makes the box taller.
   useEffect(() => {
-    if (!open) return;
-    const resized = () => { if (chip.current) setOpen(placed(chip.current)); };
-    addEventListener('resize', resized);
-    return () => removeEventListener('resize', resized);
-  }, [open !== undefined]);
+    const at = chip.current;
+    if (!shown || !at) return;
+    const again = () => setOpen(placed(at)), box = new ResizeObserver(again);
+    if (at.offsetParent) box.observe(at.offsetParent);
+    addEventListener('resize', again);
+    return () => { box.disconnect(); removeEventListener('resize', again); };
+  }, [shown]);
   return (
     <div ref={root} className="flex min-w-0 shrink">
-      <button ref={chip} type="button" aria-label="Model" title="Model and thinking level" aria-haspopup="dialog" aria-expanded={open !== undefined} aria-busy={!models} onClick={event => setOpen(open ? undefined : placed(event.currentTarget))}
+      <button ref={chip} type="button" aria-label="Model" title="Model and thinking level" aria-haspopup="dialog" aria-expanded={shown} aria-busy={!models} onClick={event => setOpen(open ? undefined : placed(event.currentTarget))}
         className="flex h-7 min-w-13 max-w-64 cursor-pointer items-center gap-1.5 rounded-[var(--control-radius)] px-2 font-medium text-foreground/80 text-sm outline-none hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring aria-expanded:bg-accent aria-expanded:text-foreground">
         {model ? <ModelName model={model} models={models} /> : <><Mark /><span className="text-muted-foreground">Model</span></>}
       </button>

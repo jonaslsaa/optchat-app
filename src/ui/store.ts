@@ -116,9 +116,13 @@ export function title(window: WindowState, state: State) {
   if (window.role === 'main') return 'Main chat';
   if (window.name) return window.name;
   const first = current(window, [...state.sessions[window.id] ?? [], ...state.live[window.id]?.messages ?? []]).find(message => message.role === 'user');
-  // A message that only cites something is called by its first comment or what it cites, and one that runs a skill as it was typed.
-  const said = yours(first ? words(first.content) : '');
-  return first ? ((said.skill ? asTyped(said) : said.text) || said.cites[0]?.comment || said.cites[0]?.text || '').split('\n')[0] : UNTITLED;
+  return first ? called(words(first.content)) : UNTITLED;
+}
+/** A message in a line: its first. One that only cites something is called by its first comment or what it cites, and one that
+ * runs a skill as it was typed. */
+export function called(text: string) {
+  const said = yours(text);
+  return ((said.skill ? asTyped(said) : said.text) || said.cites[0]?.comment || said.cites[0]?.text || '').split('\n')[0];
 }
 
 /** What went wrong, in the words it was said in. */

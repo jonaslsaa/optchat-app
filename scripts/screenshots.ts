@@ -10,7 +10,7 @@ import { startServer } from '../src/server/server.ts';
 import { defaults, describeOwner, lockProfile } from 'pi-optchat/files';
 import { createProfile, give, png, writeRun } from '../test/support.ts';
 import { chatgptExport, writeHistories } from '../test/histories.ts';
-import { agents, CHANGES, demo, FAILED, FILES, FORMULAS, grouped, GROUPED, limited, NAMED, PICTURED, remember, RESIZED, RESIZED_IMAGE, seed, SENT, SENT_IMAGE, SEEN, SEEN_IMAGE, SHIPPED, SHIPPING, SKILLED, spend, TEAM } from './seed.ts';
+import { agents, ALERT, CHANGES, demo, FAILED, FILES, FORMULAS, grouped, GROUPED, limited, NAMED, PICTURED, remember, RESIZED, RESIZED_IMAGE, seed, SENT, SENT_IMAGE, SEEN, SEEN_IMAGE, SHIPPED, SHIPPING, SKILLED, spend, TEAM, WINDOWED } from './seed.ts';
 
 /** `npm run screenshots [directory] [--dark]`: a PNG of every main state of the UI, in /tmp/optchat-app-shots unless a directory
  * is named, and all of them in dark mode with `--dark`. It builds the UI, serves it against throwaway profiles under /tmp with
@@ -115,6 +115,8 @@ const history = createProfile(home, 'history');
 writeFileSync(join(history, 'config.json'), JSON.stringify({ ...JSON.parse(readFileSync(join(history, 'config.json'), 'utf8')), compactor: defaults.compactor }));
 seed(history, 40, NOW);
 remember(history, 4);
+// A main chat with connected windows opened from it: one handed off, and one the pictures talk with.
+seed(createProfile(home, 'windowed'), 1, NOW, WINDOWED, 6 * 60_000);
 createProfile(home, 'research');
 createProfile(home, 'pictures');
 for (const file of FILES) { mkdirSync(join(home, file, '..'), { recursive: true }); writeFileSync(join(home, file), ''); }
@@ -1246,6 +1248,25 @@ async function pictures(browser: Browser, control: Client) {
     await page.getByRole('region', { name: 'How T3 Code groups reports' }).waitFor();
     await shot(page, '293-grouped-reports-sections');
     await control.request('setSettings', { reports: 'tabs' });
+    await page.close();
+  }
+  // The connected windows as the main chat says they were opened: one you are talking with, opened here, and one handed off with
+  // its handoff under it; then, in the light, what the main chat was told of it unfolded.
+  for (const dark of [false, true]) {
+    const page = await open(['windowed'], { dark: dark || allDark }), line = page.getByRole('main').getByRole('button', { name: /Window “Look at why/ });
+    if (!dark) {
+      await page.getByRole('button', { name: 'New window' }).click();
+      await page.getByRole('heading', { name: 'New connected window' }).waitFor();
+      await say(page, ALERT);
+      await page.getByRole('button', { name: 'Complete' }).first().waitFor();
+      await page.getByRole('navigation', { name: 'Windows' }).getByText('Main chat', { exact: true }).click();
+    }
+    await line.getByText(/^Talking with you/).waitFor();
+    await shot(page, dark ? '295-window-lines-dark' : '294-window-lines');
+    if (!dark) {
+      await page.getByRole('button', { name: 'What the main chat was told' }).last().click();
+      await shot(page, '296-window-line-told', line);
+    }
     await page.close();
   }
   // A patch of the app's own Pi that it tried by itself, and that failed: a grey line, and the Pi there still runs.

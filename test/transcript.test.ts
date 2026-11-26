@@ -175,6 +175,25 @@ test('a report is named by the title its agent was started under, once the chat 
     [{ type: 'work', reports: [{ agent: '1a2b3c4d', title: 'Read the notes', body: 'The answer is 42.' }] }]);
 });
 
+test('a connected window you opened is a line of its own, which knows its conversation and when it was handed off', () => {
+  // pi-optchat's words, for a window of the app's and for a Pi in a terminal, with a first message of more than one paragraph.
+  const opened = (id: string, task: string, terminal = false) => terminal
+    ? `[${id}] User started a connected conversation in /work/env, in a Pi window of its own. That agent is handling this request with the user directly; don't do it yourself. Initial message: ${task}\n\nIt runs in another Pi process, so tell can't reach it. It sends a final handoff on completion or disconnect.`
+    : `[${id}] User started a connected conversation in /work/env. That agent is handling this request with the user directly; don't do it yourself. Initial message: ${task}\n\nUse tell with this agent ID only if you know something it needs. It stays open between replies and sends a final handoff on completion or disconnect.`;
+  const handoff = '[7c41d2e0] Connected conversation completed by user. This describes the conversation ending, not proof that every task succeeded.\nBumped it.\n[7c41d2e0] completed\nFull transcript: /s.jsonl\n\nFull chat: zoom("7c41d2e0")';
+  const log = [entry(0, 'work', 0, opened('7c41d2e0', 'Bump it.\n\nThen check the canary.')), entry(1, 'work', 65, opened('029a986e', 'Why does it fire?', true))];
+  const before = parts(logged(log));
+  assert.partialDeepStrictEqual(before, [{ type: 'window', agent: '7c41d2e0', task: 'Bump it.\n\nThen check the canary.' }, { type: 'window', agent: '029a986e', task: 'Why does it fire?' }]);
+  assert.ok(before.every(part => part.type === 'window' && part.ended === undefined));
+  // Its handoff, once the chat has it, says when it ended; the handoff itself is a report as any other, and only the line it
+  // ends is made again.
+  const after = parts(logged([...log, entry(2, 'work', 1080, handoff)]), before);
+  assert.partialDeepStrictEqual(after, [{ type: 'window', agent: '7c41d2e0', ended: at(1080) }, {}, { type: 'work', reports: [{ agent: '7c41d2e0' }] }]);
+  assert.deepEqual([after[0] === before[0], after[1] === before[1]], [false, true]);
+  // Words that only look like it are a report.
+  assert.equal(parts(logged([entry(0, 'work', 0, '[1a2b3c4d] User started a connected conversation, it says.')]))[0].type, 'work');
+});
+
 test('the reports of one spawn that arrive together are each one report, without the lines for the main agent', () => {
   // As pi-optchat joins them (its `deliver`): a report of a deleted agent has no line under it, and a report may quote one.
   const report = (head: string, body: string, id?: string) => `[${head}] ${body}${id ? `\n\nFull chat: zoom("${id}")` : ''}`;

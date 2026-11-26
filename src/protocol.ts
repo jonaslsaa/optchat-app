@@ -71,13 +71,15 @@ export type Mention = Static<typeof Mention>;
  * moment it is sent until its Pi has answered, which pi-optchat does once the handoff is written and handed over.
  * `stale`, on a main window: its Pi still runs the Pi or pi-optchat it started on, older than the one installed since (named
  * with its version, as `Pi 1.5.3`), and was at work when the server looked, so it was not started again unasked (`restart`).
- * `name`, on a connected window: what you called it (`rename`), which the page shows in place of its first message. */
+ * `name`, on a connected window: what you called it (`rename`), which the page shows in place of its first message.
+ * `agent`, on a connected window: the conversation it is in, by the id pi-optchat gives it in the main chat (the agent's id its
+ * report that the window was opened and its handoff are headed with), once its Pi has said it. A new conversation has a new one. */
 export const WindowState = Type.Object({
   id: Type.String(), profile: Type.String(), role: Type.Enum(['main', 'connected']), cwd: Type.String(),
   status: Type.Enum(['stopped', 'starting', 'idle', 'running', 'closed']), seq: id,
   completed: Type.Optional(Type.Boolean()), completing: Type.Optional(Type.Boolean()), since: Type.Optional(Type.Number()), error: Type.Optional(Type.String()),
   outside: Type.Optional(Type.Union([Type.Object({ pid: Type.Integer(), host: Type.String(), cwd: Type.String() }), Type.Literal('unknown')])),
-  model: Type.Optional(ModelChoice), stale: Type.Optional(Type.String()), name: Type.Optional(Type.String({ maxLength: NAME })),
+  model: Type.Optional(ModelChoice), stale: Type.Optional(Type.String()), name: Type.Optional(Type.String({ maxLength: NAME })), agent: Type.Optional(Type.String()),
 });
 export type WindowState = Static<typeof WindowState>;
 

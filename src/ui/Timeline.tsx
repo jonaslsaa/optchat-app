@@ -3,14 +3,14 @@ import { useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useSt
 import { CiteSelection, type CiteAnchor } from './Cite.tsx';
 import type { Cite, Place } from './cite.ts';
 import { Find } from './Find.tsx';
-import type { Agent } from '../protocol.ts';
-import { AgentsInChat, Doing, HandoffRow, NoteRow, ReplyRow, UserRow, type Working } from './Rows.tsx';
+import type { Agent, WindowState } from '../protocol.ts';
+import { AgentsInChat, Doing, HandoffRow, NoteRow, ReplyRow, UserRow, WindowRow, type Working } from './Rows.tsx';
 import { ReportRow } from './Reports.tsx';
 import { parts, thinking, type Item, type Live, type Part } from './transcript.ts';
 import { Button, cn } from './ui.tsx';
 
 /** How near the end counts as at the end, in pixels. */
-const EDGE = 48, NONE: readonly Agent[] = [];
+const EDGE = 48, NONE: readonly Agent[] = [], NO_WINDOWS: readonly WindowState[] = [];
 
 /** The chat, oldest at the top. It stays at the end while you are there, and stays where you are while you read back; older
  * pages of the log are read as you reach the top. `running` says the agent is in a run, and `live` what it is doing in it.
@@ -19,8 +19,8 @@ const EDGE = 48, NONE: readonly Agent[] = [];
  * `logged` is the last message of the chat that the profile's log has, where the chat is the log. `onPlace` shows what a
  * message cites in the memory view. Where the memory can be searched from (`onMemory`), the chat can be found in: `ref.find`
  * shows the bar for it (`Find`). `agents` are the profile's as the panel lists them, which the calls that started them show
- * under them. */
-export function Timeline({ items, live, running, starting = false, profile, older, loading, onAgent, onCite, logged, onPlace, onMemory, ref, narrow = false, agents = NONE }: { items: Item[]; live: Live; running: boolean; starting?: boolean; profile: string; older?: () => void; loading?: boolean; onAgent?: (agent: string) => void; onCite?: (cite: Cite, anchor?: CiteAnchor) => void; logged?: number; onPlace?: (at: Place) => void; onMemory?: (text: string) => void; ref?: Ref<{ find: () => void }>; narrow?: boolean; agents?: readonly Agent[] }) {
+ * under them, and `windows` its windows, which the lines that say a connected window was opened open (`onWindow`). */
+export function Timeline({ items, live, running, starting = false, profile, older, loading, onAgent, onCite, logged, onPlace, onMemory, ref, narrow = false, agents = NONE, windows = NO_WINDOWS, onWindow }: { items: Item[]; live: Live; running: boolean; starting?: boolean; profile: string; older?: () => void; loading?: boolean; onAgent?: (agent: string) => void; onCite?: (cite: Cite, anchor?: CiteAnchor) => void; logged?: number; onPlace?: (at: Place) => void; onMemory?: (text: string) => void; ref?: Ref<{ find: () => void }>; narrow?: boolean; agents?: readonly Agent[]; windows?: readonly WindowState[]; onWindow?: (window: string) => void }) {
   const scroller = useRef<HTMLDivElement>(null), content = useRef<HTMLDivElement>(null);
   const atEnd = useRef(true), before = useRef({ first: items[0]?.key, height: 0, top: 0, sent: -1 });
   // Find scrolls the chat to what it found (`found` is where it put it), which is not you reading back to the top: no older
@@ -82,6 +82,7 @@ export function Timeline({ items, live, running, starting = false, profile, olde
           <AgentsInChat value={inChat}>{blocks.map(part => part.type === 'user' ? <UserRow key={part.key} part={part} profile={profile} onPlace={onPlace} />
             : part.type === 'work' ? <ReportRow key={part.key} part={part} onAgent={onAgent} />
             : part.type === 'note' ? <NoteRow key={part.key} part={part} />
+            : part.type === 'window' ? <WindowRow key={part.key} part={part} window={windows.find(window => window.agent === part.agent)} onWindow={onWindow} />
             : part.type === 'handoff' ? <HandoffRow key={part.key} part={part} writing={running && part === last} />
             : <ReplyRow key={part.key} part={part} working={running && part === last ? working : undefined} latest={part === latest} profile={profile} />)}</AgentsInChat>
           {/* What the agent is doing: under your message until it says something, and then under its reply, as one line. Your

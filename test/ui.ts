@@ -1123,7 +1123,7 @@ test('the working line opens to what the agent has thought so far, and Esc on it
   await moving.context().close();
 });
 
-test('the model list opens at its button and stays whole on the page between the top bar and the foot: over a long draft, and shorter, scrolling, in a short window', async () => {
+test('the model list opens at its button and stays whole on the page between the top bar and the foot: over a long draft, and shorter, scrolling, in a short window and under a notice', async () => {
   const page = await open('picker');
   await page.getByRole('textbox', { name: 'Message' }).fill(Array.from({ length: 14 }, (_, k) => `Line ${k + 1}`).join('\n'));
   await page.getByRole('button', { name: 'Model' }).click();
@@ -1139,6 +1139,11 @@ test('the model list opens at its button and stays whole on the page between the
   await page.waitForFunction(() => document.querySelector('[role=dialog][aria-label=Model]')!.getBoundingClientRect().top >= document.querySelector('main > header')!.getBoundingClientRect().bottom);
   const short = await where();
   assert.ok(Math.abs(short.gap - 8) < 1 && short.inside && short.height < tall.height && short.scrolls, `a short window's list is shorter and scrolls: ${JSON.stringify(short)}`);
+  // A notice over the page, as when the server stops answering, moves the top bar down: the list makes room for it.
+  await page.evaluate(() => { const notice = document.createElement('p'); notice.style.cssText = 'flex: none; height: 40px'; document.querySelector('.h-dvh')!.prepend(notice); });
+  await page.waitForFunction(height => document.querySelector('[role=dialog][aria-label=Model]')!.getBoundingClientRect().height < height, short.height);
+  const noticed = await where();
+  assert.ok(Math.abs(noticed.gap - 8) < 1 && noticed.inside, `under a notice the list is still whole on the page: ${JSON.stringify(noticed)}`);
   await page.context().close();
 });
 

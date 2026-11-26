@@ -129,19 +129,20 @@ function placed(chip: HTMLElement): Place {
  * Before the window's Pi runs it says what that will start on: the pick, the model the profile keeps for its main chat, or
  * Pi's own default. The list is read when the window is shown, for the names, and again each time it is opened: logging in
  * to a provider adds its models. Esc closes the list and nothing else, and a click anywhere else closes it too
- * (`useOverlay`). The list opens at the button, over it or under it (`placed`), and is placed again when the window or the composer is resized. */
+ * (`useOverlay`). The list opens at the button, over it or under it (`placed`), and is placed again when the window, the composer or the chat's column is resized. */
 export function Model({ state, window }: { state: State; window: WindowState }) {
   const [open, setOpen] = useState<Place>(), root = useRef<HTMLDivElement>(null), chip = useRef<HTMLButtonElement>(null);
   const models = state.models[window.id], model = window.model ?? models?.preset;
   const shown = open !== undefined;
   useEffect(() => { if (shown || !models) void app.readModels(window.id); }, [window.id, shown]);
   useOverlay(shown, () => setOpen(undefined), root, chip);
-  // Placed again when the window or the composer changes size: a draft typed while it is open makes the box taller.
+  // Placed again when the window, the composer or the chat's column changes size: a draft typed while it is open makes the
+  // box taller, and a notice over the page moves the top bar down.
   useEffect(() => {
     const at = chip.current;
     if (!shown || !at) return;
     const again = () => setOpen(placed(at)), box = new ResizeObserver(again);
-    if (at.offsetParent) box.observe(at.offsetParent);
+    for (const element of [at.offsetParent, at.closest('main')]) if (element) box.observe(element);
     addEventListener('resize', again);
     return () => { box.disconnect(); removeEventListener('resize', again); };
   }, [shown]);

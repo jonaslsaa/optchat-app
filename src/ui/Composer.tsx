@@ -91,6 +91,8 @@ export function Queued({ messages, later = 0, editable = false }: { messages: re
   );
 }
 /** The pencil and × on a citation's chip. */
+/** How long one Esc keeps the stop armed for the next. */
+const ARMED_MS = 3000;
 const CHIP_ACTION = 'shrink-0 rounded-[5px] p-[3px] text-muted-foreground outline-none hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/70 dark:hover:bg-white/9';
 /** The round button that sends what is typed: to an agent in a run (`steer`) it is a message on its way in, and with ⌘ or Ctrl
  * down (`queue`) one that waits for the run to end. */
@@ -104,7 +106,7 @@ export function SendButton({ steer, queue = false, ...props }: { steer: boolean;
   );
 }
 /** Where you type. You can always type: while the agent runs, Enter steers it and ⌘Enter queues your message for when it has
- * stopped, and Esc stops it. The line under it says only what is news: how to steer a run, that Pi is starting, agents at
+ * stopped, and Esc pressed twice stops it. The line under it says only what is news: how to steer a run, that Pi is starting, agents at
  * work. ↑ in an empty box brings back what you said last in the `chat`, and ↑ and ↓ go on through it (`recalled`), from the
  * first and the last line of what is in the box. Beside the button that
  * sends is the model the agent runs on, which is picked there. The look is T3 Code's composer
@@ -212,16 +214,23 @@ export function Composer({ state, window, live, chat, onSend, ref }: { state: St
     // The caret is at the end, once the box holds it: also where only its citations changed, which leave the text as it was.
     requestAnimationFrame(() => area.current?.setSelectionRange(area.current.value.length, area.current.value.length));
   };
+  // One Esc only arms the stop, and says so under the box: a stray press must not end a run, and a few did. A second Esc while
+  // it is armed stops the run; on its own it lets go after a few seconds, when the run ends or another window is shown. The
+  // button stops at once: a click is never a stray.
+  const [armedIn, arm] = useState<string>(), armed = running && armedIn === window.id;
+  useEffect(() => { if (!armedIn) return; const timer = setTimeout(() => arm(undefined), ARMED_MS); return () => clearTimeout(timer); }, [armedIn]);
+  useEffect(() => arm(undefined), [running, window.id]);
   const stop = () => {
     // The button that stops is gone once it has: the focus is where the next message is typed.
     area.current?.focus();
+    arm(undefined);
     return takeBack('abort');
   };
   // The button that dismissed is gone with its notice: the focus is where the next message is typed.
   const quiet = (text?: string) => { area.current?.focus(); app.quiet(window.id, text); };
-  // Esc stops the agent while the keys are the chat's, as they are here: not from the panel beside it, nor from the memory view.
-  // With no run to stop it takes what Pi said off the page.
-  useShortcuts((): Record<string, () => void> => running ? { escape: () => void stop() } : live.notices.length ? { escape: () => quiet() } : {}, [running, window.id, live.notices.length], 'chat');
+  // Esc stops the agent (twice, as above) while the keys are the chat's, as they are here: not from the panel beside it, nor
+  // from the memory view. With no run to stop it takes what Pi said off the page.
+  useShortcuts((): Record<string, () => void> => running ? { escape: () => armed ? void stop() : arm(window.id) } : live.notices.length ? { escape: () => quiet() } : {}, [running, armed, window.id, live.notices.length], 'chat');
   return (
     <div data-keys="chat" className="shrink-0 px-3 pb-3 sm:px-12 sm:pb-4">
       <div className="mx-auto flex w-full max-w-(--chat-content-max-width) flex-col gap-2">
@@ -308,7 +317,8 @@ export function Composer({ state, window, live, chat, onSend, ref }: { state: St
           <div className="flex min-w-0 items-center gap-2 px-2 pb-2">
             <p className="min-w-0 flex-1 truncate ps-2 text-muted-foreground text-xs">
               {window.status === 'starting' ? <span className="inline-flex items-center gap-1.5"><Spinner />Starting Pi…</span>
-                : running ? <><Kbd>{label('enter')}</Kbd> steer · <Kbd>{label('mod+enter')}</Kbd> queue · <Kbd>Esc</Kbd> stop</>
+                : running && armed ? <span role="status" className="text-destructive-foreground"><Kbd className="text-destructive-foreground">Esc</Kbd> again to stop</span>
+                : running ? <><Kbd>{label('enter')}</Kbd> steer · <Kbd>{label('mod+enter')}</Kbd> queue · <Kbd>Esc</Kbd><Kbd className="ms-0.5">Esc</Kbd> stop</>
                 : window.status === 'stopped' ? null
                 : news(live.status.optchat).join(' · ')}
             </p>
@@ -316,7 +326,7 @@ export function Composer({ state, window, live, chat, onSend, ref }: { state: St
             <Button variant="ghost-muted" size="icon-sm" aria-label="Attach an image" title="Attach an image" onClick={() => picker.current?.click()}><ImagePlusIcon /></Button>
             <Model state={state} window={window} />
             {running && empty ? (
-              <button type="button" aria-label="Stop the agent" title="Stop (Esc)" onClick={() => void stop()} className="flex size-8 shrink-0 items-center justify-center rounded-full bg-destructive/90 text-white shadow-destructive/24 shadow-xs inset-shadow-control-highlight transition-colors duration-150 hover:bg-destructive active:shadow-none">
+              <button type="button" aria-label="Stop the agent" title="Stop (Esc Esc)" onClick={() => void stop()} className={cn('flex size-8 shrink-0 items-center justify-center rounded-full bg-destructive/90 text-white shadow-destructive/24 shadow-xs inset-shadow-control-highlight transition-colors duration-150 hover:bg-destructive active:shadow-none', armed && 'outline-2 outline-destructive/45 outline-offset-2')}>
                 <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor" aria-hidden="true"><rect x="2" y="2" width="8" height="8" rx="1.5" /></svg>
               </button>
             ) : (

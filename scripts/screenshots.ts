@@ -190,6 +190,11 @@ async function pictures(browser: Browser, control: Client) {
   await say(work, 'Give me a demo of where things stand, and wait for me');
   await work.getByText('What I found').waitFor();
   await shot(work, '04-streaming-reply');
+  // One Esc arms the stop and says so; on its own it lets go after a few seconds, and the run goes on.
+  await work.keyboard.press('Escape');
+  await work.getByRole('status').filter({ hasText: 'again to stop' }).waitFor();
+  await shot(work, '04b-stop-armed');
+  await work.getByRole('status').filter({ hasText: 'again to stop' }).waitFor({ state: 'detached' });
   await say(work, 'Also check the tests before you finish');
   await work.getByText('waiting to be read').waitFor();
   await say(work, 'Then open the pull request', 'ControlOrMeta+Enter');
@@ -914,6 +919,7 @@ async function pictures(browser: Browser, control: Client) {
     if (name === '101-thinking-opened') await shot(thinks, '100-thinking-collapsed');
     await line.click();
     await shot(thinks, name);
+    await thinks.keyboard.press('Escape');
     await thinks.keyboard.press('Escape');
     await thinks.getByRole('button', { name: 'Send', exact: true }).waitFor();
   }

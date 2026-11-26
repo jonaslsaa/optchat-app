@@ -1,5 +1,5 @@
 import { CheckIcon, SearchIcon } from 'lucide-react';
-import { useEffect, useId, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react';
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import type { ModelChoice, Result, WindowState } from '../protocol.ts';
 import { THINKING } from './config.ts';
 import { useOverlay } from './keys.ts';
@@ -68,7 +68,7 @@ function Picker({ window, models, own, subagent, place }: { window: WindowState;
     else if (event.key === 'ArrowDown' || event.key === 'ArrowUp') { event.preventDefault(); all[(here + (event.key === 'ArrowDown' ? 1 : all.length - 1)) % all.length]?.focus(); }
   };
   return (
-    <div role="dialog" aria-label="Model" style={place.style} className={cn('absolute right-0 z-50 flex w-[min(34.5rem,100%)] flex-col overflow-hidden rounded-lg border bg-popover text-popover-foreground shadow-[0_16px_40px_-18px_rgb(0_0_0/55%)] dark:shadow-[0_18px_44px_-18px_rgb(0_0_0/80%)] enter enter-grow', place.below ? 'origin-top-right' : 'origin-bottom-right')}>
+    <div role="dialog" aria-label="Model" style={place.below ? { top: place.at, maxHeight: place.room } : { bottom: place.at, maxHeight: place.room }} className={cn('absolute right-0 z-50 flex w-[min(34.5rem,100%)] flex-col overflow-hidden rounded-lg border bg-popover text-popover-foreground shadow-[0_16px_40px_-18px_rgb(0_0_0/55%)] dark:shadow-[0_18px_44px_-18px_rgb(0_0_0/80%)] enter enter-grow', place.below ? 'origin-top-right' : 'origin-bottom-right')}>
       <div className="flex min-h-0 sm:h-86.5 max-sm:flex-col">
         <div className="flex min-h-0 min-w-0 flex-1 flex-col max-sm:h-56 max-sm:flex-initial">
           <div className="shrink-0 px-3 pt-2.5">
@@ -113,35 +113,42 @@ function Picker({ window, models, own, subagent, place }: { window: WindowState;
 }
 
 const GAP = 8;
-/** Where the list opens: at the button, on the side with more room between the top bar and the foot of the window, and no
- * taller than that room, so all of it is on the page and its list scrolls. It is placed in the composer's box, its
- * `offsetParent`, whose right edge it keeps: over the button, or under the box, whose edge is just under the button. */
-type Place = { below: boolean; style: CSSProperties };
+/** Where the list opens: at the button, on the side with more room in the chat's column between its top bar and its foot (the
+ * desktop app's notices are under it), and no taller than that room (`room`), so all of it is on the page and its list
+ * scrolls. It is placed in the composer's box, its `offsetParent`, whose right edge it keeps, `at` from its edge: over the
+ * button, or under the box, whose edge is just under the button. */
+type Place = { below: boolean; at: number; room: number };
 function placed(chip: HTMLElement): Place {
-  const button = chip.getBoundingClientRect(), box = chip.offsetParent?.getBoundingClientRect() ?? button;
+  const button = chip.getBoundingClientRect(), box = chip.offsetParent?.getBoundingClientRect() ?? button, column = chip.closest('main');
   // Not over the top bar: in the desktop app that drags the window, and would take the clicks.
-  const top = chip.closest('main')?.querySelector(':scope > header')?.getBoundingClientRect().bottom ?? 0;
-  const over = button.top - top - 2 * GAP, under = innerHeight - box.bottom - 2 * GAP;
-  return under > over ? { below: true, style: { top: box.height + GAP, maxHeight: under } } : { below: false, style: { bottom: box.bottom - button.top + GAP, maxHeight: over } };
+  const top = column?.querySelector(':scope > header')?.getBoundingClientRect().bottom ?? 0, foot = Math.min(innerHeight, column?.getBoundingClientRect().bottom ?? innerHeight);
+  const over = button.top - top - 2 * GAP, under = foot - box.bottom - 2 * GAP;
+  return under > over ? { below: true, at: box.height + GAP, room: under } : { below: false, at: box.bottom - button.top + GAP, room: over };
 }
 
 /** The model the window's agent runs on and how hard it thinks, in the composer: a click opens the list it is picked from.
  * Before the window's Pi runs it says what that will start on: the pick, the model the profile keeps for its main chat, or
  * Pi's own default. The list is read when the window is shown, for the names, and again each time it is opened: logging in
  * to a provider adds its models. Esc closes the list and nothing else, and a click anywhere else closes it too
- * (`useOverlay`). The list opens at the button, over it or under it (`placed`), and is placed again when the window, the composer or the chat's column is resized. */
+ * (`useOverlay`). The list opens at the button, over it or under it (`placed`), and is placed again wherever it may have moved. */
 export function Model({ state, window }: { state: State; window: WindowState }) {
   const [open, setOpen] = useState<Place>(), root = useRef<HTMLDivElement>(null), chip = useRef<HTMLButtonElement>(null);
   const models = state.models[window.id], model = window.model ?? models?.preset;
   const shown = open !== undefined;
   useEffect(() => { if (shown || !models) void app.readModels(window.id); }, [window.id, shown]);
   useOverlay(shown, () => setOpen(undefined), root, chip);
-  // Placed again when the window, the composer or the chat's column changes size: a draft typed while it is open makes the
-  // box taller, and a notice over the page moves the top bar down.
+  // Placed again wherever it may have moved: after each render (a draft typed, a notice, the first message taking the composer
+  // to the foot of the page), and when the window, the composer or the chat's column change size.
+  const again = () => {
+    if (!chip.current) return;
+    const now = placed(chip.current);
+    setOpen(was => was && (JSON.stringify(was) === JSON.stringify(now) ? was : now));
+  };
+  useLayoutEffect(() => { if (shown) again(); });
   useEffect(() => {
     const at = chip.current;
     if (!shown || !at) return;
-    const again = () => setOpen(placed(at)), box = new ResizeObserver(again);
+    const box = new ResizeObserver(again);
     for (const element of [at.offsetParent, at.closest('main')]) if (element) box.observe(element);
     addEventListener('resize', again);
     return () => { box.disconnect(); removeEventListener('resize', again); };

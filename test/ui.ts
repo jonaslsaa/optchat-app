@@ -55,6 +55,7 @@ seed(createProfile(home, 'formulas'), 1, Date.now(), FORMULAS);
 writeFileSync(join(home, 'chart.png'), png(120, [38, 99, 235]));
 seed(createProfile(home, 'pictured'), 1, Date.now(), PICTURED(join(home, 'chart.png')));
 createProfile(home, 'paced');
+createProfile(home, 'first-pick');
 // Three profiles open as tabs, to drag about.
 for (const name of ['ant', 'bee', 'cat']) createProfile(home, name);
 createProfile(home, 'skills');
@@ -1123,11 +1124,11 @@ test('the working line opens to what the agent has thought so far, and Esc on it
   await moving.context().close();
 });
 
-test('the model list opens at its button and stays whole on the page between the top bar and the foot: over a long draft, and shorter, scrolling, in a short window and under a notice', async () => {
+test('the model list opens at its button and stays whole on the page between the top bar and the foot: over a long draft, and shorter, scrolling, in a short window and under a notice; under the box of an empty chat, and over the button once a first message is sent', async () => {
   const page = await open('picker');
   await page.getByRole('textbox', { name: 'Message' }).fill(Array.from({ length: 14 }, (_, k) => `Line ${k + 1}`).join('\n'));
   await page.getByRole('button', { name: 'Model' }).click();
-  const where = () => page.evaluate(() => {
+  const where = (at = page) => at.evaluate(() => {
     const [dialog, button, header, list] = ['[role=dialog][aria-label=Model]', 'button[aria-label=Model]', 'main > header', '[role=listbox][aria-label=Models]'].map(selector => document.querySelector(selector)!);
     const [box, at, bar] = [dialog, button, header].map(element => element.getBoundingClientRect());
     return { gap: at.top - box.bottom, inside: box.top >= bar.bottom && box.bottom <= innerHeight, height: box.height, scrolls: list.scrollHeight > list.clientHeight };
@@ -1145,6 +1146,18 @@ test('the model list opens at its button and stays whole on the page between the
   const noticed = await where();
   assert.ok(Math.abs(noticed.gap - 8) < 1 && noticed.inside, `under a notice the list is still whole on the page: ${JSON.stringify(noticed)}`);
   await page.context().close();
+  // In an empty chat it opens under the box; a first message sent from the box with the list open takes the box to the foot
+  // of the page, and the list goes over its button.
+  const empty = await open('first-pick');
+  await empty.getByRole('button', { name: 'Model' }).click();
+  await empty.getByRole('option').first().waitFor();
+  assert.equal((await where(empty)).gap < 0, true, 'under the button in an empty chat');
+  await empty.getByRole('textbox', { name: 'Message' }).fill('hi');
+  await empty.keyboard.press('Enter');
+  await empty.getByRole('heading', { name: 'first-pick' }).waitFor({ state: 'detached' });
+  const sent = await where(empty);
+  assert.ok(Math.abs(sent.gap - 8) < 1 && sent.inside, `over the button once the chat has a message: ${JSON.stringify(sent)}`);
+  await empty.context().close();
 });
 
 test('a long edit opens as its diff, which scrolls in its box and does not make the page longer', async () => {

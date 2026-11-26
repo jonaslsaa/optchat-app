@@ -1,5 +1,5 @@
 import { CheckIcon, SearchIcon } from 'lucide-react';
-import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from 'react';
+import { useEffect, useId, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react';
 import type { ModelChoice, Result, WindowState } from '../protocol.ts';
 import { THINKING } from './config.ts';
 import { useOverlay } from './keys.ts';
@@ -30,7 +30,7 @@ const HEAD = 'flex h-8.25 shrink-0 items-center gap-2 border-border/70 border-b 
  * The switch under it says whose model it is: the window's own agent's (`own`), or that of the agents the profile's chats
  * start (`subagent`), which pi-optchat keeps in the profile and is the judge of: what it refuses is said in its words, and
  * one change is made at a time. */
-function Picker({ window, models, own, subagent, below }: { window: WindowState; models?: Result<'models'>; own?: ModelChoice; subagent?: ModelChoice; below: boolean }) {
+function Picker({ window, models, own, subagent, place }: { window: WindowState; models?: Result<'models'>; own?: ModelChoice; subagent?: ModelChoice; place: Place }) {
   const [typed, setTyped] = useState(''), [moved, setMoved] = useState<number>();
   const [whose, setWhose] = useState<'own' | 'subagents'>('own'), [refused, setRefused] = useState<string>(), [keeping, setKeeping] = useState(false);
   const model = whose === 'own' ? own : subagent;
@@ -68,9 +68,9 @@ function Picker({ window, models, own, subagent, below }: { window: WindowState;
     else if (event.key === 'ArrowDown' || event.key === 'ArrowUp') { event.preventDefault(); all[(here + (event.key === 'ArrowDown' ? 1 : all.length - 1)) % all.length]?.focus(); }
   };
   return (
-    <div role="dialog" aria-label="Model" className={cn('absolute right-0 z-50 flex w-[min(34.5rem,100%)] flex-col overflow-hidden rounded-lg border bg-popover text-popover-foreground shadow-[0_16px_40px_-18px_rgb(0_0_0/55%)] dark:shadow-[0_18px_44px_-18px_rgb(0_0_0/80%)] enter enter-grow', below ? 'top-full mt-2 origin-top-right' : 'bottom-full mb-2 origin-bottom-right')}>
+    <div role="dialog" aria-label="Model" style={place.style} className={cn('absolute right-0 z-50 flex w-[min(34.5rem,100%)] flex-col overflow-hidden rounded-lg border bg-popover text-popover-foreground shadow-[0_16px_40px_-18px_rgb(0_0_0/55%)] dark:shadow-[0_18px_44px_-18px_rgb(0_0_0/80%)] enter enter-grow', place.below ? 'origin-top-right' : 'origin-bottom-right')}>
       <div className="flex min-h-0 sm:h-86.5 max-sm:flex-col">
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col max-sm:h-56 max-sm:flex-none">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col max-sm:h-56 max-sm:flex-initial">
           <div className="shrink-0 px-3 pt-2.5">
             <label className={cn(HEAD, 'focus-within:border-ring')}>
               <SearchIcon className="size-4 shrink-0 text-muted-foreground/55" />
@@ -112,24 +112,42 @@ function Picker({ window, models, own, subagent, below }: { window: WindowState;
   );
 }
 
+const GAP = 8;
+/** Where the list opens: at the button, on the side with more room between the top bar and the foot of the window, and no
+ * taller than that room, so all of it is on the page and its list scrolls. It is placed in the composer's box, its
+ * `offsetParent`, whose right edge it keeps: over the button, or under the box, whose edge is just under the button. */
+type Place = { below: boolean; style: CSSProperties };
+function placed(chip: HTMLElement): Place {
+  const button = chip.getBoundingClientRect(), box = chip.offsetParent?.getBoundingClientRect() ?? button;
+  // Not over the top bar: in the desktop app that drags the window, and would take the clicks.
+  const top = chip.closest('main')?.querySelector(':scope > header')?.getBoundingClientRect().bottom ?? 0;
+  const over = button.top - top - 2 * GAP, under = innerHeight - box.bottom - 2 * GAP;
+  return under > over ? { below: true, style: { top: box.height + GAP, maxHeight: under } } : { below: false, style: { bottom: box.bottom - button.top + GAP, maxHeight: over } };
+}
+
 /** The model the window's agent runs on and how hard it thinks, in the composer: a click opens the list it is picked from.
  * Before the window's Pi runs it says what that will start on: the pick, the model the profile keeps for its main chat, or
  * Pi's own default. The list is read when the window is shown, for the names, and again each time it is opened: logging in
  * to a provider adds its models. Esc closes the list and nothing else, and a click anywhere else closes it too
- * (`useOverlay`). The list opens over the composer, or under it where the composer is in the upper half of the page, as in a
- * chat with nothing in it yet. */
+ * (`useOverlay`). The list opens at the button, over it or under it (`placed`), and is placed again when the window is resized. */
 export function Model({ state, window }: { state: State; window: WindowState }) {
-  const [open, setOpen] = useState<'over' | 'under'>(), root = useRef<HTMLDivElement>(null), chip = useRef<HTMLButtonElement>(null);
+  const [open, setOpen] = useState<Place>(), root = useRef<HTMLDivElement>(null), chip = useRef<HTMLButtonElement>(null);
   const models = state.models[window.id], model = window.model ?? models?.preset;
   useEffect(() => { if (open || !models) void app.readModels(window.id); }, [window.id, open]);
   useOverlay(open !== undefined, () => setOpen(undefined), root, chip);
+  useEffect(() => {
+    if (!open) return;
+    const resized = () => { if (chip.current) setOpen(placed(chip.current)); };
+    addEventListener('resize', resized);
+    return () => removeEventListener('resize', resized);
+  }, [open !== undefined]);
   return (
     <div ref={root} className="flex min-w-0 shrink">
-      <button ref={chip} type="button" aria-label="Model" title="Model and thinking level" aria-haspopup="dialog" aria-expanded={open !== undefined} aria-busy={!models} onClick={event => setOpen(open ? undefined : event.currentTarget.getBoundingClientRect().top < innerHeight / 2 ? 'under' : 'over')}
+      <button ref={chip} type="button" aria-label="Model" title="Model and thinking level" aria-haspopup="dialog" aria-expanded={open !== undefined} aria-busy={!models} onClick={event => setOpen(open ? undefined : placed(event.currentTarget))}
         className="flex h-7 min-w-13 max-w-64 cursor-pointer items-center gap-1.5 rounded-[var(--control-radius)] px-2 font-medium text-foreground/80 text-sm outline-none hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring aria-expanded:bg-accent aria-expanded:text-foreground">
         {model ? <ModelName model={model} models={models} /> : <><Mark /><span className="text-muted-foreground">Model</span></>}
       </button>
-      {open && <Picker window={window} models={models} own={model} subagent={state.config[window.profile]?.subagent} below={open === 'under'} />}
+      {open && <Picker window={window} models={models} own={model} subagent={state.config[window.profile]?.subagent} place={open} />}
     </div>
   );
 }

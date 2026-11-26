@@ -112,16 +112,22 @@ async function run(page: Page) {
   await page.keyboard.press('Enter');
   await stop(page).waitFor();
 }
-/** Esc stops the main agent. */
+/** The line under the composer once one Esc has armed the stop. */
+const armed = (page: Page) => page.getByRole('status').filter({ hasText: 'again to stop' });
+/** Esc twice stops the main agent: the first only arms the stop. */
 async function stops(page: Page, where: string) {
   await page.keyboard.press('Escape');
-  await stop(page).waitFor({ state: 'detached', timeout: 5000 }).catch(() => assert.fail(`Esc ${where} did not stop the run.`));
+  await armed(page).waitFor({ timeout: 2000 }).catch(() => assert.fail(`Esc ${where} did not arm the stop.`));
+  assert.ok(await stop(page).isVisible(), `one Esc ${where} stopped the run.`);
+  await page.keyboard.press('Escape');
+  await stop(page).waitFor({ state: 'detached', timeout: 5000 }).catch(() => assert.fail(`Esc twice ${where} did not stop the run.`));
 }
-/** Esc, and the main agent is still at work a moment later. */
+/** Esc, and the main agent is still at work a moment later, its stop not armed: the key was not the chat's. */
 async function goesOn(page: Page, where: string) {
   await page.keyboard.press('Escape');
   await page.waitForTimeout(400);
   assert.ok(await stop(page).isVisible(), `Esc ${where} stopped the run.`);
+  assert.equal(await armed(page).count(), 0, `Esc ${where} armed the stop.`);
 }
 /** What has the focus, as a reader would name it, and `the page` when nothing has. */
 const focused = (page: Page) => page.evaluate(() => {
@@ -133,6 +139,40 @@ const lose = (page: Page) => page.evaluate(() => { if (document.activeElement in
 const panel = (page: Page) => page.getByLabel('Agents and GitHub', { exact: true }).last();
 const agent = (page: Page, title: string) => panel(page).getByRole('button', { name: title });
 const back = (page: Page) => page.getByRole('button', { name: 'Back to the lists' });
+
+test('one Esc only arms the stop, which lets go after a few seconds, when the run ends or another window is shown; the Stop button stops at once', async () => {
+  const page = await open('chat');
+  await run(page);
+  await page.keyboard.press('Escape');
+  await armed(page).waitFor();
+  // On its own it lets go, and the next Esc arms it again rather than stopping.
+  await armed(page).waitFor({ state: 'detached', timeout: 5000 });
+  await page.keyboard.press('Escape');
+  await armed(page).waitFor();
+  assert.ok(await stop(page).isVisible(), 'an Esc after the stop let go stopped the run.');
+  // The button needs no second press, and leaves nothing armed for the next run.
+  await stop(page).click();
+  await stop(page).waitFor({ state: 'detached' });
+  await run(page);
+  assert.equal(await armed(page).count(), 0, 'the next run began armed.');
+  // A held Esc is one press: what the key repeats only arms the stop.
+  await page.keyboard.down('Escape');
+  await page.keyboard.down('Escape');
+  await page.keyboard.up('Escape');
+  await armed(page).waitFor();
+  await page.waitForTimeout(300);
+  assert.ok(await stop(page).isVisible(), 'a held Esc stopped the run.');
+  // Armed in one window, it is not in another.
+  await page.getByRole('button', { name: 'New window' }).click();
+  await page.getByRole('heading', { name: 'New connected window' }).waitFor();
+  await page.getByRole('textbox', { name: 'Message' }).fill('wait');
+  await page.keyboard.press('Enter');
+  await stop(page).waitFor();
+  assert.equal(await armed(page).count(), 0, 'the stop stayed armed in another window.');
+  await page.keyboard.press('Escape');
+  await armed(page).waitFor();
+  assert.ok(await stop(page).isVisible(), 'one Esc in another window stopped its run.');
+});
 
 test('Esc stops the run when the keys are in the chat, or outside every part that has its own: on the windows at the left, after a notice is dismissed', async () => {
   const page = await open('chat');
@@ -185,7 +225,10 @@ test('⌥↑ takes the messages still waiting back into the box, in front of wha
   await box.fill('and say why');
   await page.keyboard.press('Alt+ArrowUp');
   await waiting.waitFor({ state: 'detached', timeout: 5000 }).catch(() => assert.fail('⌥↑ left the messages waiting.'));
-  assert.equal(await box.inputValue(), 'Check the tests first\n\nThen open the pull request\n\nand say why');
+  // The list goes as Pi says its queue is empty, which can be before the answer that brings the messages back into the box.
+  const back = 'Check the tests first\n\nThen open the pull request\n\nand say why';
+  await page.waitForFunction(back => document.querySelector<HTMLTextAreaElement>('textarea[aria-label="Message"]')?.value === back, back, { timeout: 2000 }).catch(() => {});
+  assert.equal(await box.inputValue(), back);
   assert.deepEqual([await focused(page), await box.evaluate((area: HTMLTextAreaElement) => area.selectionStart === area.value.length)], ['Message', true]);
   await page.waitForTimeout(300);
   assert.ok(await page.getByRole('button', { name: 'Steer the agent' }).isVisible(), '⌥↑ stopped the run.');

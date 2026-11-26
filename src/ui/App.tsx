@@ -31,6 +31,7 @@ import { underway, type Source } from './imports.ts';
 
 /** A window that has not run yet. */
 const NOTHING = idle();
+const openWindow = (window: string) => app.select(window);
 const SHOWS = [['Chat', false], ['Memory', true]] as const;
 
 /** What the desktop app's menu bar asks of a profile's page, which its own shortcuts run too. */
@@ -149,7 +150,7 @@ function Profile({ state, profile, onSettings, onUsage, onNewProfile, onImport, 
                 {!own ? <>One chat that remembers everything. <button type="button" onClick={onImport} className="rounded-sm underline underline-offset-2 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring">Import your history</button> from Claude Code, Codex, Pi or ChatGPT.</> : window.completed ? 'The main chat has this conversation. Your next message starts a new one.' : 'Its own conversation, with this profile\'s memory. Complete hands it to the main chat.'}
               </p>
             </div>
-          ) : <Timeline ref={timeline} items={items} live={live} running={window.status === 'running'} starting={window.status === 'starting'} profile={profile} loading={log?.loading} older={more ? () => void app.older(profile) : undefined} onAgent={own ? undefined : openAgent} onCite={cite} logged={own ? undefined : log?.entries.at(-1)?.i} onPlace={recall} onMemory={search} agents={own ? undefined : agents} />}
+          ) : <Timeline ref={timeline} items={items} live={live} running={window.status === 'running'} starting={window.status === 'starting'} profile={profile} loading={log?.loading} older={more ? () => void app.older(profile) : undefined} onAgent={own ? undefined : openAgent} onCite={cite} logged={own ? undefined : log?.entries.at(-1)?.i} onPlace={recall} onMemory={search} agents={own ? undefined : agents} windows={own ? undefined : windows} onWindow={openWindow} />}
           {!own && !panel && agentsWork && agents && (
             // The line goes when the panel opens: the focus goes first to the panel's button, where closing the panel brings it back.
             <AtWork agents={agents} onOpen={() => { panelButton.current?.focus(); setPanel({}); }} />

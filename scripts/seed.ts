@@ -94,6 +94,22 @@ export function grouped(directory: string, end: number) {
   GROUPED_REPORTS.forEach(([id, title, report], at) => writeRun(directory, { id, title, task: `${title}.`, state: states[at], started: ago(600), ended: ago(600 - took[at]), model: models[at], report }));
 }
 
+/** pi-optchat's words to the main chat when a connected window is opened (its `agents.ts`), and when it is handed off. */
+const opened = (id: string, cwd: string, task: string) => `[${id}] User started a connected conversation in ${cwd}. That agent is handling this request with the user directly; don't do it yourself. Initial message: ${task}\n\nUse tell with this agent ID only if you know something it needs. It stays open between replies and sends a final handoff on completion or disconnect.`;
+/** The first message of the window the screenshots open, which the fake Pi knows as `w1`. */
+export const ALERT = 'Look at why the session-api alert fires every night at 02:00, and whether we can quiet it without hiding a real outage.';
+/** A main chat that two connected windows were opened from: one has handed off, with its handoff under it, and the other is the
+ * one the screenshots open and talk with. Its entries are six minutes apart. */
+export const WINDOWED: Said[][] = [[
+  ['user', 'What is left before we promote session-api?'],
+  ['talk', 'Only the stage bump, and a look at the canary once it runs.'],
+  ['work', opened('7c41d2e0', '/Users/jonas/Work/environment-stage', 'Bump session-api to 4.12.1 in stage and check the canary looks healthy before we promote.')],
+  ['work', '[7c41d2e0] Connected conversation completed by user. This describes the conversation ending, not proof that every task succeeded.\nBumped `session-api` to **4.12.1** in environment-stage. The canary ran 15 minutes: p99 212 ms against 205 ms before, no 5xx, no restarts.\n\nSafe to promote to qa. One thing to know: the `SESSION_TTL` default changed in 4.12; stage sets it, qa does not.\n[7c41d2e0] completed\nFull transcript: /Users/jonas/.pi/agent/sessions/7c41d2e0.jsonl\n\nFull chat: zoom("7c41d2e0")'],
+  ['user', 'ok nice. what was the TTL thing again, does it matter for qa?'],
+  ['talk', 'A little: without `SESSION_TTL` set, qa falls back to the new default of 30 minutes (it was 2 hours), so long test sessions there expire sooner. I can add it to qa\'s values before you promote.'],
+  ['work', opened('w1', '/Users/jonas/Work/service-containers', ALERT)],
+]];
+
 /** A long edit, for a diff that is longer than the box it opens in: one function rewritten and its tests, most lines kept. */
 const STOP_BEFORE = `  async stop(grace: number) {
     const pid = this.child.pid;

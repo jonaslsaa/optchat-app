@@ -1,8 +1,8 @@
-import { BotIcon, CheckIcon, ChevronRightIcon, CircleSlashIcon, EyeIcon, GlobeIcon, HistoryIcon, SearchIcon, SquarePenIcon, StickyNoteIcon, TerminalIcon, WrenchIcon, XIcon, type LucideIcon } from 'lucide-react';
+import { BotIcon, CheckIcon, ChevronRightIcon, CircleSlashIcon, EyeIcon, GlobeIcon, HistoryIcon, MessagesSquareIcon, SearchIcon, SquarePenIcon, StickyNoteIcon, TerminalIcon, WrenchIcon, XIcon, type LucideIcon } from 'lucide-react';
 import { createContext, memo, useContext, useEffect, useState, type ReactNode } from 'react';
 import { flushSync } from 'react-dom';
 import { working as agentWorks } from '../agent.ts';
-import type { Agent } from '../protocol.ts';
+import type { Agent, WindowState } from '../protocol.ts';
 import { among, doing, named, stood } from './agents.ts';
 import { CiteGroup, SkillChip } from './Cite.tsx';
 import { asTyped, type Place } from './cite.ts';
@@ -10,6 +10,7 @@ import { Markdown } from './Markdown.tsx';
 import { act, started, thoughtLine, took, worked, type Part, type Step, type Thinking, type Tool } from './transcript.ts';
 import { Button, cn, CopyButton, Spinner, StatusDot } from './ui.tsx';
 import { Picture } from './Picture.tsx';
+import { called } from './store.ts';
 import { WorkLogDetails, WorkLogRow } from './WorkLog.tsx';
 
 /** The rows of the chat. They only draw: what a row says is worked out in `parts` (transcript.ts). Each is drawn again only when
@@ -226,6 +227,36 @@ export const HandoffRow = memo(function HandoffRow({ part, writing }: { part: Of
     <div className="pb-4">
       <Fold open={open} toggle={() => setOpen(!open)}>Handed to the main chat</Fold>
       {open && <div className="enter mt-2 rounded-xl border border-border/70 bg-card px-3.5 py-3 dark:bg-card/60"><Markdown text={part.body} /></div>}
+    </div>
+  );
+});
+/** A connected window you opened, in the main chat, as one line: the line the agents a `spawn` started have, for a window. A dot
+ * while you talk with it, a mark once it is handed off and how long it was open, and its name in the sidebar; the line opens it
+ * (`onWindow`) while the app has it (`window`, the one whose conversation this is), and under the chevron is what pi-optchat
+ * told the main chat of it, which was for its agent. Its handoff comes as a report of its own, further down. */
+export const WindowRow = memo(function WindowRow({ part, window, onWindow }: { part: Of<'window'>; window?: WindowState; onWindow?: (window: string) => void }) {
+  const [open, setOpen] = useState(false), toggle = () => setOpen(!open);
+  const handing = !part.ended && (window?.completed || window?.completing), talking = !part.ended && !handing && window && window.status !== 'stopped' && window.status !== 'closed';
+  const go = window && onWindow ? () => onWindow(window.id) : undefined;
+  return (
+    <div className="group pt-0.5 pb-3.5">
+      <div className="flex h-7 min-w-0 items-center gap-2 rounded-md px-1.5 text-xs transition-colors hover:bg-accent">
+        <button type="button" onClick={go ?? toggle} title={go ? 'Open this window' : 'What the main chat was told'} aria-expanded={go ? undefined : open} tabIndex={go ? undefined : -1}
+          className="flex h-7 min-w-0 flex-1 cursor-pointer select-none items-center gap-2 rounded-md text-left outline-none focus-visible:ring-2 focus-visible:ring-ring/70">
+          {part.ended ? <CheckIcon role="img" aria-label="Handed off" className="size-3.5 shrink-0 text-muted-foreground" /> : talking || handing ? <StatusDot tone="working" pulse /> : <MessagesSquareIcon className="size-3.5 shrink-0 text-muted-foreground" />}
+          <span className="shrink-0 text-foreground/75">Window</span>
+          <span className="min-w-0 flex-1 truncate text-muted-foreground">{window?.name ?? <span className="text-foreground/80">“{called(part.task)}”</span>}</span>
+          <span data-no-find className={cn('shrink-0 text-muted-foreground tabular-nums', talking && 'text-info-foreground')}>
+            {part.ended ? `Handed off · ${took(part.date, part.ended)}` : handing ? 'Handing off' : talking ? <>Talking with you · <Timer from={part.date} /></> : null}
+          </span>
+        </button>
+        <button type="button" onClick={toggle} aria-expanded={open} aria-label="What the main chat was told" title="What the main chat was told"
+          className="flex size-5.5 shrink-0 cursor-pointer items-center justify-center rounded-[5px] text-muted-foreground opacity-0 outline-none transition hover:bg-accent hover:text-foreground focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring/70 group-hover:opacity-100 aria-expanded:opacity-100">
+          <ChevronRightIcon className={cn('size-3 transition-transform duration-200', open && 'rotate-90')} />
+        </button>
+        <Time date={part.date} />
+      </div>
+      {open && <div data-cite={part.key} className="enter ms-6.5 mt-1 cursor-text select-text whitespace-pre-wrap rounded-lg border border-border/60 bg-secondary px-2.5 py-2 text-muted-foreground text-xs leading-relaxed [overflow-wrap:anywhere] dark:border-transparent dark:bg-input/32">{part.items[0].text}</div>}
     </div>
   );
 });

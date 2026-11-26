@@ -61,7 +61,7 @@ export const PROMPT = 'When you first mention a GitHub pull request or issue, gi
  * sent as the session starts, so before Pi's first answer; a Pi that has not sent it by then has no profile open. This is the
  * one place that reads it, and it reads only these fields. */
 const ROLE_STATUS = 'optchat.role';
-const Role = Type.Object({ profile: Type.String(), completed: Type.Optional(Type.Boolean()), after: Type.Optional(Type.Number()) });
+const Role = Type.Object({ profile: Type.String(), id: Type.Optional(Type.String()), completed: Type.Optional(Type.Boolean()), after: Type.Optional(Type.Number()) });
 /** pi-optchat's role as it stands, or nothing: from another program, or a pi-optchat too old to say. */
 function role(status: unknown) {
   try {
@@ -373,15 +373,17 @@ export class Windows {
     }
   }
   /** `status` is pi-optchat's role as JSON, or nothing once its Pi has no profile open. All the app needs of it is whether a
-   * connected window's conversation is handed off, and where the one it is in began (`after`, which pi-optchat says once a
-   * conversation goes on in a session that has one handed off: as your next message arrives, and before the run). Which Pi
-   * owns the profile and which is a window on it is the app's own doing. The cut outlives the Pi that said it, since the page
-   * still shows that Pi's messages; a Pi started later says none, and all it says is later than the cut there was. */
+   * connected window's conversation is handed off, where the one it is in began (`after`, which pi-optchat says once a
+   * conversation goes on in a session that has one handed off: as your next message arrives, and before the run), and that
+   * conversation's id in the main chat (`id`). Which Pi owns the profile and which is a window on it is the app's own doing.
+   * The cut and the id outlive the Pi that said them, since the page still shows that Pi's messages, and the main chat its
+   * conversation; a Pi started later says none, and all it says is later than the cut there was. */
   private role(opened: Opened, status: unknown) {
-    const { state } = opened, { completed = false, after = state.since } = role(status) ?? {};
-    if ((state.completed ?? false) === completed && state.since === after) return;
+    const { state } = opened, { completed = false, after = state.since, id: agent = state.agent } = role(status) ?? {};
+    if ((state.completed ?? false) === completed && state.since === after && state.agent === agent) return;
     if (completed) state.completed = true; else delete state.completed;
     if (after !== undefined) state.since = after;
+    if (agent !== undefined) state.agent = agent;
     this.changed(opened);
   }
 }

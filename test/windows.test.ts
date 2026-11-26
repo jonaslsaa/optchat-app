@@ -238,6 +238,8 @@ test('a connected window starts the profile\'s owner first, joins it, and Comple
   assert.partialDeepStrictEqual(await state('work/main'), { args: ['--optchat-profile', 'work', '--optchat-connect', 'off', '--mode', 'rpc'] });
   assert.partialDeepStrictEqual(await state(window.id), { args: ['--optchat-profile', 'work', '--optchat-connect', 'join', '--mode', 'rpc'] });
   assert.partialDeepStrictEqual(await windows(), [{ id: 'work/1', role: 'connected', status: 'idle' }, { id: 'work/main', role: 'main', status: 'idle' }]);
+  // The window knows its conversation by pi-optchat's id for it, which heads what the main chat is told of it.
+  assert.deepEqual((await request('windows', {})).windows.map(w => w.agent), ['w1', undefined]);
 
   // Complete is for a connected conversation that is not handed off yet: not the main chat, and not twice.
   await assert.rejects(request('complete', { window: 'work/main' }), /none to hand off/);
@@ -269,7 +271,7 @@ test('a connected window starts the profile\'s owner first, joins it, and Comple
   await assert.rejects(request('prompt', { window: window.id, text: 'crash' }));
   let gone = (await request('windows', {})).windows[0];
   while (gone.status !== 'stopped') { await sleep(10); gone = (await request('windows', {})).windows[0]; }
-  assert.equal(gone.since, after.since);
+  assert.deepEqual([gone.since, gone.agent], [after.since, 'w1']);
   await request('close', { window: window.id });
   assert.equal((await status('closed')).window.id, window.id);
   assert.deepEqual((await windows()).map(w => w.id), ['work/main']);

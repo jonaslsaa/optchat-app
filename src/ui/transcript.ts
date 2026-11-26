@@ -269,15 +269,24 @@ export type Step = { key: number } & (
   | { type: 'fault'; text: string });
 export type Tool = Extract<Step, { type: 'tool' }>;
 /** The chat in the blocks it is drawn as: your message with its images, a note, a report from an agent (with the `title` it was
- * started under, where the chat has its start), the agent's reply, which is its work and then its answer, or the handoff a
- * connected window's agent wrote for the main chat (`body`, empty until it is written). `items` is what the part was made from.
- * Your message is what you typed, apart from what it `cites` and the `skill` it runs; an answer's `said` is the messages it is, one for each of its blocks. */
+ * started under, where the chat has its start), a connected window you opened (by the `agent` its conversation is to the main
+ * chat, with the first message you sent it as `task`, and when it was handed off, where the chat has its handoff), the agent's
+ * reply, which is its work and then its answer, or the handoff a connected window's agent wrote for the main chat (`body`, empty
+ * until it is written). `items` is what the part was made from. Your message is what you typed, apart from what it `cites` and
+ * the `skill` it runs; an answer's `said` is the messages it is, one for each of its blocks. */
 export type Part = { key: number; items: readonly Item[] } & (
   | { type: 'user'; date: string; text: string; cites: Cite[]; skill?: Skill; /** Each by its name in the profile, or as an address where it is not kept there. */ images: string[] }
   | { type: 'note'; text: string }
   | { type: 'work'; date: string; reports: Report[] }
   | { type: 'handoff'; date: string; body: string }
+  | { type: 'window'; date: string; agent: string; task: string; ended?: string }
   | { type: 'reply'; steps: Step[]; answer?: { text: string; said: readonly Item[]; streaming?: boolean }; from: string; to: string; stopped: boolean });
+
+/** What pi-optchat tells the main chat when you open a connected window (its `agents.ts`), in the app or in a terminal's Pi
+ * ("…in a Pi window of its own."): written for the agent, which it tells not to do the work itself and how to reach the window. */
+const OPENED = /^\[([\w-]+)\] User started a connected conversation in .+?\. That agent is handling this request with the user directly; don't do it yourself\. Initial message: ([\s\S]*)\n\n(?:Use tell with this agent ID|It runs in another Pi process)[^\n]*$/;
+/** How the handoff of a connected conversation begins, completed or cut off (pi-optchat's `deliverHandoff`). */
+const HANDED = 'Connected conversation ';
 
 const inReply = ({ kind }: Item) => kind === 'talk' || kind === 'tool' || kind === 'echo';
 const same = (a: Item, b: Item) => a === b || a.key === b.key && a.kind === b.kind && a.date === b.date && a.text === b.text && a.streaming === b.streaming && a.call === b.call && a.handoff === b.handoff;
@@ -298,9 +307,11 @@ export function parts(items: readonly Item[], previous: readonly Part[] = []): P
     return old && old.items.length === group.length && old.items.every((item, at) => same(item, group[at])) ? old : part(group);
   });
   // A report that does not say its agent's title is named by its number; the call that started the agent, where the chat
-  // reaches back to it, has the title.
+  // reaches back to it, has the title. A window that was opened ended with its handoff, where the chat has it.
   const titles = new Map(made.flatMap(part => part.type === 'reply' ? part.steps.flatMap(spawned) : []));
+  const handed = new Map(made.flatMap(part => part.type === 'work' ? part.reports.flatMap(({ agent, body }) => agent && body.startsWith(HANDED) ? [[agent, part.date] as const] : []) : []));
   return made.map(part => {
+    if (part.type === 'window') { const ended = handed.get(part.agent); return part.ended === ended ? part : { ...part, ended }; }
     if (part.type !== 'work' || !part.reports.some(report => report.agent && report.title === undefined && titles.has(report.agent))) return part;
     return { ...part, reports: part.reports.map(report => { const title = report.agent && report.title === undefined ? titles.get(report.agent) : undefined; return title === undefined ? report : { ...report, title }; }) };
   });
@@ -338,7 +349,10 @@ function part(items: readonly Item[]): Part {
     return { ...common, type: 'user', date: first.date, cites, ...skill && { skill }, text: typed.trim(), images };
   }
   if (first.kind === 'note') return { ...common, type: 'note', text: first.text };
-  if (first.kind === 'work') return { ...common, type: 'work', date: first.date, reports: reported(first.text) };
+  if (first.kind === 'work') {
+    const [, agent, task] = OPENED.exec(first.text) ?? [];
+    return agent ? { ...common, type: 'window', date: first.date, agent, task } : { ...common, type: 'work', date: first.date, reports: reported(first.text) };
+  }
   // What the agent was saying when it was stopped stays in view, as its answer does.
   const cut = last.kind === 'echo' && last.text.startsWith('Agent aborted'), answer = closing(cut ? items.slice(0, -1) : items);
   const work = steps(items.filter(item => !answer.includes(item)));

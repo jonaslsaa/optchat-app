@@ -48,14 +48,15 @@ export function escapes(event: Pick<KeyboardEvent, 'key' | 'defaultPrevented' | 
   close();
 }
 /** Runs the binding whose shortcut is pressed, unless something nearer already took the key: wherever the focus is, or only
- * while the keys are `within` one of the parts of the page that are named. `bindings` is made again when `deps` change, as
- * with `useEffect`. */
+ * while the keys are `within` one of the parts of the page that are named. A key held down runs it once: what it repeats is
+ * taken and does nothing, so a held Esc is one press, never the two that stop a run. `bindings` is made again when `deps`
+ * change, as with `useEffect`. */
 export function useShortcuts(bindings: () => Record<string, () => void>, deps: readonly unknown[], ...within: Keys[]) {
   useEffect(() => {
     const now = bindings();
     const pressed = (event: KeyboardEvent) => {
       const run = !within.length || within.some(keys => keys === keysOf(event.target)) ? bound(event, now) : undefined;
-      if (run) { event.preventDefault(); run(); }
+      if (run) { event.preventDefault(); if (!event.repeat) run(); }
     };
     addEventListener('keydown', pressed);
     return () => removeEventListener('keydown', pressed);

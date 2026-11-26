@@ -155,9 +155,14 @@ test('one Esc only arms the stop, which lets go after a few seconds, when the ru
   await stop(page).waitFor({ state: 'detached' });
   await run(page);
   assert.equal(await armed(page).count(), 0, 'the next run began armed.');
-  // Armed in one window, it is not in another.
-  await page.keyboard.press('Escape');
+  // A held Esc is one press: what the key repeats only arms the stop.
+  await page.keyboard.down('Escape');
+  await page.keyboard.down('Escape');
+  await page.keyboard.up('Escape');
   await armed(page).waitFor();
+  await page.waitForTimeout(300);
+  assert.ok(await stop(page).isVisible(), 'a held Esc stopped the run.');
+  // Armed in one window, it is not in another.
   await page.getByRole('button', { name: 'New window' }).click();
   await page.getByRole('heading', { name: 'New connected window' }).waitFor();
   await page.getByRole('textbox', { name: 'Message' }).fill('wait');
@@ -220,7 +225,10 @@ test('⌥↑ takes the messages still waiting back into the box, in front of wha
   await box.fill('and say why');
   await page.keyboard.press('Alt+ArrowUp');
   await waiting.waitFor({ state: 'detached', timeout: 5000 }).catch(() => assert.fail('⌥↑ left the messages waiting.'));
-  assert.equal(await box.inputValue(), 'Check the tests first\n\nThen open the pull request\n\nand say why');
+  // The list goes as Pi says its queue is empty, which can be before the answer that brings the messages back into the box.
+  const back = 'Check the tests first\n\nThen open the pull request\n\nand say why';
+  await page.waitForFunction(back => document.querySelector<HTMLTextAreaElement>('textarea[aria-label="Message"]')?.value === back, back, { timeout: 2000 }).catch(() => {});
+  assert.equal(await box.inputValue(), back);
   assert.deepEqual([await focused(page), await box.evaluate((area: HTMLTextAreaElement) => area.selectionStart === area.value.length)], ['Message', true]);
   await page.waitForTimeout(300);
   assert.ok(await page.getByRole('button', { name: 'Steer the agent' }).isVisible(), '⌥↑ stopped the run.');

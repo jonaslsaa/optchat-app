@@ -23,7 +23,7 @@ process.env.FAKE_PI_HOME = join(home, 'pi');
 mkdirSync(join(home, 'pi', 'pi-optchat'), { recursive: true });
 writeFileSync(join(home, 'pi', 'pi-optchat', 'package.json'), JSON.stringify({ name: 'pi-optchat', version: '0.12.2' }));
 writeFileSync(join(home, 'pi', 'state.json'), JSON.stringify({ version: '1.5.2', providers: ['anthropic', 'openai'], packages: { 'npm:pi-optchat': join(home, 'pi', 'pi-optchat') } }));
-for (const name of ['bar', 'cold', 'colder', 'chat', 'beside', 'sheet', 'memory', 'rows', 'menus', 'fields', 'asks', 'windows', 'importing', 'into', 'keys', 'spend', 'commands', 'arrows', 'mute', 'said', 'images', 'gallery', 'tabs', 'slow', 'inline', 'held', 'unread', 'finish', 'renames', 'queues']) {
+for (const name of ['bar', 'cold', 'colder', 'chat', 'beside', 'sheet', 'memory', 'rows', 'menus', 'fields', 'asks', 'windows', 'importing', 'into', 'keys', 'spend', 'commands', 'arrows', 'mute', 'said', 'images', 'gallery', 'tabs', 'slow', 'inline', 'held', 'unread', 'finish', 'renames', 'queues', 'picker']) {
   const profile = createProfile(home, name);
   if (['bar', 'cold', 'colder', 'memory', 'windows', 'keys', 'spend', 'arrows', 'unread', 'queues'].includes(name)) { writeMemory(profile, 16); continue; }
   seed(profile, TEAM.length, Date.now(), TEAM);
@@ -55,6 +55,7 @@ seed(createProfile(home, 'formulas'), 1, Date.now(), FORMULAS);
 writeFileSync(join(home, 'chart.png'), png(120, [38, 99, 235]));
 seed(createProfile(home, 'pictured'), 1, Date.now(), PICTURED(join(home, 'chart.png')));
 createProfile(home, 'paced');
+createProfile(home, 'first-pick');
 // Three profiles open as tabs, to drag about.
 for (const name of ['ant', 'bee', 'cat']) createProfile(home, name);
 createProfile(home, 'skills');
@@ -1121,6 +1122,42 @@ test('the working line opens to what the agent has thought so far, and Esc on it
   await stops(moving, 'on the long thought');
   ctl.close();
   await moving.context().close();
+});
+
+test('the model list opens at its button and stays whole on the page between the top bar and the foot: over a long draft, and shorter, scrolling, in a short window and under a notice; under the box of an empty chat, and over the button once a first message is sent', async () => {
+  const page = await open('picker');
+  await page.getByRole('textbox', { name: 'Message' }).fill(Array.from({ length: 14 }, (_, k) => `Line ${k + 1}`).join('\n'));
+  await page.getByRole('button', { name: 'Model' }).click();
+  const where = (at = page) => at.evaluate(() => {
+    const [dialog, button, header, list] = ['[role=dialog][aria-label=Model]', 'button[aria-label=Model]', 'main > header', '[role=listbox][aria-label=Models]'].map(selector => document.querySelector(selector)!);
+    const [box, at, bar] = [dialog, button, header].map(element => element.getBoundingClientRect());
+    return { gap: at.top - box.bottom, inside: box.top >= bar.bottom && box.bottom <= innerHeight, height: box.height, scrolls: list.scrollHeight > list.clientHeight };
+  });
+  await page.getByRole('option').first().waitFor();
+  const tall = await where();
+  assert.ok(Math.abs(tall.gap - 8) < 1 && tall.inside, `over the button, all on the page: ${JSON.stringify(tall)}`);
+  await page.setViewportSize({ width: 1280, height: 460 });
+  await page.waitForFunction(() => document.querySelector('[role=dialog][aria-label=Model]')!.getBoundingClientRect().top >= document.querySelector('main > header')!.getBoundingClientRect().bottom);
+  const short = await where();
+  assert.ok(Math.abs(short.gap - 8) < 1 && short.inside && short.height < tall.height && short.scrolls, `a short window's list is shorter and scrolls: ${JSON.stringify(short)}`);
+  // A notice over the page, as when the server stops answering, moves the top bar down: the list makes room for it.
+  await page.evaluate(() => { const notice = document.createElement('p'); notice.style.cssText = 'flex: none; height: 40px'; document.querySelector('.h-dvh')!.prepend(notice); });
+  await page.waitForFunction(height => document.querySelector('[role=dialog][aria-label=Model]')!.getBoundingClientRect().height < height, short.height);
+  const noticed = await where();
+  assert.ok(Math.abs(noticed.gap - 8) < 1 && noticed.inside, `under a notice the list is still whole on the page: ${JSON.stringify(noticed)}`);
+  await page.context().close();
+  // In an empty chat it opens under the box; a first message sent from the box with the list open takes the box to the foot
+  // of the page, and the list goes over its button.
+  const empty = await open('first-pick');
+  await empty.getByRole('button', { name: 'Model' }).click();
+  await empty.getByRole('option').first().waitFor();
+  assert.equal((await where(empty)).gap < 0, true, 'under the button in an empty chat');
+  await empty.getByRole('textbox', { name: 'Message' }).fill('hi');
+  await empty.keyboard.press('Enter');
+  await empty.getByRole('heading', { name: 'first-pick' }).waitFor({ state: 'detached' });
+  const sent = await where(empty);
+  assert.ok(Math.abs(sent.gap - 8) < 1 && sent.inside, `over the button once the chat has a message: ${JSON.stringify(sent)}`);
+  await empty.context().close();
 });
 
 test('a long edit opens as its diff, which scrolls in its box and does not make the page longer', async () => {

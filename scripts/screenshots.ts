@@ -600,6 +600,23 @@ async function pictures(browser: Browser, control: Client) {
   await lean.getByRole('button', { name: 'Model' }).click();
   await lean.getByRole('radio', { name: 'High', exact: true, checked: true }).waitFor();
   await shot(lean, '55-model-narrow');
+  // The list opens at its button and stays on the page: over a long draft, in a short window, and in an empty chat, over
+  // its box where there is more room above and under it in a taller window.
+  const tall = await open(['picks'], { dark: true });
+  await tall.getByRole('textbox', { name: 'Message' }).fill(Array.from({ length: 14 }, (_, k) => `Line ${k + 1} of a long draft`).join('\n'));
+  await tall.getByRole('button', { name: 'Model' }).click();
+  await tall.getByRole('radio', { name: 'High', exact: true, checked: true }).waitFor();
+  await shot(tall, '56-model-long-draft-dark');
+  const short = await open(['picks'], { dark: true, height: 460 });
+  await short.getByRole('button', { name: 'Model' }).click();
+  await short.getByRole('radio', { name: 'High', exact: true, checked: true }).waitFor();
+  await shot(short, '57-model-short-window-dark');
+  for (const [height, name] of [[800, '58-model-empty-dark'], [1000, '58b-model-empty-tall-dark']] as const) {
+    const blank = await open(['empty'], { dark: true, height });
+    await blank.getByRole('button', { name: 'Model' }).click();
+    await blank.getByRole('dialog', { name: 'Model' }).getByRole('option').first().waitFor();
+    await shot(blank, name);
+  }
   // A message pi-optchat did not take: it says why above the composer, and the message is back in it.
   const refused = await open(['importing']);
   await say(refused, 'Summarise the release notes');

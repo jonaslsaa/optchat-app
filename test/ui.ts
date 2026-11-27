@@ -695,18 +695,23 @@ test('with the panel closed the agents a call started are under it, and over the
   assert.equal(await focused(narrow), 'Agents and GitHub');
 });
 
-test('a handoff the main chat\'s Pi writes in the background is said on the window\'s line and over the composer, mid-turn too, until it is done', async () => {
-  const page = await open('handoff'), line = page.getByRole('main').getByRole('button', { name: /Window “Find out why/ }), over = page.getByRole('status').filter({ hasText: 'window handing off' });
+test('a handoff the main chat\'s Pi writes in the background is on the window\'s line and the sidebar\'s Handing off shelf, mid-turn too, until it is done', async () => {
+  const page = await open('handoff'), line = page.getByRole('main').getByRole('button', { name: /Window “Find out why/ });
+  const windows = page.getByRole('navigation', { name: 'Windows' }), shelf = windows.getByRole('button', { name: /^Handing off \d+$/ }), row = windows.getByRole('listitem').filter({ hasText: 'Find out why' });
   // No Pi has the profile yet: none writes it, and nothing says one does.
   await line.getByText('“Find out why').waitFor();
-  assert.equal(await over.count(), 0);
+  assert.equal(await shelf.count(), 0);
   // The app has nothing of the window, which went with the last start: its record is the word, while the main agent works on something else.
   await run(page);
-  await over.filter({ hasText: '1 window handing off · Find out why' }).waitFor();
+  await row.waitFor();
+  await windows.getByRole('button', { name: 'Handing off 1' }).waitFor();
   await line.getByText('Handing off').waitFor();
+  // A row with no window: nothing to pick in it.
+  assert.equal(await row.getByRole('button').count(), 0);
   // Read every two seconds until it is in the main chat.
   writeRun(handoff, { id: '9b2e4f17', task: 'Find out why.', state: 'interrupted', started: 0, ended: 1, connected: true, handoff: { reason: 'owner-stopped', delivered: true } });
-  await over.waitFor({ state: 'detached', timeout: 5000 });
+  await shelf.waitFor({ state: 'detached', timeout: 5000 });
+  assert.equal(await row.count(), 0);
   assert.equal(await line.getByText('Handing off').count(), 0);
 });
 

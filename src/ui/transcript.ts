@@ -540,7 +540,7 @@ export function act({ name, args, output, failed }: Tool, live: boolean): { verb
 /** What pi-optchat's status line says that is news. It is written for a terminal (`OptChat: work · 350 messages · 2 pending ·
  * 1 agents · 1 handing off`, a window's `OptChat: work · connected window · main window not reachable`): the profile, the size
  * of the log and what the window is are on the page already, and so are the agents at work (over the composer, and in the
- * panel) and the windows handing off (over the composer, and on their line in the chat), a count of nothing says nothing, and
+ * panel) and the windows handing off (on the sidebar's shelf, and on their line in the chat), a count of nothing says nothing, and
  * the rest is said in words. */
 export function news(status = ''): string[] {
   return status.split(' · ').slice(1).flatMap(part => {

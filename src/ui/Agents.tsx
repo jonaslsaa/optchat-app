@@ -1,12 +1,12 @@
 import { ArrowLeftIcon } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { working } from '../agent.ts';
-import type { Agent, Handing, WindowState } from '../protocol.ts';
-import { controls, doing, listed, named, ownAtWork, polled, stood, transcript } from './agents.ts';
+import type { Agent } from '../protocol.ts';
+import { controls, doing, handingOff, listed, named, ownAtWork, polled, stood, transcript } from './agents.ts';
 import { Queued, SendButton } from './Composer.tsx';
-import { Mark, Timer, Took, TONES } from './Rows.tsx';
+import { Mark, Took, TONES } from './Rows.tsx';
 import { escapes } from './keys.ts';
-import { app, called, type State } from './store.ts';
+import { app, type State } from './store.ts';
 import { Timeline } from './Timeline.tsx';
 import { idle } from './transcript.ts';
 import { Button, cn, More, Section, StatusDot } from './ui.tsx';
@@ -100,10 +100,10 @@ function Control({ profile, agent, owner, queued = [], onDone }: { profile: stri
  * the chat of the one that is opened in its place.
  * It is read again when the main chat changes (`pulse`: that is when an agent starts or reports), and every two
  * seconds while one of them works, or while a Pi outside the app has the chat (`outside`), which tells the app nothing of what
- * it starts. Under an agent's chat is where you tell it, interrupt it and stop it (`Control`). */
+ * it starts, and while a handoff is written (for the sidebar's shelf). Under an agent's chat is where you tell it, interrupt it and stop it (`Control`). */
 export function Agents({ state, profile, agent: id, pulse, outside, onAgent }: { state: State; profile: string; agent?: string; pulse: string; outside: boolean; onAgent: (id?: string) => void }) {
   const [limit, setLimit] = useState(SHOWN);
-  const list = state.agents[profile], agents = list?.agents ?? [], active = polled(agents, outside);
+  const list = state.agents[profile], agents = list?.agents ?? [], active = polled(agents, outside) || handingOff(undefined, list);
   const agent = agents.find(agent => agent.id === id), chat = id === undefined ? undefined : state.chats[`${profile}/${id}`];
   const items = useMemo(() => chat ? transcript(chat, !agent || !working(agent)) : [], [chat, agent?.state]);
   const read = () => Promise.all([app.readAgents(profile, limit), id !== undefined && app.readAgent(profile, id)]);
@@ -131,7 +131,8 @@ export function Agents({ state, profile, agent: id, pulse, outside, onAgent }: {
 }
 /** The main chat's agents while the panel is closed: read when the chat changes (`pulse`), as the open panel reads them, and
  * every two seconds while the status line counts agents at work or a Pi in a terminal has the chat (`busy`, by the panel's rule), for the lines under the calls that started them and
- * the line over the composer. Then the panel is the one that reads them. */
+ * the line over the composer, and the handoffs on the sidebar's shelf, which a connected window has too. While the panel is open
+ * it is the one that reads them. */
 export function useAgents(profile: string, { closed, pulse, busy, connected }: { closed: boolean; pulse: string; busy: boolean; connected: boolean }) {
   useEffect(() => { if (closed && connected) void app.readAgents(profile, SHOWN); }, [profile, closed, pulse, connected]);
   useEffect(() => {
@@ -155,23 +156,6 @@ export function AtWork({ agents, onOpen }: { agents: readonly Agent[]; onOpen: (
           {shown.map(agent => <span key={agent.id}> · {named(agent)} <Took agent={agent} /></span>)}
         </span>
       </button>
-    </div>
-  );
-}
-/** Over the composer while connected windows are handed off to the main chat: how many, and each one's name and how long its
- * handoff has taken, in `AtWork`'s line. It is written in the background, by the main chat's Pi, which may be at work on
- * something else meanwhile, and after a restart it is all the app says of it until the handoff is in the chat. */
-export function HandingOff({ handing, windows }: { handing: readonly Handing[]; windows: readonly WindowState[] }) {
-  if (!handing.length) return null;
-  return (
-    <div data-no-find role="status" className="enter shrink-0 px-3 sm:px-12">
-      <p className="mx-auto flex h-6 w-full min-w-0 max-w-(--chat-content-max-width) items-center gap-2 px-2 text-muted-foreground text-xs">
-        <StatusDot tone="working" pulse />
-        <span className="min-w-0 flex-1 truncate tabular-nums">
-          <span className="text-secondary-label">{handing.length === 1 ? '1 window handing off' : `${handing.length} windows handing off`}</span>
-          {handing.map(({ id, task, started, ended = started }) => <span key={id}> · {windows.find(window => window.agent === id)?.name ?? called(task)} <Timer from={new Date(ended).toISOString()} /></span>)}
-        </span>
-      </p>
     </div>
   );
 }

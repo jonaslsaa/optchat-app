@@ -117,7 +117,7 @@ seed(history, 40, NOW);
 remember(history, 4);
 // A main chat with connected windows opened from it: one handed off, and one the pictures talk with.
 seed(createProfile(home, 'windowed'), 1, NOW, WINDOWED, 6 * 60_000);
-// A main chat whose connected window's handoff its Pi writes in the background, as after a restart: for 1m 12s by the page's clock.
+// A main chat whose connected window's handoff its Pi writes in the background, as after a restart.
 const handoff = createProfile(home, 'handoff');
 seed(handoff, 1, NOW, HANDING, 6 * 60_000);
 handing(handoff, NOW - 30_000);
@@ -1297,12 +1297,12 @@ async function pictures(browser: Browser, control: Client) {
     await page.close();
   }
   // The same after a restart, with the window gone with the app and its handoff written in the background by the main chat's Pi,
-  // at work on your next message meanwhile: on the window's line, and over the composer.
+  // at work on your next message meanwhile: on the window's line, and on the sidebar's Handing off shelf.
   for (const dark of [false, true]) {
     const page = await open(['handoff'], { dark: dark || allDark });
     if (!dark) await say(page, 'Give me a demo of where things stand, and wait for me');
     await page.getByText('What I found').waitFor();
-    await page.getByRole('status').filter({ hasText: '1 window handing off' }).waitFor();
+    await page.getByRole('navigation', { name: 'Windows' }).getByRole('button', { name: 'Handing off 1' }).waitFor();
     await shot(page, dark ? '297-window-handing-off-dark' : '297-window-handing-off');
     await page.close();
   }

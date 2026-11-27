@@ -603,4 +603,10 @@ test('the sidebar has a window on the shelf its state says, a closed shelf shows
   });
   assert.deepEqual(sidebar({ completing: false, completed: true }, 'main').rows, ['main', '3', '1', '4']);
   assert.deepEqual(shelved(windows.slice(0, 1), { completing: true, completed: true }, 'work/main').shelves, []);
+  // A handoff written in the background is on the shelf with no window to pick, unless it is the window's that is on it already.
+  const handing = [{ id: 'gone', task: 'Fix it', started: 0 }, { id: 'two', task: 'Two', started: 0 }];
+  const live = [at('main'), at('2', { completing: true, agent: 'two' })];
+  assert.deepEqual(shelved(live, { completing: true, completed: true }, 'work/main', handing).shelves.map(({ count, rows, background }) => [count, ids(rows), background.map(({ id }) => id)]), [[2, ['2'], ['gone']]]);
+  assert.deepEqual(shelved(live, { completing: true, completed: true }, 'work/main', handing).rows.map(({ id }) => id), ['work/main', 'work/2'], 'nothing for ⌥ and a digit');
+  assert.deepEqual(shelved(windows.slice(0, 1), { completing: false, completed: true }, 'work/main', handing).shelves.map(({ count, background }) => [count, background.length]), [[2, 0]]);
 });

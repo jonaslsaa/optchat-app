@@ -3,7 +3,7 @@ import { Fragment, useCallback, useEffect, useImperativeHandle, useMemo, useRef,
 import { flushSync } from 'react-dom';
 import { canComplete, current } from '../window.ts';
 import { busy, handingOff, polled } from './agents.ts';
-import { AtWork, HandingOff, useAgents } from './Agents.tsx';
+import { AtWork, useAgents } from './Agents.tsx';
 import type { Cite, Place } from './cite.ts';
 import type { CiteAnchor } from './Cite.tsx';
 import { Composer } from './Composer.tsx';
@@ -60,7 +60,7 @@ function Profile({ state, profile, onSettings, onUsage, onNewProfile, onImport, 
   const windows = state.windows.filter(window => window.profile === profile);
   const window = windows.find(w => w.id === state.selected[profile]) ?? windows.find(w => w.id === mainOf(profile));
   // What the sidebar shows, and in its order what ⌥ and a digit pick.
-  const list = shelved(windows, state.shelves, window?.id ?? ''), ids = list.rows.map(window => window.id).join(' ');
+  const list = shelved(windows, state.shelves, window?.id ?? '', state.agents[profile]?.handing), ids = list.rows.map(window => window.id).join(' ');
   const live = (window && state.live[window.id]) ?? NOTHING, log = state.logs[profile], session = window && state.sessions[window.id];
   // The main chat is the profile's log. A connected window's conversation is only in its Pi until it is handed off.
   const own = window?.role === 'connected', memory = remembering && !own;
@@ -102,9 +102,10 @@ function Profile({ state, profile, onSettings, onUsage, onNewProfile, onImport, 
   // An import takes the profile's chat: pi-optchat takes no message until it is over. A new session after it is a new log.
   useImport(profile, turn);
   const importing = underway(state.imports[profile]);
-  // The connected windows whose handoff the main chat's Pi is writing, which are read for until it is done, as agents at work are.
+  // The connected windows whose handoff the main chat's Pi is writing, which are read for until it is done, as agents at work are:
+  // from a connected window too, whose sidebar has them.
   const handing = own ? undefined : state.agents[profile]?.handing, writing = handingOff(window?.status === 'stopped' ? undefined : live.status.optchat, state.agents[profile]);
-  useAgents(profile, { closed: !panel && !own, pulse, busy: agentsWork || writing || polled(agents ?? [], window?.outside !== undefined), connected: state.connection === 'open' });
+  useAgents(profile, { closed: own || !panel, pulse, busy: writing || !own && (agentsWork || polled(agents ?? [], window?.outside !== undefined)), connected: state.connection === 'open' });
   if (!window) return <p className="m-auto text-muted-foreground text-sm">Opening {profileName(state, profile)}…</p>;
   const more = !own && log && log.entries.length > 0 && log.entries[0].i > 0;
   // Nothing has been said here, as far as is known: a window that may have a conversation waits for it rather than say so.
@@ -157,7 +158,6 @@ function Profile({ state, profile, onSettings, onUsage, onNewProfile, onImport, 
             // The line goes when the panel opens: the focus goes first to the panel's button, where closing the panel brings it back.
             <AtWork agents={agents} onOpen={() => { panelButton.current?.focus(); setPanel({}); }} />
           )}
-          {handing && <HandingOff handing={handing} windows={windows} />}
           {importing && !own ? <ImportLine status={importing} onShow={onImport} /> : window.outside ? <Outside window={window} outside={window.outside} models={state.models[window.id]} /> : <Composer ref={composer} state={state} window={window} live={live} chat={items} onSend={toChat} />}
           {fresh && !memory && <div className="flex-[1.6]" />}
         </Fragment>

@@ -8,6 +8,10 @@ import { MINIMUM_OPTCHAT } from './setup.ts';
 type Message = Record<string, unknown>;
 const SHOWN = 30, KEPT = 20;
 const isObject = (value: unknown): value is Message => typeof value === 'object' && value !== null;
+/** A connected window whose handoff the main chat has not had yet (pi-optchat's `isHandingOff`): its conversation ended
+ * (Complete, or its Pi went) and the main chat's Pi is writing the handoff, or will once it starts. Its record says so after a
+ * restart too, when the app has nothing left of the window but its line in the chat. */
+const handingOff = (run: RunInfo) => run.connected === true && !working(run) && run.handoff !== undefined && !run.handoff.delivered;
 /** The tool calls of an agent's last reply that have no result yet. */
 function pending(messages: Message[]): Agent['doing'] {
   const at = messages.findLastIndex(message => message.role === 'assistant'), content = messages[at]?.content;
@@ -61,10 +65,10 @@ export class Agents {
   atWork(profile: string) { return this.runs(profile).some(working); }
 
   async list({ profile, limit = SHOWN }: Params<'agents'>): Promise<Result<'agents'>> {
-    const runs = this.runs(profile).sort((a, b) => b.started - a.started);
+    const all = readRuns(profileDirectory(this.home, profile)), runs = all.filter(run => !run.connected).sort((a, b) => b.started - a.started), handing = all.filter(handingOff);
     // A run saved as working is at work only if a Pi has the profile open, the app's or one in a terminal: a Pi that died
-    // corrects its runs' records only when the profile is next opened.
-    const owned = !runs.some(working) || await this.owned(profile);
+    // corrects its runs' records only when the profile is next opened. A handoff, too, is only being written by a Pi that has it.
+    const owned = !runs.some(working) && !handing.length || await this.owned(profile);
     const agents = runs.map((run): Agent => {
       const { id, title, task, model, started, ended, parentId, report } = run, state = working(run) && !owned ? 'interrupted' : run.state;
       const headline = report?.split('\n').find(line => line.trim())?.trim().slice(0, 200);
@@ -72,7 +76,8 @@ export class Agents {
         doing: working({ state }) ? pending(this.chat(run)) : [], ...headline && { headline } };
     });
     const ended = agents.filter(agent => !working(agent));
-    return { agents: [...agents.filter(working), ...ended.slice(0, limit)], more: Math.max(0, ended.length - limit) };
+    const handoffs = owned ? handing.map(({ id, task, started, ended }) => ({ id, task, started, ...ended !== undefined && { ended } })) : [];
+    return { agents: [...agents.filter(working), ...ended.slice(0, limit)], more: Math.max(0, ended.length - limit), ...handoffs.length && { handing: handoffs } };
   }
   one({ profile, id, after = 0 }: Params<'agent'>): Result<'agent'> {
     // A report in the chat outlives its agent's record, and a click on it asks for that agent: it has no chat, which is no error.

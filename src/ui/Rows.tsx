@@ -233,10 +233,11 @@ export const HandoffRow = memo(function HandoffRow({ part, writing }: { part: Of
 /** A connected window you opened, in the main chat, as one line: the line the agents a `spawn` started have, for a window. A dot
  * while you talk with it, a mark once it is handed off and how long it was open, and its name in the sidebar; the line opens it
  * (`onWindow`) while the app has it (`window`, the one whose conversation this is), and under the chevron is what pi-optchat
- * told the main chat of it, which was for its agent. Its handoff comes as a report of its own, further down. */
-export const WindowRow = memo(function WindowRow({ part, window, onWindow }: { part: Of<'window'>; window?: WindowState; onWindow?: (window: string) => void }) {
+ * told the main chat of it, which was for its agent. Its handoff comes as a report of its own, further down. `handing`: its
+ * record says the main chat's Pi is writing the handoff, which outlives the window: after a restart, the app has no other word of it. */
+export const WindowRow = memo(function WindowRow({ part, window, handing: writing = false, onWindow }: { part: Of<'window'>; window?: WindowState; handing?: boolean; onWindow?: (window: string) => void }) {
   const [open, setOpen] = useState(false), toggle = () => setOpen(!open);
-  const handing = !part.ended && (window?.completed || window?.completing), talking = !part.ended && !handing && window && window.status !== 'stopped' && window.status !== 'closed';
+  const handing = !part.ended && (window?.completed || window?.completing || writing), talking = !part.ended && !handing && window && window.status !== 'stopped' && window.status !== 'closed';
   const go = window && onWindow ? () => onWindow(window.id) : undefined;
   return (
     <div className="group pt-0.5 pb-3.5">

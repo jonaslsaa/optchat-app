@@ -147,6 +147,11 @@ export const Agent = Type.Object({
   doing: Type.Array(Type.Object({ name: Type.String(), args: Type.Record(Type.String(), Type.Unknown()) })), headline: Type.Optional(Type.String()),
 });
 export type Agent = Static<typeof Agent>;
+/** A connected window whose conversation has ended and whose handoff the main chat's Pi is writing, by its run: `id` is the
+ * agent's id the window's line in the chat goes by, `task` its first message, `ended` when the conversation ended. Only while
+ * a Pi has the profile open: none is written otherwise. */
+export const Handing = Type.Pick(Agent, ['id', 'task', 'started', 'ended']);
+export type Handing = Static<typeof Handing>;
 
 /** One of a profile's settings, as pi-optchat describes it (its `SETTINGS`) and as the profile has it (`value`). A `toggle` is
  * on or off; a `number` is whole, from `min` to `max` where it has them, of a `unit` where it has one; a `percent` is kept as
@@ -266,8 +271,9 @@ export const methods = {
   search: method(Type.Object({ profile: Type.String(), text: Type.String({ minLength: 1 }), before: Type.Optional(id) }), Type.Object({ hits: Type.Array(Hit), more: id })),
 
   /** A profile's subagents, read from disk: those at work, and the newest `limit` of those that have ended (30 unless said);
-   * `more` is how many ended ones that leaves out. No Pi is asked, so the list is there whether or not one runs. */
-  agents: method(Type.Object({ profile: Type.String(), limit: Type.Optional(Type.Integer({ minimum: 0 })) }), Type.Object({ agents: Type.Array(Agent), more: id })),
+   * `more` is how many ended ones that leaves out. No Pi is asked, so the list is there whether or not one runs. `handing`: the
+   * connected windows whose handoff is being written, when there are any. */
+  agents: method(Type.Object({ profile: Type.String(), limit: Type.Optional(Type.Integer({ minimum: 0 })) }), Type.Object({ agents: Type.Array(Agent), more: id, handing: Type.Optional(Type.Array(Handing)) })),
   /** One agent's chat, from its Pi session file: its messages as Pi wrote them (Pi's docs: session.md), from number `after` on,
    * of `total`. The first is its task, without the view of the profile's memory it was sent with, and images are left out.
    * `report` is what it reported, whole, and `ended` when it ended. `queued`: your messages to it that it has not read yet

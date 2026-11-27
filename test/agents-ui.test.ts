@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import type { Agent } from '../src/protocol.ts';
-import { among, busy, controls, doing, listed, named, ownAtWork, polled, stood } from '../src/ui/agents.ts';
+import { among, busy, controls, doing, handingOff, listed, named, ownAtWork, polled, stood } from '../src/ui/agents.ts';
 
 const agent = (id: string, state: Agent['state'], started: number, more: Partial<Agent> = {}): Agent => ({ id, task: `Task of ${id}\nand more`, model: 'm', state, started, doing: [], ...more });
 
@@ -36,6 +36,14 @@ test('the agents\' button has its dot by the Pi\'s own count, and the open panel
   assert.deepEqual([busy(undefined, working), busy(undefined, ended), busy(undefined)], [true, false, false]);
   // That Pi sends the app nothing, so an agent it starts later is found only by looking.
   assert.deepEqual([polled(ended, false), polled(working, false), polled(ended, true), polled([], true)], [false, true, true, true]);
+});
+
+test('a handoff being written is looked for while the Pi\'s status line counts one, or the list last had one', () => {
+  const handing = { agents: [], more: 0, handing: [{ id: 'w', task: 'Fix it', started: 0 }] }, none = { agents: [], more: 0 };
+  assert.equal(handingOff('OptChat: work · 350 messages · 0 pending · 0 agents · 1 handing off'), true);
+  assert.equal(handingOff('OptChat: work · 350 messages · 0 pending · 2 agents'), false);
+  // A Pi in a terminal says nothing to the app: the list is the word, and it is read until it has none.
+  assert.deepEqual([handingOff(undefined, handing), handingOff(undefined, none), handingOff()], [true, false, false]);
 });
 
 test('an agent\'s chat offers what its state allows: a message while it works or once it ended, and no dead button', () => {

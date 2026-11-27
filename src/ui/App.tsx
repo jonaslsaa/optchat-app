@@ -2,8 +2,8 @@ import { ChartColumnIcon, CheckIcon, PanelLeftIcon, PanelRightIcon, SettingsIcon
 import { Fragment, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, type ComponentRef, type Ref } from 'react';
 import { flushSync } from 'react-dom';
 import { canComplete, current } from '../window.ts';
-import { busy, polled } from './agents.ts';
-import { AtWork, useAgents } from './Agents.tsx';
+import { busy, handingOff, polled } from './agents.ts';
+import { AtWork, HandingOff, useAgents } from './Agents.tsx';
 import type { Cite, Place } from './cite.ts';
 import type { CiteAnchor } from './Cite.tsx';
 import { Composer } from './Composer.tsx';
@@ -102,7 +102,9 @@ function Profile({ state, profile, onSettings, onUsage, onNewProfile, onImport, 
   // An import takes the profile's chat: pi-optchat takes no message until it is over. A new session after it is a new log.
   useImport(profile, turn);
   const importing = underway(state.imports[profile]);
-  useAgents(profile, { closed: !panel && !own, pulse, busy: agentsWork || polled(agents ?? [], window?.outside !== undefined), connected: state.connection === 'open' });
+  // The connected windows whose handoff the main chat's Pi is writing, which are read for until it is done, as agents at work are.
+  const handing = own ? undefined : state.agents[profile]?.handing, writing = handingOff(window?.status === 'stopped' ? undefined : live.status.optchat, state.agents[profile]);
+  useAgents(profile, { closed: !panel && !own, pulse, busy: agentsWork || writing || polled(agents ?? [], window?.outside !== undefined), connected: state.connection === 'open' });
   if (!window) return <p className="m-auto text-muted-foreground text-sm">Opening {profileName(state, profile)}…</p>;
   const more = !own && log && log.entries.length > 0 && log.entries[0].i > 0;
   // Nothing has been said here, as far as is known: a window that may have a conversation waits for it rather than say so.
@@ -150,11 +152,12 @@ function Profile({ state, profile, onSettings, onUsage, onNewProfile, onImport, 
                 {!own ? <>One chat that remembers everything. <button type="button" onClick={onImport} className="rounded-sm underline underline-offset-2 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring">Import your history</button> from Claude Code, Codex, Pi or ChatGPT.</> : window.completed ? 'The main chat has this conversation. Your next message starts a new one.' : 'Its own conversation, with this profile\'s memory. Complete hands it to the main chat.'}
               </p>
             </div>
-          ) : <Timeline ref={timeline} items={items} live={live} running={window.status === 'running'} starting={window.status === 'starting'} profile={profile} loading={log?.loading} older={more ? () => void app.older(profile) : undefined} onAgent={own ? undefined : openAgent} onCite={cite} logged={own ? undefined : log?.entries.at(-1)?.i} onPlace={recall} onMemory={search} agents={own ? undefined : agents} windows={own ? undefined : windows} onWindow={openWindow} />}
+          ) : <Timeline ref={timeline} items={items} live={live} running={window.status === 'running'} starting={window.status === 'starting'} profile={profile} loading={log?.loading} older={more ? () => void app.older(profile) : undefined} onAgent={own ? undefined : openAgent} onCite={cite} logged={own ? undefined : log?.entries.at(-1)?.i} onPlace={recall} onMemory={search} agents={own ? undefined : agents} windows={own ? undefined : windows} handing={handing} onWindow={openWindow} />}
           {!own && !panel && agentsWork && agents && (
             // The line goes when the panel opens: the focus goes first to the panel's button, where closing the panel brings it back.
             <AtWork agents={agents} onOpen={() => { panelButton.current?.focus(); setPanel({}); }} />
           )}
+          {handing && <HandingOff handing={handing} windows={windows} />}
           {importing && !own ? <ImportLine status={importing} onShow={onImport} /> : window.outside ? <Outside window={window} outside={window.outside} models={state.models[window.id]} /> : <Composer ref={composer} state={state} window={window} live={live} chat={items} onSend={toChat} />}
           {fresh && !memory && <div className="flex-[1.6]" />}
         </Fragment>

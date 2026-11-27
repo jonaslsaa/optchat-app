@@ -10,7 +10,7 @@ import { startServer } from '../src/server/server.ts';
 import { defaults, describeOwner, lockProfile } from 'pi-optchat/files';
 import { createProfile, give, png, writeRun } from '../test/support.ts';
 import { chatgptExport, writeHistories } from '../test/histories.ts';
-import { agents, ALERT, CHANGES, demo, FAILED, FILES, FORMULAS, grouped, GROUPED, limited, NAMED, PICTURED, remember, RESIZED, RESIZED_IMAGE, seed, SENT, SENT_IMAGE, SEEN, SEEN_IMAGE, SHIPPED, SHIPPING, SKILLED, spend, TEAM, WINDOWED } from './seed.ts';
+import { agents, ALERT, CHANGES, demo, FAILED, FILES, FORMULAS, grouped, GROUPED, handing, HANDING, limited, NAMED, PICTURED, remember, RESIZED, RESIZED_IMAGE, seed, SENT, SENT_IMAGE, SEEN, SEEN_IMAGE, SHIPPED, SHIPPING, SKILLED, spend, TEAM, WINDOWED } from './seed.ts';
 
 /** `npm run screenshots [directory] [--dark]`: a PNG of every main state of the UI, in /tmp/optchat-app-shots unless a directory
  * is named, and all of them in dark mode with `--dark`. It builds the UI, serves it against throwaway profiles under /tmp with
@@ -117,6 +117,10 @@ seed(history, 40, NOW);
 remember(history, 4);
 // A main chat with connected windows opened from it: one handed off, and one the pictures talk with.
 seed(createProfile(home, 'windowed'), 1, NOW, WINDOWED, 6 * 60_000);
+// A main chat whose connected window's handoff its Pi writes in the background, as after a restart: for 1m 12s by the page's clock.
+const handoff = createProfile(home, 'handoff');
+seed(handoff, 1, NOW, HANDING, 6 * 60_000);
+handing(handoff, NOW - 30_000);
 createProfile(home, 'research');
 createProfile(home, 'pictures');
 for (const file of FILES) { mkdirSync(join(home, file, '..'), { recursive: true }); writeFileSync(join(home, file), ''); }
@@ -1290,6 +1294,16 @@ async function pictures(browser: Browser, control: Client) {
       await page.getByRole('button', { name: 'What the main chat was told' }).last().click();
       await shot(page, '296-window-line-told', line);
     }
+    await page.close();
+  }
+  // The same after a restart, with the window gone with the app and its handoff written in the background by the main chat's Pi,
+  // at work on your next message meanwhile: on the window's line, and over the composer.
+  for (const dark of [false, true]) {
+    const page = await open(['handoff'], { dark: dark || allDark });
+    if (!dark) await say(page, 'Give me a demo of where things stand, and wait for me');
+    await page.getByText('What I found').waitFor();
+    await page.getByRole('status').filter({ hasText: '1 window handing off' }).waitFor();
+    await shot(page, dark ? '297-window-handing-off-dark' : '297-window-handing-off');
     await page.close();
   }
   // A patch of the app's own Pi that it tried by itself, and that failed: a grey line, and the Pi there still runs.

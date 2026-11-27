@@ -110,6 +110,20 @@ export const WINDOWED: Said[][] = [[
   ['work', opened('w1', '/Users/jonas/Work/service-containers', ALERT)],
 ]];
 
+/** What a connected window of `HANDING` was opened with. */
+const RESTART = 'Find out why nothing shows that a handoff is still being written after the app restarts.';
+/** A main chat a connected window was opened from, whose conversation has ended: the main chat's Pi is writing its handoff in
+ * the background, as it does after a restart, so the chat has no report of it yet (`handing`). */
+export const HANDING: Said[][] = [[
+  ['user', 'Can you look into the restart thing in a window of its own?'],
+  ['talk', 'Opened one for it: it works on it with you there, and hands it back here when you complete it.'],
+  ['work', opened('9b2e4f17', '/Users/jonas/Personal/optchat-app', RESTART)],
+]];
+/** The record of `HANDING`'s window: ended (`ended`), with a handoff not in the main chat yet. */
+export function handing(directory: string, ended: number) {
+  writeRun(directory, { id: '9b2e4f17', task: RESTART, state: 'interrupted', started: ended - 600_000, ended, connected: true, model: 'anthropic/claude-opus-5-5', handoff: { reason: 'owner-stopped' } });
+}
+
 /** A long edit, for a diff that is longer than the box it opens in: one function rewritten and its tests, most lines kept. */
 const STOP_BEFORE = `  async stop(grace: number) {
     const pid = this.child.pid;

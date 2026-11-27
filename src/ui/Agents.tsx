@@ -1,12 +1,12 @@
 import { ArrowLeftIcon } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { working } from '../agent.ts';
-import type { Agent } from '../protocol.ts';
+import type { Agent, Handing, WindowState } from '../protocol.ts';
 import { controls, doing, listed, named, ownAtWork, polled, stood, transcript } from './agents.ts';
 import { Queued, SendButton } from './Composer.tsx';
-import { Mark, Took, TONES } from './Rows.tsx';
+import { Mark, Timer, Took, TONES } from './Rows.tsx';
 import { escapes } from './keys.ts';
-import { app, type State } from './store.ts';
+import { app, called, type State } from './store.ts';
 import { Timeline } from './Timeline.tsx';
 import { idle } from './transcript.ts';
 import { Button, cn, More, Section, StatusDot } from './ui.tsx';
@@ -155,6 +155,23 @@ export function AtWork({ agents, onOpen }: { agents: readonly Agent[]; onOpen: (
           {shown.map(agent => <span key={agent.id}> · {named(agent)} <Took agent={agent} /></span>)}
         </span>
       </button>
+    </div>
+  );
+}
+/** Over the composer while connected windows are handed off to the main chat: how many, and each one's name and how long its
+ * handoff has taken, in `AtWork`'s line. It is written in the background, by the main chat's Pi, which may be at work on
+ * something else meanwhile, and after a restart it is all the app says of it until the handoff is in the chat. */
+export function HandingOff({ handing, windows }: { handing: readonly Handing[]; windows: readonly WindowState[] }) {
+  if (!handing.length) return null;
+  return (
+    <div data-no-find role="status" className="enter shrink-0 px-3 sm:px-12">
+      <p className="mx-auto flex h-6 w-full min-w-0 max-w-(--chat-content-max-width) items-center gap-2 px-2 text-muted-foreground text-xs">
+        <StatusDot tone="working" pulse />
+        <span className="min-w-0 flex-1 truncate tabular-nums">
+          <span className="text-secondary-label">{handing.length === 1 ? '1 window handing off' : `${handing.length} windows handing off`}</span>
+          {handing.map(({ id, task, started, ended = started }) => <span key={id}> · {windows.find(window => window.agent === id)?.name ?? called(task)} <Timer from={new Date(ended).toISOString()} /></span>)}
+        </span>
+      </p>
     </div>
   );
 }

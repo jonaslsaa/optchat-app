@@ -59,6 +59,21 @@ test('a profile\'s agents are read from its files: who works on what now, and wh
   await assert.rejects(client.request('agents', { profile: 'nobody' }), /No profile named nobody\./);
 });
 
+test('a connected window whose handoff the main chat\'s Pi is writing is said to be handing off, while a Pi has the profile', { timeout: 30_000 }, async t => {
+  const directory = createProfile(home, 'handing');
+  const server = await startServer({ home, cwd: home, pi }), client = await connect(server.url);
+  t.after(async () => { client.close(); await server.close(); });
+  // Its conversation ended and the handoff is not in the main chat yet; another's is, and one window is still open.
+  writeRun(directory, { id: 'aaaaaaaa', state: 'interrupted', started: 1000, ended: 2000, task: 'Fix the badge', connected: true, handoff: { reason: 'owner-stopped' } });
+  writeRun(directory, { id: 'bbbbbbbb', state: 'completed', started: 1000, ended: 1500, connected: true, handoff: { reason: 'complete', delivered: true } });
+  writeRun(directory, { id: 'cccccccc', state: 'running', started: 3000, connected: true, window: { pid: process.pid } });
+  // No Pi has the profile: none is writing it, and a spinner would never end.
+  assert.deepEqual(await client.request('agents', { profile: 'handing' }), { agents: [], more: 0 });
+  const unlock = await lockProfile(directory, describeOwner({ profile: 'handing', pid: 4242, host: 'a-terminal', cwd: '/somewhere' }));
+  t.after(() => unlock().catch(() => {}));
+  assert.deepEqual(await client.request('agents', { profile: 'handing' }), { agents: [], more: 0, handing: [{ id: 'aaaaaaaa', task: 'Fix the badge' }] });
+});
+
 test('an agent is told, interrupted, stopped and resumed through the Pi that has its profile open', { timeout: 30_000 }, async t => {
   const directory = createProfile(home, 'crew');
   const server = await startServer({ home, cwd: home, pi }), client = await connect(server.url);

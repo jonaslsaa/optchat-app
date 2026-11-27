@@ -2,7 +2,7 @@ import { ArrowLeftIcon } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { working } from '../agent.ts';
 import type { Agent } from '../protocol.ts';
-import { controls, doing, listed, named, ownAtWork, polled, stood, transcript } from './agents.ts';
+import { controls, doing, handingOff, listed, named, ownAtWork, polled, stood, transcript } from './agents.ts';
 import { Queued, SendButton } from './Composer.tsx';
 import { Mark, Took, TONES } from './Rows.tsx';
 import { escapes } from './keys.ts';
@@ -100,10 +100,10 @@ function Control({ profile, agent, owner, queued = [], onDone }: { profile: stri
  * the chat of the one that is opened in its place.
  * It is read again when the main chat changes (`pulse`: that is when an agent starts or reports), and every two
  * seconds while one of them works, or while a Pi outside the app has the chat (`outside`), which tells the app nothing of what
- * it starts. Under an agent's chat is where you tell it, interrupt it and stop it (`Control`). */
+ * it starts, and while a handoff is written (for the sidebar's shelf). Under an agent's chat is where you tell it, interrupt it and stop it (`Control`). */
 export function Agents({ state, profile, agent: id, pulse, outside, onAgent }: { state: State; profile: string; agent?: string; pulse: string; outside: boolean; onAgent: (id?: string) => void }) {
   const [limit, setLimit] = useState(SHOWN);
-  const list = state.agents[profile], agents = list?.agents ?? [], active = polled(agents, outside);
+  const list = state.agents[profile], agents = list?.agents ?? [], active = polled(agents, outside) || handingOff(undefined, list);
   const agent = agents.find(agent => agent.id === id), chat = id === undefined ? undefined : state.chats[`${profile}/${id}`];
   const items = useMemo(() => chat ? transcript(chat, !agent || !working(agent)) : [], [chat, agent?.state]);
   const read = () => Promise.all([app.readAgents(profile, limit), id !== undefined && app.readAgent(profile, id)]);
@@ -131,7 +131,8 @@ export function Agents({ state, profile, agent: id, pulse, outside, onAgent }: {
 }
 /** The main chat's agents while the panel is closed: read when the chat changes (`pulse`), as the open panel reads them, and
  * every two seconds while the status line counts agents at work or a Pi in a terminal has the chat (`busy`, by the panel's rule), for the lines under the calls that started them and
- * the line over the composer. Then the panel is the one that reads them. */
+ * the line over the composer, and the handoffs on the sidebar's shelf, which a connected window has too. While the panel is open
+ * it is the one that reads them. */
 export function useAgents(profile: string, { closed, pulse, busy, connected }: { closed: boolean; pulse: string; busy: boolean; connected: boolean }) {
   useEffect(() => { if (closed && connected) void app.readAgents(profile, SHOWN); }, [profile, closed, pulse, connected]);
   useEffect(() => {

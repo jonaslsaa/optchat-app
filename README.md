@@ -50,7 +50,7 @@ Every subagent is listed live with what it is doing right now, and so are the ag
 
 ## Windows that hand work back
 
-Open a connected window for a side task. It reads the same memory, and **Complete** hands what it did back to the main chat: its row moves to a "Handing off" shelf at the foot of the sidebar, then to "Completed", and you are taken to the main chat to see it arrive. In the main chat, a window you opened is one quiet line that says how it stands, talking with you or handed off, and opens it. Double-click a window's name to rename it.
+Open a connected window for a side task. It reads the same memory, and **Complete** hands what it did back to the main chat: its row moves to a "Handing off" shelf at the foot of the sidebar, then to "Completed", and you are taken to the main chat to see it arrive. In the main chat, a window you opened is one quiet line that says how it stands, talking with you, handing off or handed off, and opens it. A handoff the main chat is still writing stays on the "Handing off" shelf, even after the app restarts. Double-click a window's name to rename it.
 
 <p align="center">
   <picture>

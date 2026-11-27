@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { after, before, test } from 'node:test';
 import { chromium, type Browser, type Locator, type Page } from 'playwright-core';
 import { build } from 'vite';
-import { agents, CHANGES, FILES, FORMULAS, GONE, grouped, GROUPED, NAMED, PICTURED, remember, seed, SEEN, SEEN_IMAGE, TEAM } from '../scripts/seed.ts';
+import { agents, CHANGES, FILES, FORMULAS, GONE, grouped, GROUPED, handing, HANDING, NAMED, PICTURED, remember, seed, SEEN, SEEN_IMAGE, TEAM } from '../scripts/seed.ts';
 import type { Launch } from '../src/server/files.ts';
 import { connect } from '../src/client.ts';
 import { ROW_EVENT, TAB_EVENT } from '../src/menu.ts';
@@ -32,6 +32,12 @@ for (const name of ['bar', 'cold', 'colder', 'chat', 'beside', 'sheet', 'memory'
   for (let i = 0; i < 6; i++) writeRun(profile, { id: `e000000${i}`, title: `An older agent ${i}`, state: 'completed', started: Date.now() - 9_000_000 - i * 1000, ended: Date.now() - 8_000_000, report: 'Done.' });
 }
 seed(createProfile(home, 'diffs'), CHANGES.length, Date.now(), CHANGES);
+// A connected window whose handoff the main chat's Pi writes in the background, as after a restart.
+const handoff = createProfile(home, 'handoff');
+seed(handoff, 1, Date.now(), HANDING);
+handing(handoff, Date.now());
+// The same chat, with no handoff yet: one comes while a connected window is shown.
+seed(createProfile(home, 'handoff-later'), 1, Date.now(), HANDING);
 // Four agents that reported together, and their records.
 const together = createProfile(home, 'grouped');
 seed(together, 1, Date.now(), GROUPED);
@@ -689,6 +695,46 @@ test('with the panel closed the agents a call started are under it, and over the
   await narrow.keyboard.press('Escape');
   assert.equal(await narrow.locator('dialog[open]').count(), 0, 'the sheet has closed');
   assert.equal(await focused(narrow), 'Agents and GitHub');
+});
+
+test('a handoff the main chat\'s Pi writes in the background is on the window\'s line and the sidebar\'s Handing off shelf, mid-turn too, until it is done', async () => {
+  const page = await open('handoff'), line = page.getByRole('main').getByRole('button', { name: /Window “Find out why/ });
+  const windows = page.getByRole('navigation', { name: 'Windows' }), shelf = windows.getByRole('button', { name: /^Handing off \d+$/ }), row = windows.getByRole('listitem').filter({ hasText: 'Find out why' });
+  // No Pi has the profile yet: none writes it, and nothing says one does.
+  await line.getByText('“Find out why').waitFor();
+  assert.equal(await shelf.count(), 0);
+  // The app has nothing of the window, which went with the last start: its record is the word, while the main agent works on something else.
+  await run(page);
+  await row.waitFor();
+  await windows.getByRole('button', { name: 'Handing off 1' }).waitFor();
+  await line.getByText('Handing off').waitFor();
+  // A row with no window: nothing to pick in it.
+  assert.equal(await row.getByRole('button').count(), 0);
+  // Read every two seconds until it is in the main chat.
+  writeRun(handoff, { id: '9b2e4f17', task: 'Find out why.', state: 'interrupted', started: 0, ended: 1, connected: true, handoff: { reason: 'owner-stopped', delivered: true } });
+  await shelf.waitFor({ state: 'detached', timeout: 5000 });
+  assert.equal(await row.count(), 0);
+  assert.equal(await line.getByText('Handing off').count(), 0);
+});
+
+test('a handoff that begins while a connected window is shown is looked for by its owner, a Pi in a terminal here', async () => {
+  const profile = join(home, 'profiles', 'handoff-later'), unlock = await lockProfile(profile, describeOwner({ profile: 'handoff-later', pid: process.pid, host: 'a-terminal', cwd: home }));
+  try {
+    const context = await browser.newContext({ viewport: WIDE, reducedMotion: 'reduce' });
+    await context.addInitScript(saved => localStorage.setItem('optchat-app', saved), JSON.stringify({ tabs: ['handoff-later'], profile: 'handoff-later', selected: {} }));
+    await context.addInitScript(dismissed => localStorage.setItem('optchat-app-cut-off', dismissed), JSON.stringify(Object.fromEntries(readdirSync(join(home, 'profiles')).map(name => [name, Number.MAX_SAFE_INTEGER]))));
+    const page = await context.newPage(), windows = page.getByRole('navigation', { name: 'Windows' });
+    await page.goto(server.page);
+    await page.getByRole('button', { name: 'New window' }).click();
+    await page.getByRole('heading', { name: 'New connected window' }).waitFor();
+    await page.getByRole('textbox', { name: 'Message' }).fill('hello there');
+    await page.keyboard.press('Enter');
+    await windows.getByText('hello there').waitFor();
+    assert.equal(await windows.getByRole('button', { name: /^Handing off \d+$/ }).count(), 0);
+    handing(profile, Date.now());
+    await windows.getByRole('button', { name: 'Handing off 1' }).waitFor({ timeout: 5000 });
+    await windows.getByRole('listitem').filter({ hasText: 'Find out why' }).waitFor();
+  } finally { await unlock(); }
 });
 
 test('with a Pi in a terminal on the chat, which tells the app nothing, its agents are read every two seconds with the panel closed', async () => {

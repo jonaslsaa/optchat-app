@@ -283,9 +283,11 @@ if (profile === 'busy') {
   write({ type: 'extension_error', extensionPath: 'pi-optchat', event: 'session_start', error: `Profile already running: ${profile} · PID 1 · a-terminal · /somewhere` });
 } else if (profile !== 'bare') {
   if (profile === 'noisy') write({ type: 'extension_error', extensionPath: 'something-else', event: 'session_start', error: 'No API key' });
-  // pi-optchat counts the main chat's own agents at work, as their records have them when it starts.
-  const agents = readRuns(join(process.env.OPTCHAT_HOME ?? '.', 'profiles', profile)).filter(run => !run.connected && !run.parentId && working(run)).length;
-  status('optchat', joins ? `OptChat: ${profile} · connected window` : `OptChat: ${profile} · ${logged} messages · 0 pending · ${agents} agents${profile === 'importing' ? ' · import paused: /optchat import' : ''}`);
+  // pi-optchat counts the main chat's own agents at work, and the connected windows whose handoff it writes, as their records
+  // have them when it starts.
+  const runs = readRuns(join(process.env.OPTCHAT_HOME ?? '.', 'profiles', profile)), agents = runs.filter(run => !run.connected && !run.parentId && working(run)).length;
+  const handing = runs.filter(run => run.connected && !working(run) && run.handoff && !run.handoff.delivered).length;
+  status('optchat', joins ? `OptChat: ${profile} · connected window` : `OptChat: ${profile} · ${logged} messages · 0 pending · ${agents} agents${handing ? ` · ${handing} handing off` : ''}${profile === 'importing' ? ' · import paused: /optchat import' : ''}`);
   if (profile !== 'old') role();
 }
 // An owner has its profile before it answers anything, as Pi has once its session has started.

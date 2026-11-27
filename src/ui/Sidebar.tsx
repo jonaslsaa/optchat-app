@@ -1,13 +1,13 @@
 import { CheckIcon, ChevronDownIcon, MessageSquareIcon, MessagesSquareIcon, SquarePenIcon, XIcon } from 'lucide-react';
 import { Fragment, useEffect, useState } from 'react';
 import { ROW_EVENT } from '../menu.ts';
-import type { WindowState } from '../protocol.ts';
+import type { Handing, WindowState } from '../protocol.ts';
 import { canComplete } from '../window.ts';
 import { Art } from './Art.tsx';
 import { label, useHeld } from './keys.ts';
 import { Rename } from './Rename.tsx';
 import { isObject } from './transcript.ts';
-import { app, shelf, shelved, title, UNTITLED, type Shelf, type State } from './store.ts';
+import { app, called, shelf, shelved, title, UNTITLED, type Shelf, type State } from './store.ts';
 import { Button, cn, Kbd, Spinner, WindowDot } from './ui.tsx';
 import { UpdateButton } from './Update.tsx';
 
@@ -33,11 +33,12 @@ export function Sidebar({ state, profile, list: { top, shelves, rows }, selected
     addEventListener(ROW_EVENT, asked); addEventListener('contextmenu', clicked, true);
     return () => { removeEventListener(ROW_EVENT, asked); removeEventListener('contextmenu', clicked, true); delete document.documentElement.dataset.menuRow; };
   }, []);
+  const handing = state.agents[profile]?.handing;
   const row = (window: WindowState) => {
-    const active = window.id === selected, name = title(window, state), connected = window.role === 'connected', index = rows.indexOf(window);
+    const active = window.id === selected, name = title(window, state), connected = window.role === 'connected', index = rows.indexOf(window), on = shelf(window, handing);
     // Complete while it can be; ✕ for a window that has nothing to hand off and is on no shelf (its Pi stopped or failed). One
     // on a shelf has neither: what is handed off stays, and a right click removes it (or a Pi that never answers Complete).
-    const end = !connected ? undefined : canComplete(window) ? 'complete' : shelf(window) ? undefined : 'close';
+    const end = !connected ? undefined : canComplete(window) ? 'complete' : on ? undefined : 'close';
     return (
       <li key={window.id} data-row={connected ? window.id : undefined} className="group/row relative">
         <button type="button" aria-current={active || undefined} onClick={() => { onPick(); app.select(window.id); }}
@@ -45,7 +46,7 @@ export function Sidebar({ state, profile, list: { top, shelves, rows }, selected
           className={cn('flex h-9 w-full select-none items-center gap-2.5 overflow-hidden rounded-md px-2.5 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset',
             active ? 'bg-sidebar-row-active light:ring-1 light:ring-sidebar-border/70 light:ring-inset' : 'hover:bg-sidebar-row-hover')}>
           {!connected ? <MessagesSquareIcon className="size-4 shrink-0 text-sidebar-muted-foreground" />
-            : window.completing ? <span title="Handing off to the main chat" className="flex"><Spinner className="size-4 shrink-0 text-sidebar-muted-foreground" /></span>
+            : on === 'completing' ? <span title="Handing off to the main chat" className="flex"><Spinner className="size-4 shrink-0 text-sidebar-muted-foreground" /></span>
             : window.completed ? <span title="Completed: handed to the main chat" className="flex"><CheckIcon aria-label="Completed" className="size-4 shrink-0 text-sidebar-muted-foreground" /></span>
             : <MessageSquareIcon className="size-4 shrink-0 text-sidebar-muted-foreground" />}
           {/* A row with a button shows it at its end while the pointer or the focus is on it, and always where there is no
@@ -77,9 +78,10 @@ export function Sidebar({ state, profile, list: { top, shelves, rows }, selected
       <ul className="relative flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto px-2 pb-2">
         {top.map(row)}
         {/* The first shelf's header takes the room that is left, so the shelves are at the foot. */}
-        {shelves.map(({ name, count, open, rows }, at) => <Fragment key={name}>
+        {shelves.map(({ name, count, open, rows, background }, at) => <Fragment key={name}>
           <li className={cn(at === 0 && 'mt-auto')}><ShelfHeader shelf={name} count={count} open={open} /></li>
           {rows.map(row)}
+          {background.map(handoff => <Background key={handoff.id} handoff={handoff} />)}
         </Fragment>)}
       </ul>
       {/* Where the app updates itself, its update button is at the sidebar's foot. */}
@@ -88,6 +90,16 @@ export function Sidebar({ state, profile, list: { top, shelves, rows }, selected
   );
 }
 
+/** A handoff the main chat's Pi writes in the background, on the Handing off shelf: a window's row as it looks there, but no
+ * window to pick, rename or remove, since the app has none of it left after a restart. It goes once the main chat has it. */
+function Background({ handoff: { task } }: { handoff: Handing }) {
+  return (
+    <li title="Handing off to the main chat" className="flex h-9 select-none items-center gap-2.5 overflow-hidden rounded-md px-2.5">
+      <Spinner className="size-4 shrink-0 text-sidebar-muted-foreground" />
+      <span className="min-w-0 flex-1 truncate text-sidebar-muted-foreground text-sm">{called(task) || UNTITLED}</span>
+    </li>
+  );
+}
 const SHELF: Record<Shelf, string> = { completing: 'Handing off', completed: 'Completed' };
 /** A shelf's header, which opens and closes it, with how many windows are on it: T3 Code's `CollapsibleSectionHeader`. */
 function ShelfHeader({ shelf, count, open }: { shelf: Shelf; count: number; open: boolean }) {

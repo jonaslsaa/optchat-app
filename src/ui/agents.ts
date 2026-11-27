@@ -1,5 +1,5 @@
 import { working } from '../agent.ts';
-import type { Agent } from '../protocol.ts';
+import type { Agent, Result } from '../protocol.ts';
 import { act, spoken, words, type Item, type PiMessage } from './transcript.ts';
 
 /** What the agents panel shows of a profile's agents, worked out from what the server read of them. Nothing here touches the DOM. */
@@ -13,6 +13,10 @@ export function busy(status = '', listed?: readonly Agent[]): boolean {
   const count = / · (\d+) agents\b/.exec(status)?.[1];
   return count === undefined ? listed?.some(working) ?? false : count !== '0';
 }
+/** Whether a connected window's handoff is being written, which the list is read again for every two seconds until it is in
+ * the main chat: pi-optchat's status line counts them (`· 1 handing off`, only when there are any), and the list has them once
+ * read (`handing`), which is where a Pi in a terminal says it. */
+export const handingOff = (status = '', list?: Result<'agents'>) => / · [1-9]\d* handing off\b/.test(status) || (list?.handing?.length ?? 0) > 0;
 /** The main chat's own agents at work, oldest first: what stands over the composer while the panel is closed. Their own
  * agents are left out, as pi-optchat's count leaves them out; the panel has them. */
 export const ownAtWork = (agents: readonly Agent[]) => agents.filter(agent => working(agent) && agent.parent === undefined).toSorted((a, b) => a.started - b.started);

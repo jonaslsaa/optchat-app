@@ -33,11 +33,12 @@ export function Sidebar({ state, profile, list: { top, shelves, rows }, selected
     addEventListener(ROW_EVENT, asked); addEventListener('contextmenu', clicked, true);
     return () => { removeEventListener(ROW_EVENT, asked); removeEventListener('contextmenu', clicked, true); delete document.documentElement.dataset.menuRow; };
   }, []);
+  const handing = state.agents[profile]?.handing;
   const row = (window: WindowState) => {
-    const active = window.id === selected, name = title(window, state), connected = window.role === 'connected', index = rows.indexOf(window);
+    const active = window.id === selected, name = title(window, state), connected = window.role === 'connected', index = rows.indexOf(window), on = shelf(window, handing);
     // Complete while it can be; ✕ for a window that has nothing to hand off and is on no shelf (its Pi stopped or failed). One
     // on a shelf has neither: what is handed off stays, and a right click removes it (or a Pi that never answers Complete).
-    const end = !connected ? undefined : canComplete(window) ? 'complete' : shelf(window) ? undefined : 'close';
+    const end = !connected ? undefined : canComplete(window) ? 'complete' : on ? undefined : 'close';
     return (
       <li key={window.id} data-row={connected ? window.id : undefined} className="group/row relative">
         <button type="button" aria-current={active || undefined} onClick={() => { onPick(); app.select(window.id); }}
@@ -45,7 +46,7 @@ export function Sidebar({ state, profile, list: { top, shelves, rows }, selected
           className={cn('flex h-9 w-full select-none items-center gap-2.5 overflow-hidden rounded-md px-2.5 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset',
             active ? 'bg-sidebar-row-active light:ring-1 light:ring-sidebar-border/70 light:ring-inset' : 'hover:bg-sidebar-row-hover')}>
           {!connected ? <MessagesSquareIcon className="size-4 shrink-0 text-sidebar-muted-foreground" />
-            : window.completing ? <span title="Handing off to the main chat" className="flex"><Spinner className="size-4 shrink-0 text-sidebar-muted-foreground" /></span>
+            : on === 'completing' ? <span title="Handing off to the main chat" className="flex"><Spinner className="size-4 shrink-0 text-sidebar-muted-foreground" /></span>
             : window.completed ? <span title="Completed: handed to the main chat" className="flex"><CheckIcon aria-label="Completed" className="size-4 shrink-0 text-sidebar-muted-foreground" /></span>
             : <MessageSquareIcon className="size-4 shrink-0 text-sidebar-muted-foreground" />}
           {/* A row with a button shows it at its end while the pointer or the focus is on it, and always where there is no

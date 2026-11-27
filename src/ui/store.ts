@@ -81,15 +81,19 @@ export const UNTITLED = 'Untitled window';
  * handed to the main chat, and those it has. A window is on the one its state says, and on none while it is open. */
 export const SHELVES = ['completing', 'completed'] as const;
 export type Shelf = typeof SHELVES[number];
-export const shelf = ({ completing, completed }: WindowState): Shelf | undefined => completing ? 'completing' : completed ? 'completed' : undefined;
+/** `handing`: the handoffs the main chat's Pi writes in the background (`handing` of the agents list), as for a window whose Pi
+ * died: one of the window's conversation puts it on the Handing off shelf. What the window says goes first: one that has
+ * completed since was handed off, and the list, read every two seconds, has not caught up yet. */
+export const shelf = ({ completing, completed, agent }: WindowState, handing: readonly Handing[] = []): Shelf | undefined =>
+  completing ? 'completing' : completed ? 'completed' : handing.some(({ id }) => id === agent) ? 'completing' : undefined;
 /** A profile's sidebar: its windows on top, then each shelf that has any, with all of them while it is open, and only the window
  * shown (`selected`) while it is closed, so the chat you are in never leaves the sidebar. `handing`: the handoffs the main chat's
- * Pi writes in the background (the agents list's), which are on the Handing off shelf too while it is open (`background`), but
- * no window: after a restart the app has none of it left, so there is nothing to pick. One of a window that is on the shelf
- * already is that window. */
+ * Pi writes in the background (the agents list's), by the agent id of the conversation. A window the app still has with it is
+ * where `shelf` puts it, the Handing off shelf unless it said it was done; one it does not (after a restart it has none left)
+ * is on that shelf as a row of its own while it is open (`background`), with nothing to pick. */
 export function shelved(windows: WindowState[], open: Record<Shelf, boolean>, selected: string, handing: readonly Handing[] = []) {
-  const on = (name?: Shelf) => windows.filter(window => shelf(window) === name);
-  const left = handing.filter(({ id }) => !on('completing').some(window => window.agent === id));
+  const on = (name?: Shelf) => windows.filter(window => shelf(window, handing) === name);
+  const left = handing.filter(({ id }) => !windows.some(window => window.agent === id));
   const shelves = SHELVES.map(name => ({ name, all: on(name), open: open[name], background: name === 'completing' ? left : [] })).filter(({ all, background }) => all.length + background.length)
     .map(({ all, background, ...rest }) => ({ ...rest, count: all.length + background.length, rows: rest.open ? all : all.filter(window => window.id === selected), background: rest.open ? background : [] }));
   // `rows`: what the sidebar shows, top to bottom, which is what ⌥ and a digit pick from.

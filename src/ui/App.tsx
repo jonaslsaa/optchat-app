@@ -102,10 +102,12 @@ function Profile({ state, profile, onSettings, onUsage, onNewProfile, onImport, 
   // An import takes the profile's chat: pi-optchat takes no message until it is over. A new session after it is a new log.
   useImport(profile, turn);
   const importing = underway(state.imports[profile]);
-  // The connected windows whose handoff the main chat's Pi is writing, which are read for until it is done, as agents at work are:
-  // from a connected window too, whose sidebar has them.
-  const handing = own ? undefined : state.agents[profile]?.handing, writing = handingOff(window?.status === 'stopped' ? undefined : live.status.optchat, state.agents[profile]);
-  useAgents(profile, { closed: own || !panel, pulse, busy: writing || !own && (agentsWork || polled(agents ?? [], window?.outside !== undefined)), connected: state.connection === 'open' });
+  // The connected windows whose handoff the main chat's Pi is writing, which are read for until it is done, as agents at work are,
+  // and from a connected window too, whose sidebar has them: by what the owner says, whichever window is shown. Its status line
+  // counts them; a Pi in a terminal says nothing, so then they are looked for.
+  const handing = own ? undefined : state.agents[profile]?.handing, owner = windows.find(({ id }) => id === mainOf(profile));
+  const owns = owner?.status === 'stopped' ? undefined : owner && state.live[owner.id]?.status.optchat, outside = owner?.outside !== undefined;
+  useAgents(profile, { closed: own || !panel, pulse: `${pulse} ${owns}`, busy: handingOff(owns, state.agents[profile]) || polled(own ? [] : agents ?? [], outside) || !own && agentsWork, connected: state.connection === 'open' });
   if (!window) return <p className="m-auto text-muted-foreground text-sm">Opening {profileName(state, profile)}…</p>;
   const more = !own && log && log.entries.length > 0 && log.entries[0].i > 0;
   // Nothing has been said here, as far as is known: a window that may have a conversation waits for it rather than say so.

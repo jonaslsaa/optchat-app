@@ -76,7 +76,7 @@ export class Agents {
         doing: working({ state }) ? pending(this.chat(run)) : [], ...headline && { headline } };
     });
     const ended = agents.filter(agent => !working(agent));
-    const handoffs = owned ? handing.map(({ id, task, started, ended }) => ({ id, task, started, ...ended !== undefined && { ended } })) : [];
+    const handoffs = owned ? handing.map(({ id, task }) => ({ id, task })) : [];
     return { agents: [...agents.filter(working), ...ended.slice(0, limit)], more: Math.max(0, ended.length - limit), ...handoffs.length && { handing: handoffs } };
   }
   one({ profile, id, after = 0 }: Params<'agent'>): Result<'agent'> {

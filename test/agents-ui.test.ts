@@ -39,7 +39,7 @@ test('the agents\' button has its dot by the Pi\'s own count, and the open panel
 });
 
 test('a handoff being written is looked for while the Pi\'s status line counts one, or the list last had one', () => {
-  const handing = { agents: [], more: 0, handing: [{ id: 'w', task: 'Fix it', started: 0 }] }, none = { agents: [], more: 0 };
+  const handing = { agents: [], more: 0, handing: [{ id: 'w', task: 'Fix it' }] }, none = { agents: [], more: 0 };
   assert.equal(handingOff('OptChat: work · 350 messages · 0 pending · 0 agents · 1 handing off'), true);
   assert.equal(handingOff('OptChat: work · 350 messages · 0 pending · 2 agents'), false);
   // A Pi in a terminal says nothing to the app: the list is the word, and it is read until it has none.

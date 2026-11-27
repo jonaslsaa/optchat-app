@@ -36,6 +36,8 @@ seed(createProfile(home, 'diffs'), CHANGES.length, Date.now(), CHANGES);
 const handoff = createProfile(home, 'handoff');
 seed(handoff, 1, Date.now(), HANDING);
 handing(handoff, Date.now());
+// The same chat, with no handoff yet: one comes while a connected window is shown.
+seed(createProfile(home, 'handoff-later'), 1, Date.now(), HANDING);
 // Four agents that reported together, and their records.
 const together = createProfile(home, 'grouped');
 seed(together, 1, Date.now(), GROUPED);
@@ -713,6 +715,26 @@ test('a handoff the main chat\'s Pi writes in the background is on the window\'s
   await shelf.waitFor({ state: 'detached', timeout: 5000 });
   assert.equal(await row.count(), 0);
   assert.equal(await line.getByText('Handing off').count(), 0);
+});
+
+test('a handoff that begins while a connected window is shown is looked for by its owner, a Pi in a terminal here', async () => {
+  const profile = join(home, 'profiles', 'handoff-later'), unlock = await lockProfile(profile, describeOwner({ profile: 'handoff-later', pid: process.pid, host: 'a-terminal', cwd: home }));
+  try {
+    const context = await browser.newContext({ viewport: WIDE, reducedMotion: 'reduce' });
+    await context.addInitScript(saved => localStorage.setItem('optchat-app', saved), JSON.stringify({ tabs: ['handoff-later'], profile: 'handoff-later', selected: {} }));
+    await context.addInitScript(dismissed => localStorage.setItem('optchat-app-cut-off', dismissed), JSON.stringify(Object.fromEntries(readdirSync(join(home, 'profiles')).map(name => [name, Number.MAX_SAFE_INTEGER]))));
+    const page = await context.newPage(), windows = page.getByRole('navigation', { name: 'Windows' });
+    await page.goto(server.page);
+    await page.getByRole('button', { name: 'New window' }).click();
+    await page.getByRole('heading', { name: 'New connected window' }).waitFor();
+    await page.getByRole('textbox', { name: 'Message' }).fill('hello there');
+    await page.keyboard.press('Enter');
+    await windows.getByText('hello there').waitFor();
+    assert.equal(await windows.getByRole('button', { name: /^Handing off \d+$/ }).count(), 0);
+    handing(profile, Date.now());
+    await windows.getByRole('button', { name: 'Handing off 1' }).waitFor({ timeout: 5000 });
+    await windows.getByRole('listitem').filter({ hasText: 'Find out why' }).waitFor();
+  } finally { await unlock(); }
 });
 
 test('with a Pi in a terminal on the chat, which tells the app nothing, its agents are read every two seconds with the panel closed', async () => {

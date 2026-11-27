@@ -71,7 +71,7 @@ test('a connected window whose handoff the main chat\'s Pi is writing is said to
   assert.deepEqual(await client.request('agents', { profile: 'handing' }), { agents: [], more: 0 });
   const unlock = await lockProfile(directory, describeOwner({ profile: 'handing', pid: 4242, host: 'a-terminal', cwd: '/somewhere' }));
   t.after(() => unlock().catch(() => {}));
-  assert.deepEqual(await client.request('agents', { profile: 'handing' }), { agents: [], more: 0, handing: [{ id: 'aaaaaaaa', task: 'Fix the badge', started: 1000, ended: 2000 }] });
+  assert.deepEqual(await client.request('agents', { profile: 'handing' }), { agents: [], more: 0, handing: [{ id: 'aaaaaaaa', task: 'Fix the badge' }] });
 });
 
 test('an agent is told, interrupted, stopped and resumed through the Pi that has its profile open', { timeout: 30_000 }, async t => {

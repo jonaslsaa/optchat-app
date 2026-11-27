@@ -603,10 +603,13 @@ test('the sidebar has a window on the shelf its state says, a closed shelf shows
   });
   assert.deepEqual(sidebar({ completing: false, completed: true }, 'main').rows, ['main', '3', '1', '4']);
   assert.deepEqual(shelved(windows.slice(0, 1), { completing: true, completed: true }, 'work/main').shelves, []);
-  // A handoff written in the background is on the shelf with no window to pick, unless it is the window's that is on it already.
-  const handing = [{ id: 'gone', task: 'Fix it', started: 0 }, { id: 'two', task: 'Two', started: 0 }];
-  const live = [at('main'), at('2', { completing: true, agent: 'two' })];
-  assert.deepEqual(shelved(live, { completing: true, completed: true }, 'work/main', handing).shelves.map(({ count, rows, background }) => [count, ids(rows), background.map(({ id }) => id)]), [[2, ['2'], ['gone']]]);
-  assert.deepEqual(shelved(live, { completing: true, completed: true }, 'work/main', handing).rows.map(({ id }) => id), ['work/main', 'work/2'], 'nothing for ⌥ and a digit');
-  assert.deepEqual(shelved(windows.slice(0, 1), { completing: false, completed: true }, 'work/main', handing).shelves.map(({ count, background }) => [count, background.length]), [[2, 0]]);
+  // A handoff written in the background with no window the app has is a row of its own on the shelf, with nothing to pick.
+  const handing = [{ id: 'gone', task: 'Fix it' }, { id: 'two', task: 'Two' }, { id: 'dead', task: 'Dead' }, { id: 'done', task: 'Done' }];
+  const live = [at('main'), at('2', { completing: true, agent: 'two' }), at('dead', { status: 'stopped', agent: 'dead' }), at('done', { completed: true, agent: 'done' })];
+  const placed = (open: { completing: boolean; completed: boolean }, list = live) => shelved(list, open, 'work/main', handing).shelves.map(({ name, count, rows, background }) => [name, count, ids(rows), background.map(({ id }) => id)]);
+  // The window the app still has is the one row: whose Pi died (on top until now) is handing off, and one that said it has
+  // completed is that, before the list says so too.
+  assert.deepEqual(placed({ completing: true, completed: true }), [['completing', 3, ['2', 'dead'], ['gone']], ['completed', 1, ['done'], []]]);
+  assert.deepEqual(shelved(live, { completing: true, completed: true }, 'work/main', handing).rows.map(({ id }) => id.slice(5)), ['main', '2', 'dead', 'done'], 'nothing for ⌥ and a digit');
+  assert.deepEqual(placed({ completing: false, completed: true }, windows.slice(0, 1)), [['completing', 4, [], []]]);
 });

@@ -148,9 +148,9 @@ export const Agent = Type.Object({
 });
 export type Agent = Static<typeof Agent>;
 /** A connected window whose conversation has ended and whose handoff the main chat's Pi is writing, by its run: `id` is the
- * agent's id the window's line in the chat goes by, `task` its first message, `ended` when the conversation ended. Only while
- * a Pi has the profile open: none is written otherwise. */
-export const Handing = Type.Pick(Agent, ['id', 'task', 'started', 'ended']);
+ * agent's id the window's line in the chat goes by, `task` its first message. Only while a Pi has the profile open: none is
+ * written otherwise. */
+export const Handing = Type.Pick(Agent, ['id', 'task']);
 export type Handing = Static<typeof Handing>;
 
 /** One of a profile's settings, as pi-optchat describes it (its `SETTINGS`) and as the profile has it (`value`). A `toggle` is

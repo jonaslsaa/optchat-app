@@ -1424,17 +1424,31 @@ test('a reply, a report or a message of yours is cited whole by the button besid
   const { messages } = await (await connect(server.url)).request('history', { profile: 'whole' });
   const at = (start: string) => ({ id: messages.find(message => message.text.startsWith(start))!.i, n: 1 });
   const done = 'Done: the test waits ten seconds on Windows, and `docs/windows.md` says why stopping is slower there.';
-  // A message of yours, and ⌘Enter cites it and sends.
-  await box.fill('compare this');
-  await page.getByRole('button', { name: 'Cite message' }).first().click();
-  await page.keyboard.press('ControlOrMeta+Enter');
-  await page.getByText('reply', { exact: true }).waitFor();
-  // The message just sent cites one, but is cited as what was typed: what it cites is where its place sends the agent.
-  await page.getByRole('button', { name: 'Cite message' }).last().click();
-  await page.keyboard.press('Enter');
-  const { messages: now } = await (await connect(server.url)).request('history', { profile: 'whole' });
-  assert.deepEqual(await draft(), [{ text: 'compare this', at: { id: now.findLast(message => message.kind === 'user')!.i, n: 1 } }]);
-  await page.getByRole('button', { name: 'Remove the citation' }).click();
+  // A message of yours, with a comment, and ⌘Enter cites it and sends.
+  const send = async (typed: string, comment: string) => {
+    const replies = await page.getByText('reply', { exact: true }).count();
+    await box.fill(typed);
+    await page.getByRole('button', { name: 'Cite message' }).first().click();
+    await page.keyboard.type(comment);
+    await page.keyboard.press('ControlOrMeta+Enter');
+    await page.getByText('reply', { exact: true }).nth(replies).waitFor();
+  };
+  // A message just sent cites one, but is cited as what was written in it: the comment on what it cites, then what was typed.
+  // What it cites the agent finds where its place sends it. One with only a comment is cited by the comment.
+  const last = async () => {
+    await page.getByRole('button', { name: 'Cite message' }).last().click();
+    await page.keyboard.press('Enter');
+    const { messages: now } = await (await connect(server.url)).request('history', { profile: 'whole' });
+    const cites = await draft();
+    await page.getByRole('button', { name: 'Remove the citation' }).click();
+    return [cites, now.findLast(message => message.kind === 'user')!.i] as const;
+  };
+  await send('Check this', 'Please hold the release.');
+  let [cites, id] = await last();
+  assert.deepEqual(cites, [{ text: 'Please hold the release.\n\nCheck this', at: { id, n: 1 } }]);
+  await send('', 'Hold it.');
+  [cites, id] = await last();
+  assert.deepEqual(cites, [{ text: 'Hold it.', at: { id, n: 1 } }]);
   // A reply: its whole answer, at the message it begins with, and the popover right under the button, with the keys in it.
   const button = page.getByRole('button', { name: 'Cite reply' }).first();
   await button.click();

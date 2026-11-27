@@ -5,7 +5,7 @@ import { working as agentWorks } from '../agent.ts';
 import type { Agent, WindowState } from '../protocol.ts';
 import { among, doing, named, stood } from './agents.ts';
 import { CiteButton, CiteGroup, SkillChip, type CiteMessage } from './Cite.tsx';
-import { asTyped, type Place } from './cite.ts';
+import { asTyped, written, type Place } from './cite.ts';
 import { Markdown } from './Markdown.tsx';
 import { act, started, thoughtLine, took, worked, type Part, type Step, type Thinking, type Tool } from './transcript.ts';
 import { Button, cn, CopyButton, Spinner, StatusDot } from './ui.tsx';
@@ -49,10 +49,10 @@ const source = (profile: string, image: string) => image.startsWith('data:') ? i
  * 4px (16 = 4 + 12). A message that only cites is its card, which the bubble hugs. */
 const BLEED = '-mx-1.5 first:-mt-1.5 last:-mb-1.5';
 /** Your message: a bubble on the right, with the images you sent. Where it can be cited (`onCite`), it is cited as what you
- * typed, with the skill it runs: what it cites itself the agent finds where the citation sends it. */
+ * wrote (`written`): what it cites itself the agent finds where the citation sends it. */
 export const UserRow = memo(function UserRow({ part, profile, onPlace, onCite }: { part: Of<'user'>; profile: string; onPlace?: (at: Place) => void; onCite?: CiteMessage }) {
   // The message as it was sent: copied, it is pasted into the box as it was, with what it cites and the skill as it was typed.
-  const sent = asTyped(part), typed = asTyped({ ...part, cites: [] }), alone = !part.text && !part.skill && part.cites.length === 0;
+  const sent = asTyped(part), typed = written(part), alone = !part.text && !part.skill && part.cites.length === 0;
   return (
     <div className="group flex flex-col items-end gap-1 pt-2 pb-1">
       <div data-gallery="" className="relative min-w-0 max-w-[80%] rounded-2xl bg-message p-3 text-message-foreground">

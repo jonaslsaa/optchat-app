@@ -23,7 +23,7 @@ process.env.FAKE_PI_HOME = join(home, 'pi');
 mkdirSync(join(home, 'pi', 'pi-optchat'), { recursive: true });
 writeFileSync(join(home, 'pi', 'pi-optchat', 'package.json'), JSON.stringify({ name: 'pi-optchat', version: '0.12.2' }));
 writeFileSync(join(home, 'pi', 'state.json'), JSON.stringify({ version: '1.5.2', providers: ['anthropic', 'openai'], packages: { 'npm:pi-optchat': join(home, 'pi', 'pi-optchat') } }));
-for (const name of ['bar', 'cold', 'colder', 'chat', 'beside', 'sheet', 'memory', 'rows', 'menus', 'fields', 'asks', 'windows', 'importing', 'into', 'keys', 'spend', 'commands', 'arrows', 'mute', 'said', 'images', 'gallery', 'tabs', 'slow', 'inline', 'held', 'unread', 'finish', 'renames', 'queues', 'picker']) {
+for (const name of ['bar', 'cold', 'colder', 'chat', 'beside', 'sheet', 'memory', 'rows', 'menus', 'fields', 'asks', 'windows', 'importing', 'into', 'keys', 'spend', 'commands', 'arrows', 'mute', 'said', 'whole', 'images', 'gallery', 'tabs', 'slow', 'inline', 'held', 'unread', 'finish', 'renames', 'queues', 'picker']) {
   const profile = createProfile(home, name);
   if (['bar', 'cold', 'colder', 'memory', 'windows', 'keys', 'spend', 'arrows', 'unread', 'queues'].includes(name)) { writeMemory(profile, 16); continue; }
   seed(profile, TEAM.length, Date.now(), TEAM);
@@ -1418,10 +1418,59 @@ test('what is selected in a reply, a report or a message is cited in the message
   assert.equal(await draft(), '<cite>wait</cite>\n\n');
 });
 
+test('a reply, a report or a message of yours is cited whole by the button beside its Copy: all of its words, at its message, with the comment popover at the button', async () => {
+  const page = await open('whole'), box = page.getByRole('textbox', { name: 'Message' }), commentBox = page.getByRole('textbox', { name: 'Comment on cited text' });
+  const draft = async () => cited(await page.evaluate((): string => JSON.parse(localStorage.getItem('optchat-app-drafts') ?? '{}')['whole/main'] ?? '')).cites;
+  const { messages } = await (await connect(server.url)).request('history', { profile: 'whole' });
+  const at = (start: string) => ({ id: messages.find(message => message.text.startsWith(start))!.i, n: 1 });
+  const done = 'Done: the test waits ten seconds on Windows, and `docs/windows.md` says why stopping is slower there.';
+  // A message of yours, and ⌘Enter cites it and sends.
+  await box.fill('compare this');
+  await page.getByRole('button', { name: 'Cite message' }).first().click();
+  await page.keyboard.press('ControlOrMeta+Enter');
+  await page.getByText('reply', { exact: true }).waitFor();
+  // The message just sent cites one, but is cited as what was typed: what it cites is where its place sends the agent.
+  await page.getByRole('button', { name: 'Cite message' }).last().click();
+  await page.keyboard.press('Enter');
+  const { messages: now } = await (await connect(server.url)).request('history', { profile: 'whole' });
+  assert.deepEqual(await draft(), [{ text: 'compare this', at: { id: now.findLast(message => message.kind === 'user')!.i, n: 1 } }]);
+  await page.getByRole('button', { name: 'Remove the citation' }).click();
+  // A reply: its whole answer, at the message it begins with, and the popover right under the button, with the keys in it.
+  const button = page.getByRole('button', { name: 'Cite reply' }).first();
+  await button.click();
+  await commentBox.waitFor();
+  const [pressed, popover] = [await button.boundingBox(), await page.getByRole('dialog', { name: 'Comment on citation' }).boundingBox()];
+  assert.ok(pressed && popover && popover.y >= pressed.y + pressed.height && popover.y - pressed.y - pressed.height < 16, 'the popover is not at the button');
+  assert.equal(await focused(page), 'Comment on cited text');
+  await page.keyboard.press('Enter');
+  assert.deepEqual(await draft(), [{ text: done, at: at('Done: the test') }]);
+  // A report, as it is copied, with a comment.
+  await page.getByRole('button', { name: 'Cite report' }).click();
+  await page.keyboard.type('still true?');
+  await page.keyboard.press('Enter');
+  const [, report] = await draft();
+  assert.match(report.text, /^\*\*T3 Code replays by sequence number\.\*\*[^]*- Nothing is replayed twice$/);
+  assert.deepEqual([report.at, report.comment], [at('[ce3d516d'), 'still true?']);
+  // A reply that is still being written has no button yet, as it has no Copy.
+  const replies = await page.getByRole('button', { name: 'Cite reply' }).count();
+  await run(page);
+  assert.equal(await page.getByRole('button', { name: 'Cite reply' }).count(), replies);
+  await stops(page, 'after citing');
+});
+
+test('a report of several is cited one report at a time, from its tab or its section', async () => {
+  const page = await open('grouped');
+  await page.getByRole('tabpanel').getByRole('button', { name: 'Cite this report' }).click();
+  await page.keyboard.press('Enter');
+  const [only] = cited(await page.evaluate((): string => JSON.parse(localStorage.getItem('optchat-app-drafts') ?? '{}')['grouped/main'] ?? '')).cites;
+  assert.match(only.text, /^\*\*Security review of #11952: one HIGH, two LOW\.\*\*[^]*No new dependencies\.$/);
+});
+
 test('citations open a comment popover right at the trigger: Enter saves, Esc cancels a fresh cite or discards edits, ⌘Enter sends, and comments render under their quotes and work in memory view', async () => {
   const page = await open('cited-comments'), box = page.getByRole('textbox', { name: 'Message' }), cite = page.getByRole('button', { name: 'Cite', exact: true });
   const commentBox = page.getByRole('textbox', { name: 'Comment on cited text' });
   const chips = () => page.getByRole('list', { name: 'Cited in the message' }).getByRole('listitem').allInnerTexts();
+  const draft = () => page.evaluate((): string | undefined => JSON.parse(localStorage.getItem('optchat-app-drafts') ?? '{}')['cited-comments/main']);
   const report = page.locator('[data-cite] li', { hasText: 'Nothing is replayed twice' }), reply = page.locator('[data-cite] p', { hasText: 'Started two agents.' });
   await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
   // Esc on a brand-new cite removes the fresh chip cleanly and returns focus to the composer.
@@ -1443,7 +1492,7 @@ test('citations open a comment popover right at the trigger: Enter saves, Esc ca
   await commentBox.waitFor({ state: 'detached' });
   assert.deepEqual([await chips(), await focused(page)], [['Is this true on reconnect? Check edge case.'], 'Message']);
   // Editing an existing chip's comment: Esc discards unsaved edits and keeps the saved comment; clicking the active pencil
-  // toggles the popover closed and commits; over-cap blocks Save and outside-click; Save updates it.
+  // toggles the popover closed and commits; Save updates it.
   await page.getByRole('button', { name: 'Edit citation comment' }).click();
   await commentBox.waitFor();
   assert.equal(await commentBox.inputValue(), 'Is this true on reconnect?\nCheck edge case.');
@@ -1457,14 +1506,15 @@ test('citations open a comment popover right at the trigger: Enter saves, Esc ca
   await page.getByRole('button', { name: 'Edit citation comment' }).click();
   await commentBox.waitFor({ state: 'detached' });
   assert.deepEqual([await chips(), await focused(page)], [['Toggled closed'], 'Message']);
+  // A comment is not capped: a long one is saved whole, as a long message is sent whole.
   await page.getByRole('button', { name: 'Edit citation comment' }).click();
   await commentBox.waitFor();
-  await commentBox.fill('x'.repeat(2001));
-  assert.ok(await page.getByRole('button', { name: 'Shorten comment' }).isDisabled());
-  await box.click();
+  await commentBox.fill('x'.repeat(5000));
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await commentBox.waitFor({ state: 'detached' });
+  assert.equal(cited((await draft()) ?? '').cites[0]?.comment, 'x'.repeat(5000));
+  await page.getByRole('button', { name: 'Edit citation comment' }).click();
   await commentBox.waitFor();
-  await commentBox.fill(`  ${'x'.repeat(2000)}  `);
-  assert.ok(await page.getByRole('button', { name: 'Save', exact: true }).isEnabled());
   await commentBox.fill('Verify reconnect dedupe');
   await page.getByRole('button', { name: 'Save', exact: true }).click();
   await commentBox.waitFor({ state: 'detached' });

@@ -1,7 +1,7 @@
-import { ArrowLeftIcon, ChevronRightIcon, ClipboardCheckIcon, ClockIcon, CornerDownRightIcon, HistoryIcon, MessageSquareIcon, QuoteIcon, SearchIcon, SparkleIcon, StickyNoteIcon, UserIcon, WrenchIcon, XIcon, type LucideIcon } from 'lucide-react';
+import { ArrowLeftIcon, ChevronRightIcon, ClipboardCheckIcon, ClockIcon, CornerDownRightIcon, HistoryIcon, MessageSquareIcon, SearchIcon, SparkleIcon, StickyNoteIcon, UserIcon, WrenchIcon, XIcon, type LucideIcon } from 'lucide-react';
 import { Fragment, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode, type RefObject } from 'react';
 import type { Hit, Line, Message, WindowState } from '../protocol.ts';
-import { anchorOf, CiteSelection, type CiteAnchor } from './Cite.tsx';
+import { CiteButton, CiteSelection, type CiteAnchor } from './Cite.tsx';
 import { whole, type Cite, type Place } from './cite.ts';
 import { escapes, label } from './keys.ts';
 import { called, isOpen, key, leaf, listed, polled, printed, reports, since, size, tagged, WHO, type Kind, type Search, type Tree } from './memory.ts';
@@ -43,7 +43,7 @@ const Original = memo(function Original({ messages, profile }: { messages: Messa
 function CiteWhole({ onCite, className = 'end-1 top-1' }: { onCite: (anchor: CiteAnchor) => void; className?: string }) {
   return (
     <span className={cn('absolute opacity-0 transition-opacity duration-200 focus-within:opacity-100 group-focus-within:opacity-100 group-hover:opacity-100 pointer-coarse:opacity-100', className)}>
-      <Button variant="ghost-muted" size="icon-xs" aria-label="Cite this line" title="Cite this line in the message" onClick={event => onCite(anchorOf(event.currentTarget))}><QuoteIcon className="size-3" /></Button>
+      <CiteButton label="Cite this line" onCite={onCite} />
     </span>
   );
 }

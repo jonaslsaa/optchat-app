@@ -27,8 +27,8 @@ test('only what a message begins with is a citation, and a long one is cut', () 
   const typed = 'See <cite zoom="5">this</cite> in the middle';
   assert.deepEqual(cited(typed), { cites: [], text: typed });
   assert.deepEqual(cited('<cite zoom="five">no place</cite>'), { cites: [], text: '<cite zoom="five">no place</cite>' });
-  const long = cite('word '.repeat(1000)), line = whole({ id: 0, n: 8 }, 'word '.repeat(100));
-  assert.equal(long.text.length, 2000);
+  const long = cite('word '.repeat(2000)), line = whole({ id: 0, n: 8 }, 'word '.repeat(100));
+  assert.equal(long.text.length, 8000);
   assert.ok(long.text.endsWith('word…'));
   assert.equal(line.text.length, 200);
   assert.deepEqual([place('11953'), place('11904+4'), place(''), place('4+'), place('5+0')], [{ id: 11953, n: 1 }, { id: 11904, n: 4 }, undefined, undefined, undefined]);

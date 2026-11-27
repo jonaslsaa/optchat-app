@@ -4,7 +4,7 @@ import { flushSync } from 'react-dom';
 import { working as agentWorks } from '../agent.ts';
 import type { Agent, WindowState } from '../protocol.ts';
 import { among, doing, named, stood } from './agents.ts';
-import { CiteGroup, SkillChip } from './Cite.tsx';
+import { CiteButton, CiteGroup, SkillChip, type CiteMessage } from './Cite.tsx';
 import { asTyped, type Place } from './cite.ts';
 import { Markdown } from './Markdown.tsx';
 import { act, started, thoughtLine, took, worked, type Part, type Step, type Thinking, type Tool } from './transcript.ts';
@@ -48,10 +48,11 @@ const source = (profile: string, image: string) => image.startsWith('data:') ? i
  * corners follow the bubble's 16px ones (16 = 10 + 6). Images with words keep to the words' 12px edge, and their corners to
  * 4px (16 = 4 + 12). A message that only cites is its card, which the bubble hugs. */
 const BLEED = '-mx-1.5 first:-mt-1.5 last:-mb-1.5';
-/** Your message: a bubble on the right, with the images you sent. */
-export const UserRow = memo(function UserRow({ part, profile, onPlace }: { part: Of<'user'>; profile: string; onPlace?: (at: Place) => void }) {
+/** Your message: a bubble on the right, with the images you sent. Where it can be cited (`onCite`), it is cited as what you
+ * typed, with the skill it runs: what it cites itself the agent finds where the citation sends it. */
+export const UserRow = memo(function UserRow({ part, profile, onPlace, onCite }: { part: Of<'user'>; profile: string; onPlace?: (at: Place) => void; onCite?: CiteMessage }) {
   // The message as it was sent: copied, it is pasted into the box as it was, with what it cites and the skill as it was typed.
-  const sent = asTyped(part), alone = !part.text && !part.skill && part.cites.length === 0;
+  const sent = asTyped(part), typed = asTyped({ ...part, cites: [] }), alone = !part.text && !part.skill && part.cites.length === 0;
   return (
     <div className="group flex flex-col items-end gap-1 pt-2 pb-1">
       <div data-gallery="" className="relative min-w-0 max-w-[80%] rounded-2xl bg-message p-3 text-message-foreground">
@@ -60,7 +61,7 @@ export const UserRow = memo(function UserRow({ part, profile, onPlace }: { part:
         {part.cites.length > 0 && <CiteGroup cites={part.cites} onOpen={onPlace} className={cn(BLEED, part.text && 'mb-2')} />}
         {part.text && <Clamp text={part.text} lines={12}><p data-cite={part.key} className="whitespace-pre-wrap text-sm leading-relaxed [overflow-wrap:anywhere]">{part.text}</p></Clamp>}
       </div>
-      <div className="flex max-w-[80%] items-center gap-1.5 pe-1 opacity-0 transition-opacity duration-200 focus-within:opacity-100 group-hover:opacity-100">{sent && <CopyButton text={sent} label="Copy message" />}<Time date={part.date} /></div>
+      <div className="flex max-w-[80%] items-center gap-1.5 pe-1 opacity-0 transition-opacity duration-200 focus-within:opacity-100 group-hover:opacity-100">{sent && <CopyButton text={sent} label="Copy message" />}{onCite && typed && <CiteButton label="Cite message" onCite={anchor => onCite(typed, { id: part.key, n: 1 }, anchor)} />}<Time date={part.date} /></div>
     </div>
   );
 });
@@ -187,8 +188,9 @@ export function Doing({ from, activity, thinking }: { from: string; activity?: s
   );
 }
 /** The agent's reply: its work, folded once it is done, and then its answer. While it works (`working`) the steps stay open, and
- * the chat says under them what it is doing (`Doing`). The chat's `latest` reply always shows what can be done with it; the others on hover. */
-export const ReplyRow = memo(function ReplyRow({ part, working, latest, profile }: { part: Of<'reply'>; working?: Working; latest: boolean; profile: string }) {
+ * the chat says under them what it is doing (`Doing`). The chat's `latest` reply always shows what can be done with it; the others on hover.
+ * An answer cited whole (`onCite`) is all of it, at the place of its first message. */
+export const ReplyRow = memo(function ReplyRow({ part, working, latest, profile, onCite }: { part: Of<'reply'>; working?: Working; latest: boolean; profile: string; onCite?: CiteMessage }) {
   const [open, setOpen] = useState(false);
   const { steps, answer } = part, tools = steps.filter(step => step.type === 'tool'), failed = tools.filter(step => step.failed).length;
   // Why a reply failed is said outside the fold too, or a failed turn would look like one that answered nothing.
@@ -210,7 +212,7 @@ export const ReplyRow = memo(function ReplyRow({ part, working, latest, profile 
       {answer && <div className="relative flex min-w-0 flex-col gap-[0.65rem] px-1 py-0.5 pt-2">{answer.said.map((block, at) => <div key={block.key} data-cite={block.key}><Markdown text={block.text} streaming={answer.streaming && at === answer.said.length - 1} /></div>)}</div>}
       {!working && answer && (
         <div className={cn('-ms-0.5 flex items-center gap-1.5 px-1 pt-1 transition-opacity duration-200', !latest && 'opacity-0 focus-within:opacity-100 group-hover/reply:opacity-100')}>
-          <CopyButton text={answer.text} label="Copy reply" /><Time date={part.to} />
+          <CopyButton text={answer.text} label="Copy reply" />{onCite && <CiteButton label="Cite reply" onCite={anchor => onCite(answer.text, { id: answer.said[0].key, n: 1 }, anchor)} />}<Time date={part.to} />
         </div>
       )}
     </div>

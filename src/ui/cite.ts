@@ -8,11 +8,10 @@ export type Place = Pick<Line, 'id' | 'n'>;
  * the log yet (a reply in a run, a connected window's conversation) no place. */
 export interface Cite { text: string; at?: Place; comment?: string }
 
-/** How much of what is cited goes with the message: the agent can zoom to the rest. A comment on one has its own cap. */
-const CAP = 2000, LINE = 200;
-export const COMMENT_CAP = 2000;
+/** How much of what is cited goes with the message: the agent can zoom to the rest. A comment on one is yours, and goes whole. */
+const CAP = 8000, LINE = 200;
 const cut = (text: string, cap: number) => text.length > cap ? `${text.slice(0, cap).trimEnd()}…` : text;
-/** What was selected, as a citation; and a line or a message cited whole, by how it begins. */
+/** What was selected, or a message of the chat cited whole, as a citation; and a line of the memory cited whole, by how it begins. */
 export const cite = (text: string, at?: Place, comment?: string): Cite => {
   const note = comment?.trim();
   return { text: cut(text.trim(), CAP), ...at && { at }, ...note && { comment: note } };

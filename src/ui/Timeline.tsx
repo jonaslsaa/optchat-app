@@ -1,7 +1,7 @@
 import { ChevronDownIcon } from 'lucide-react';
-import { useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState, type Ref } from 'react';
-import { CiteSelection, type CiteAnchor } from './Cite.tsx';
-import type { Cite, Place } from './cite.ts';
+import { useCallback, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState, type Ref } from 'react';
+import { CiteSelection, type CiteAnchor, type CiteMessage } from './Cite.tsx';
+import { cite, type Cite, type Place } from './cite.ts';
 import { Find } from './Find.tsx';
 import type { Agent, Handing, WindowState } from '../protocol.ts';
 import { AgentsInChat, Doing, HandoffRow, NoteRow, ReplyRow, UserRow, WindowRow, type Working } from './Rows.tsx';
@@ -15,7 +15,8 @@ const EDGE = 48, NONE: readonly Agent[] = [], NO_WINDOWS: readonly WindowState[]
 /** The chat, oldest at the top. It stays at the end while you are there, and stays where you are while you read back; older
  * pages of the log are read as you reach the top. `running` says the agent is in a run, and `live` what it is doing in it.
  * `onAgent` opens the agent a report is from; `narrow` is for a chat in a panel, which has no room for wide margins. Where
- * there is a composer to cite into (`onCite`), a "Cite" button stands by what is selected in a message, a reply or a report;
+ * there is a composer to cite into (`onCite`), a "Cite" button stands by what is selected in a message, a reply or a report,
+ * and one by its Copy button cites it whole;
  * `logged` is the last message of the chat that the profile's log has, where the chat is the log. `onPlace` shows what a
  * message cites in the memory view. Where the memory can be searched from (`onMemory`), the chat can be found in: `ref.find`
  * shows the bar for it (`Find`). `agents` are the profile's as the panel lists them, which the calls that started them show
@@ -35,6 +36,12 @@ export function Timeline({ items, live, running, starting = false, profile, olde
   const last = blocks.at(-1), latest = last?.type === 'handoff' ? blocks.at(-2) : last;
   const inChat = useMemo(() => ({ agents, onAgent }), [agents, onAgent]);
   const working = useMemo((): Working => ({ thinking: thinking(live), activity: live.activity, tools: live.tools }), [live]);
+  // A message cited whole keeps its place only where the log has it, as a selection does. The rows are drawn again only when
+  // their part changes, so they are given one function for good, which reads what is current when it is pressed.
+  const now = useRef({ onCite, logged });
+  now.current = { onCite, logged };
+  const whole = useCallback<CiteMessage>((text, at, anchor) => { const { onCite, logged = -1 } = now.current; onCite?.(cite(text, at.id + at.n - 1 <= logged ? at : undefined), anchor); }, []);
+  const citeWhole = onCite && whole;
 
   useLayoutEffect(() => {
     const element = scroller.current;
@@ -80,12 +87,12 @@ export function Timeline({ items, live, running, starting = false, profile, olde
               <span className="h-px flex-1 bg-border/70" />{loading ? 'Loading earlier messages…' : 'Load earlier messages'}<span className="h-px flex-1 bg-border/70" />
             </button>
           )}
-          <AgentsInChat value={inChat}>{blocks.map(part => part.type === 'user' ? <UserRow key={part.key} part={part} profile={profile} onPlace={onPlace} />
-            : part.type === 'work' ? <ReportRow key={part.key} part={part} onAgent={onAgent} />
+          <AgentsInChat value={inChat}>{blocks.map(part => part.type === 'user' ? <UserRow key={part.key} part={part} profile={profile} onPlace={onPlace} onCite={citeWhole} />
+            : part.type === 'work' ? <ReportRow key={part.key} part={part} onAgent={onAgent} onCite={citeWhole} />
             : part.type === 'note' ? <NoteRow key={part.key} part={part} />
             : part.type === 'window' ? <WindowRow key={part.key} part={part} window={windows.find(window => window.agent === part.agent)} handing={handing.some(({ id }) => id === part.agent)} onWindow={onWindow} />
             : part.type === 'handoff' ? <HandoffRow key={part.key} part={part} writing={running && part === last} />
-            : <ReplyRow key={part.key} part={part} working={running && part === last ? working : undefined} latest={part === latest} profile={profile} />)}</AgentsInChat>
+            : <ReplyRow key={part.key} part={part} working={running && part === last ? working : undefined} latest={part === latest} profile={profile} onCite={citeWhole} />)}</AgentsInChat>
           {/* What the agent is doing: under your message until it says something, and then under its reply, as one line. Your
               message is in the chat before Pi has it (`live.sent`), and the agent is at work on it from then: its Pi may still be
               starting. */}

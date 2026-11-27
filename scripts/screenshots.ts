@@ -73,6 +73,8 @@ remember(long);
 const cites = createProfile(home, 'cites');
 seed(cites, TEAM.length, NOW, TEAM);
 remember(cites, 4);
+// The same chat, for a reply, a report and a message of yours cited whole by the button beside their Copy.
+seed(createProfile(home, 'cite-whole'), TEAM.length, NOW, TEAM);
 // What it used in those ten days, and a ledger with a line that cannot be read.
 spend(long, NOW);
 spend(join(home, 'profiles', 'notes'), NOW, 1);
@@ -701,6 +703,23 @@ async function pictures(browser: Browser, control: Client) {
   await citing.getByText('reply', { exact: true }).waitFor();
   await shot(citing, '151-cited-message');
   await shot(await open(['cites'], { dark: true }), '152-cited-message-dark');
+  // A reply, a report and a message of yours cited whole: the button beside Copy under the pointer, the comment popover at it,
+  // and the message that cites a report whole once it is sent; light and dark.
+  for (const dark of [true, false]) {
+    const whole = await open(['cite-whole'], { dark }), suffix = dark ? '-dark' : '';
+    await shot(whole, `300-cite-whole-reply${suffix}`, whole.getByRole('button', { name: 'Cite reply' }).first());
+    await shot(whole, `301-cite-whole-message${suffix}`, whole.getByRole('button', { name: 'Cite message' }).first());
+    await whole.getByRole('button', { name: 'Cite report' }).click();
+    await whole.getByRole('textbox', { name: 'Comment on cited text' }).waitFor();
+    await whole.keyboard.type('Is the snapshot still our fallback?');
+    await shot(whole, `302-cite-whole-popover${suffix}`);
+    if (dark) continue;
+    await whole.keyboard.press('Enter');
+    await say(whole, 'Check this against ours.');
+    await whole.getByText('reply', { exact: true }).waitFor();
+    await shot(whole, '303-cite-whole-sent');
+    await shot(await open(['cite-whole'], { dark: true }), '303-cite-whole-sent-dark');
+  }
   await shot(await open(['cites'], { width: 420, height: 800 }), '153-cited-message-narrow');
   // A message that is only a long quote with a comment: the bubble hugs its card, the quote is cut at two lines, and a click
   // unfolds it; the same cited while the agent runs, waiting under the chat.

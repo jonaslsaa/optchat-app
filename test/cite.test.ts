@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { asTyped, called, cite, cited, citing, commented, joined, paired, place, placed, whole, yours, type Cite } from '../src/ui/cite.ts';
+import { asTyped, called, cite, cited, citing, commented, joined, paired, place, placed, whole, written, yours, type Cite } from '../src/ui/cite.ts';
 
 test('a message is written with what it cites first, each with its place in the memory, and is read back as it was', () => {
   const cites: Cite[] = [cite('  the two lines\nthat were selected ', { id: 11953, n: 1 }), whole({ id: 11904, n: 4 }, 'How the snapshot is taken'), whole({ id: 64, n: 2 }), cite('said in a run')];
@@ -27,10 +27,15 @@ test('only what a message begins with is a citation, and a long one is cut', () 
   const typed = 'See <cite zoom="5">this</cite> in the middle';
   assert.deepEqual(cited(typed), { cites: [], text: typed });
   assert.deepEqual(cited('<cite zoom="five">no place</cite>'), { cites: [], text: '<cite zoom="five">no place</cite>' });
-  const long = cite('word '.repeat(1000)), line = whole({ id: 0, n: 8 }, 'word '.repeat(100));
-  assert.equal(long.text.length, 2000);
+  const long = cite('word '.repeat(2000)), line = whole({ id: 0, n: 8 }, 'word '.repeat(100));
+  assert.equal(long.text.length, 8000);
   assert.ok(long.text.endsWith('word…'));
   assert.equal(line.text.length, 200);
+  // The "…" is in the cap, and a character of two code units is kept whole or left out, never cut in half.
+  const emoji = cite(`${'a'.repeat(7998)}😀 and more`);
+  assert.deepEqual([emoji.text.length, emoji.text.endsWith('a…'), /[\uD800-\uDBFF]…$/.test(emoji.text)], [7999, true, false]);
+  assert.equal(cite(`${'a'.repeat(7997)}😀 and more`).text, `${'a'.repeat(7997)}😀…`);
+  assert.equal(cite('b'.repeat(8000)).text, 'b'.repeat(8000));
   assert.deepEqual([place('11953'), place('11904+4'), place(''), place('4+'), place('5+0')], [{ id: 11953, n: 1 }, { id: 11904, n: 4 }, undefined, undefined, undefined]);
 });
 
@@ -104,4 +109,13 @@ test('a message that runs a skill is its name and what was typed after it, as Pi
   assert.equal(joined([sent, 'and say why']), '/skill:sol-loop\n\nand say why');
   // Only a message that begins with a skill runs one, as Pi reads it.
   for (const message of [`Look at this:\n\n${sent}`, '/skill:', '/skill:sol-loop\nthe last commit', ' /skill:sol-loop']) assert.deepEqual(yours(message), { cites: [], text: message }, message);
+});
+
+test('a message of yours is cited whole as what you wrote: your comments on what it cites, then what was typed', () => {
+  const quoted = [cite('the quote', { id: 3, n: 1 }, 'Please hold the release.'), cite('another'), cite('third', undefined, 'And this one?')];
+  assert.equal(written(yours(citing(quoted, ''))), 'Please hold the release.\n\nAnd this one?');
+  assert.equal(written(yours(citing(quoted, 'Check this'))), 'Please hold the release.\n\nAnd this one?\n\nCheck this');
+  assert.equal(written(yours(citing([cite('only a quote')], ''))), '');
+  assert.equal(written({ cites: [], text: '' }), '', 'a message of images alone has no words to cite');
+  assert.equal(written(yours('/skill:review the PR')), '/skill:review the PR');
 });

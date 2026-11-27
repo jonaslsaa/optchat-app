@@ -132,7 +132,7 @@ export function Composer({ state, window, live, chat, onSend, ref }: { state: St
   // A click on them opens their comment there, as the pencil on the chip does: once more on the one open, it stays open.
   useMarks(ranges, (index, anchor) => {
     if (editing?.index === index) return popover.current?.focus();
-    if (popover.current && !popover.current.commit()) return;
+    popover.current?.commit();
     setEditing({ index, anchor, fresh: false, above: false });
   });
   const images = state.attached[window.id] ?? [], [refused, setRefused] = useState<string>(), [reading, setReading] = useState(0);
@@ -169,7 +169,7 @@ export function Composer({ state, window, live, chat, onSend, ref }: { state: St
       else area.current?.focus();
     },
     closeComment: () => {
-      if (popover.current) popover.current.commit();
+      popover.current?.commit();
       setEditing(undefined);
     },
   }));
@@ -259,8 +259,8 @@ export function Composer({ state, window, live, chat, onSend, ref }: { state: St
                   <span className={cn('min-w-0 truncate', cite.comment ? 'text-foreground' : 'text-muted-foreground')}>{called(cite)}</span>
                   <button type="button" data-cite-action aria-label={cite.comment ? 'Edit citation comment' : 'Add comment to citation'} title={cite.comment ? 'Edit comment' : 'Add comment'} aria-pressed={editing?.index === at}
                     onClick={event => {
-                      if (editing?.index === at) { if (popover.current?.commit()) area.current?.focus(); return; }
-                      if (popover.current && !popover.current.commit()) return;
+                      if (editing?.index === at) { popover.current?.commit(); area.current?.focus(); return; }
+                      popover.current?.commit();
                       setEditing({ index: at, anchor: { ...anchorOf(event.currentTarget), range: ranges[at] }, fresh: false, above: true, opener: event.currentTarget });
                     }}
                     className={cn(CHIP_ACTION, editing?.index === at && 'bg-accent text-foreground dark:bg-white/9')}><PencilIcon className="size-3" /></button>

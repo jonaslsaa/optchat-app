@@ -8,11 +8,15 @@ export type Place = Pick<Line, 'id' | 'n'>;
  * the log yet (a reply in a run, a connected window's conversation) no place. */
 export interface Cite { text: string; at?: Place; comment?: string }
 
-/** How much of what is cited goes with the message: the agent can zoom to the rest. A comment on one has its own cap. */
-const CAP = 2000, LINE = 200;
-export const COMMENT_CAP = 2000;
-const cut = (text: string, cap: number) => text.length > cap ? `${text.slice(0, cap).trimEnd()}…` : text;
-/** What was selected, as a citation; and a line or a message cited whole, by how it begins. */
+/** How much of what is cited goes with the message: the agent can zoom to the rest. A comment on one is yours, and goes whole. */
+const CAP = 8000, LINE = 200;
+// Cut to `cap` with the "…": never through a character that takes two code units (an emoji), which would leave half of it.
+const cut = (text: string, cap: number) => {
+  if (text.length <= cap) return text;
+  const kept = text.slice(0, cap - 1);
+  return `${(/[\uD800-\uDBFF]$/.test(kept) ? kept.slice(0, -1) : kept).trimEnd()}…`;
+};
+/** What was selected, or a message of the chat cited whole, as a citation; and a line of the memory cited whole, by how it begins. */
 export const cite = (text: string, at?: Place, comment?: string): Cite => {
   const note = comment?.trim();
   return { text: cut(text.trim(), CAP), ...at && { at }, ...note && { comment: note } };
@@ -100,6 +104,9 @@ export function yours(said: string): Yours {
   const [, given, words = ''] = TYPED.exec(message) ?? [];
   return given ? { skill: { name: given }, cites: [], text: words.trim() } : cited(message);
 }
+/** What you wrote in a message, which is how it is cited whole: your comments on what it cites, in order, and what was typed
+ * with the skill it runs. Not what it cites: the agent reads that where the citation's place sends it. */
+export const written = ({ skill, cites, text }: Yours) => [...cites.flatMap(({ comment }) => comment || []), asTyped({ skill, cites: [], text })].filter(Boolean).join('\n\n');
 /** Your message as it was typed, which is how it is copied, brought back and sent again: `yours`, written back. */
 export const asTyped = ({ skill, cites, text }: Yours) => skill ? `/skill:${skill.name}${text && ` ${text}`}` : citing(cites, text).trimEnd();
 /** Messages that go back into the composer as one: what they cite, then what they say. */

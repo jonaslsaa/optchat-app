@@ -4,6 +4,7 @@ import { flushSync } from 'react-dom';
 import { working } from '../agent.ts';
 import type { Agent } from '../protocol.ts';
 import { stood } from './agents.ts';
+import { CiteButton, type CiteMessage } from './Cite.tsx';
 import { Markdown } from './Markdown.tsx';
 import { AgentsInChat, Clamp, Mark, Time, Took, TONES } from './Rows.tsx';
 import { app } from './store.ts';
@@ -18,6 +19,8 @@ import { cn, CopyButton } from './ui.tsx';
 
 type Work = Extract<Part, { type: 'work' }>;
 type OnAgent = ((agent: string) => void) | undefined;
+/** Where a report can be cited, it is cited whole as it is copied, at its message: a report of several is one message. */
+type OnCite = CiteMessage | undefined;
 /** A report as it is drawn: what it says for you (`lead`, `text`), how its agent ended, the agent as the list has it, and what
  * a copy of it is. */
 type Shown = Report & ReturnType<typeof plainly> & { state?: Agent['state']; from?: Agent; name: string; copy: string };
@@ -32,7 +35,7 @@ function shown(report: Report, agents: readonly Agent[]): Shown {
   };
 }
 
-export const ReportRow = memo(function ReportRow({ part, onAgent }: { part: Work; onAgent?: (agent: string) => void }) {
+export const ReportRow = memo(function ReportRow({ part, onAgent, onCite }: { part: Work; onAgent?: (agent: string) => void; onCite?: CiteMessage }) {
   const { agents } = useContext(AgentsInChat), layout = useSyncExternalStore(app.subscribe, () => app.state.settings?.reports ?? 'tabs');
   const reports = useMemo(() => part.reports.map(report => shown(report, agents)), [part.reports, agents]);
   if (reports.length === 1) {
@@ -43,14 +46,14 @@ export const ReportRow = memo(function ReportRow({ part, onAgent }: { part: Work
           <BotIcon className="size-3.5 shrink-0" />
           <Name report={report} onAgent={onAgent} label={report.title ? `Report: ${report.title}` : report.name} />
           <span className="flex-1" />
-          <Hover><CopyButton text={report.copy} label="Copy report" /></Hover>
+          <Hover><CopyButton text={report.copy} label="Copy report" /><Cites report={report} at={part.key} label="Cite report" onCite={onCite} /></Hover>
           <Time date={part.date} />
         </div>
         <Body report={report} at={part.key} />
       </Card>
     );
   }
-  return layout === 'sections' ? <Sections part={part} reports={reports} onAgent={onAgent} /> : <Tabs part={part} reports={reports} onAgent={onAgent} />;
+  return layout === 'sections' ? <Sections part={part} reports={reports} onAgent={onAgent} onCite={onCite} /> : <Tabs part={part} reports={reports} onAgent={onAgent} onCite={onCite} />;
 });
 
 const Card = ({ children }: { children: ReactNode }) => <div className="group pb-4"><div className="rounded-xl border border-border/70 bg-card px-3.5 py-3 dark:bg-card/60">{children}</div></div>;
@@ -62,6 +65,8 @@ function Name({ report, onAgent, label = report.name }: { report: Shown; onAgent
     ? <button type="button" title={`Open this agent's chat (${agent})`} onClick={() => onAgent(agent)} className="min-w-0 cursor-pointer truncate rounded-sm font-medium outline-none hover:text-foreground hover:underline hover:underline-offset-2 focus-visible:ring-2 focus-visible:ring-ring/70">{label}</button>
     : <span title={agent} className="min-w-0 truncate font-medium">{label}</span>;
 }
+const Cites = ({ report, at, label = 'Cite this report', onCite }: { report: Shown; at: number; label?: string; onCite: OnCite }) =>
+  onCite && report.copy ? <CiteButton label={label} onCite={anchor => onCite(report.copy, { id: at, n: 1 }, anchor)} /> : null;
 /** How a report's agent ended, where that is news: failed or stopped. */
 const Ended = ({ report: { state } }: { report: Shown }) => state && state !== 'completed' ? <Mark agent={{ state }} /> : null;
 function State({ report: { state } }: { report: Shown }) {
@@ -101,7 +106,7 @@ const Worked = ({ report: { from } }: { report: Shown }) => from ? <span classNa
 /** A tab for each report and one shown at a time, so the card stays one report high however many there are. The arrows go from
  * tab to tab, as a tab list's do. The others are on the page all the same, hidden, so find in the chat finds in them and shows the
  * one it found in (`data-folded`, find.ts). */
-function Tabs({ part, reports, onAgent }: { part: Work; reports: Shown[]; onAgent: OnAgent }) {
+function Tabs({ part, reports, onAgent, onCite }: { part: Work; reports: Shown[]; onAgent: OnAgent; onCite: OnCite }) {
   const [shownAt, setAt] = useState(0), id = useId();
   const arrow = (event: KeyboardEvent) => {
     const to = { ArrowLeft: shownAt - 1, ArrowRight: shownAt + 1, Home: 0, End: reports.length - 1 }[event.key];
@@ -130,7 +135,7 @@ function Tabs({ part, reports, onAgent }: { part: Work; reports: Shown[]; onAgen
             {report.from && <span className="shrink-0">· {report.from.model.split('/').at(-1)}</span>}
             <State report={report} />
             <span className="flex-1" />
-            <Hover><CopyButton text={report.copy} label="Copy this report" /></Hover>
+            <Hover><CopyButton text={report.copy} label="Copy this report" /><Cites report={report} at={part.key} onCite={onCite} /></Hover>
             <Worked report={report} />
           </div>
           <Body report={report} at={part.key} />
@@ -141,7 +146,7 @@ function Tabs({ part, reports, onAgent }: { part: Work; reports: Shown[]; onAgen
 }
 /** A section for each report, under a hairline, all in sight. With three or more each is cut shorter, so four long reviews do
  * not fill the page. */
-function Sections({ part, reports, onAgent }: { part: Work; reports: Shown[]; onAgent: OnAgent }) {
+function Sections({ part, reports, onAgent, onCite }: { part: Work; reports: Shown[]; onAgent: OnAgent; onCite: OnCite }) {
   return (
     <Card>
       <Head part={part} reports={reports} />
@@ -151,7 +156,7 @@ function Sections({ part, reports, onAgent }: { part: Work; reports: Shown[]; on
             <Ended report={report} />
             <Name report={report} onAgent={onAgent} />
             <span className="flex-1" />
-            <Hover within="group-hover/report:opacity-100"><CopyButton text={report.copy} label="Copy this report" /></Hover>
+            <Hover within="group-hover/report:opacity-100"><CopyButton text={report.copy} label="Copy this report" /><Cites report={report} at={part.key} onCite={onCite} /></Hover>
             <Worked report={report} />
           </div>
           <Body report={report} at={part.key} short={reports.length >= 3} />
